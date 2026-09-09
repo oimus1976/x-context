@@ -8,7 +8,7 @@
 - **Current phase:** Specification baseline (Issue #1, spec-only).
 - **Last completed:** Repository bootstrap from ai-dev-starter and initial SPEC-0001/ADR/test-matrix draft.
 - **Now working on:** Review and validation of the MVP specification contract.
-- **Next:** Open a spec-only Draft PR, review the contract, then implement the first vertical slice only after human acceptance.
+- **Next:** Complete spec review with local/static evidence while GitHub Actions is unavailable, then implement the first vertical slice only after human acceptance.
 - **Human decision pending:** Accept the MVP scope and authority/privacy boundaries before product implementation.
 - **Main risks:** Private activity data, credentials, X API/platform dependency, usage cost/spec drift.
 - **Required comprehension level:** C1
@@ -21,7 +21,7 @@ See `PROJECT_PROFILE.toml`; baseline rules live only in `BASELINE.md`.
 - Execution: Git topic branches and pull requests
 - Source code: Git
 - Private/actual data: Local runtime only; not repository/PR/CI artifacts by default
-- CI evidence: GitHub Actions once implementation bootstrap defines checks
+- CI evidence: GitHub Actions when available; currently unavailable because the monthly Actions-minute quota is exhausted. Do not infer CI success from queued/unstarted runs.
 - Production/deployed state: N/A during experimental MVP
 
 ## Current risk facets
@@ -41,6 +41,7 @@ Default project risk level: `ELEVATED`.
 - SPEC-0001 limits the MVP to arbitrary post read, authenticated bookmarks, and authenticated likes.
 - ADR-0003 proposes official-X-API-only acquisition.
 - ADR-0004 proposes a read-only authentication/product authority boundary.
+- GitHub Actions is not usable at present because the account monthly Actions-minute quota has been exhausted; local/static validation is required and CI success must not be claimed.
 
 ## Current implementation scope
 
@@ -60,6 +61,7 @@ Current deliverables are documentation/configuration only:
 
 - X API pricing, endpoint availability, scopes, and rate-limit semantics are external and may change.
 - The current project profile declares but does not yet independently verify branch protection / required CI enforcement.
+- GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; this is an evidence-availability limitation, not evidence of test failure or success.
 - Real-boundary smoke requires live credentials and must not expose tokens or private bookmark/like payloads.
 - Canonical JSON details beyond SPEC-0001 remain intentionally unimplemented and may need refinement during review before code work.
 
