@@ -14,6 +14,10 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### x-context bootstrap
+
+- Established the initial spec-driven MVP boundary before product implementation: arbitrary X post read, authenticated bookmarks, and authenticated liked-post reads through the official X API only. Added canonical JSON/error/CLI contracts, requirement-to-test traceability, explicit fail-closed behavior with no scraping/internal-GraphQL/browser-cookie fallback, read-only authorization boundaries, private-activity handling, and project risk/authority metadata. No product code or X write authority is introduced by this change. See Issue #1, SPEC-0001, ADR-0003, and ADR-0004.
+
 ### Baseline
 
 - Initial project scaffold from oimus AI Development Starter v0.5.
