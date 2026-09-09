@@ -27,7 +27,7 @@ Current X pricing documentation defines Owned Reads conditionally: qualifying ow
 
 ### Remediation
 
-SPEC-0001 now requires:
+SPEC-0001, SPEC-0000, ADR-0004, and TEST_MATRIX now require:
 
 - official derivation/verification of the authenticated subject identity;
 - endpoint target `{id}` to match that subject before collection access;
@@ -35,8 +35,6 @@ SPEC-0001 now requires:
 - no arbitrary target-user argument for P0 bookmarks/likes;
 - canonical collection output to include minimal subject provenance;
 - opaque continuation tokens to remain out of diagnostics/committed evidence.
-
-TEST_MATRIX now maps these requirements to automated and real-boundary evidence.
 
 ## Independent review result after remediation
 
@@ -48,7 +46,7 @@ The remaining uncertainties are intentionally external or implementation-stage m
 - prices, Owned Read qualification, rate limits, and usage-gate response details remain external platform facts;
 - provider continuation tokens are opaque and must not be interpreted by x-context;
 - Bookmark Folders remain a P1 candidate omission/non-blocking prioritization matter from Review-0001;
-- actual credential-store choice and OAuth implementation remain deferred implementation decisions within ADR-0004's read-only boundary;
+- actual credential-store choice and OAuth implementation remain deferred implementation decisions within ADR-0004's read-only/same-subject boundary;
 - real-boundary smoke cannot be completed until product code and live local credentials exist.
 
 ## Gate recommendation
