@@ -53,7 +53,7 @@ evidence = "CI behavior to be established and verified during implementation boo
 [verification]
 real_boundary_smoke_required = true
 test_matrix_required = true
-exact_head_required_from_level = "HIGH_IMACT"
+exact_head_required_from_level = "HIGH_IMPACT"
 
 [cleanup]
 # Exact repo-relative paths of ignored files/directories that can be safely deleted.
