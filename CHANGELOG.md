@@ -16,6 +16,7 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ### x-context bootstrap
 
+- Added SPEC-0000 as a product-scope/capability map so the user's broader read-only X context goal remains explicit above the narrow MVP. P0 remains arbitrary post read, bookmarks, and likes; P1 preserves candidate reads for own posts, mentions, followers/following, list relationships, blocks, and mutes; P2/P3 preserve knowledge-ingestion and AI-context directions. Capabilities in SPEC-0000 are candidates rather than implementation authorization, and write operations/unofficial fallback remain outside the intended direction unless a later product decision explicitly changes that boundary. See Issue #1 and SPEC-0000.
 - Established the initial spec-driven MVP boundary before product implementation: arbitrary X post read, authenticated bookmarks, and authenticated liked-post reads through the official X API only. Added canonical JSON/error/CLI contracts, requirement-to-test traceability, explicit fail-closed behavior with no scraping/internal-GraphQL/browser-cookie fallback, read-only authorization boundaries, private-activity handling, and project risk/authority metadata. No product code or X write authority is introduced by this change. See Issue #1, SPEC-0001, ADR-0003, and ADR-0004.
 
 ### Baseline
