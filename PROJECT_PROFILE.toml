@@ -4,35 +4,35 @@ version = "0.5"
 reviewed_at = "2026-08-30"
 
 [project]
-name = "TODO"
-purpose = "TODO"
+name = "x-context"
+purpose = "Read X content through the official X API for local tooling and AI-assisted analysis while preserving a narrow read-only authority boundary."
 lifecycle = "experimental" # experimental | active | production
 
 # One authority per material fact/state where practical.
 [authority]
-planning = "TODO"
-execution = "TODO"
+planning = "GitHub Issues and accepted specs/ADRs"
+execution = "Git topic branches and pull requests"
 source_code = "git"
-private_actual_data = "TODO_OR_NA"
-ci_result = "TODO"
-review_result = "TODO"
-production_state = "TODO_OR_NA"
-credentials = "TODO_OR_NA"
-release_artifacts = "TODO_OR_NA"
+private_actual_data = "local runtime only; never repository/PR/CI artifacts by default"
+ci_result = "GitHub Actions when available; local/static evidence when Actions minutes are unavailable"
+review_result = "GitHub pull-request review evidence and tracked review records"
+production_state = "N/A during experimental MVP"
+credentials = "local runtime configuration outside Git"
+release_artifacts = "N/A until packaging/release is specified"
 
 [risk]
-persistent_facets = []
+persistent_facets = ["PRIVATE_DATA", "CREDENTIALS", "PLATFORM_DEPENDENT"]
 # Allowed values:
 # PRIVATE_DATA, EXTERNAL_WRITE, DESTRUCTIVE_IO, AI_AGENT,
 # SECURITY_BOUNDARY, HIGH_AUTHORITY, PLATFORM_DEPENDENT,
 # CREDENTIALS, DEPLOYMENT, CRYPTOGRAPHY, WORKFLOW_PERMISSION
 # AI_AGENT means runtime agent authority/mutation, not merely AI-assisted development.
 # Risk levels are named rather than numbered to reduce comprehension debt.
-default_level = "ROUTINE" # ROUTINE | ELEVATED | HIGH_IMPACT
+default_level = "ELEVATED" # ROUTINE | ELEVATED | HIGH_IMPACT
 
 [comprehension]
 required_level = "C1" # C0 Operate | C1 Diagnose | C2 Govern
-owner_checkpoint = "TODO"
+owner_checkpoint = "Owner can explain official-API-only, read-only auth, same-subject personal collection binding, private activity handling, bounded pagination/usage, and fail-closed fallback boundaries before implementation is treated as accepted."
 
 [governance]
 ready = "human_final"
@@ -42,17 +42,17 @@ release = "project_specific"
 
 [enforcement.main_direct_write]
 desired = "forbidden_normal_path"
-state = "UNKNOWN" # DECLARED | ENFORCED | VERIFIED | UNKNOWN
-evidence = "TODO"
+state = "DECLARED" # DECLARED | ENFORCED | VERIFIED | UNKNOWN
+evidence = "AGENTS.md and project workflow; repository branch protection not yet verified"
 
 [enforcement.required_ci]
 desired = true
 state = "UNKNOWN"
-evidence = "TODO"
+evidence = "GitHub Actions desired when available; current account Actions-minute exhaustion prevents CI evidence for this spec-only PR"
 
 [verification]
-real_boundary_smoke_required = false
-test_matrix_required = false
+real_boundary_smoke_required = true
+test_matrix_required = true
 exact_head_required_from_level = "HIGH_IMPACT"
 
 [cleanup]
