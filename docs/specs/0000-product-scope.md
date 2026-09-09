@@ -16,9 +16,10 @@ The product is broader than SPEC-0001. SPEC-0001 is the first implementation sli
 1. **Read-only by product design.** x-context does not expose X mutation operations as part of the intended product direction.
 2. **Official X API is the default authority boundary.** Unofficial scraping, browser-cookie reuse, internal GraphQL, or browser automation are not equivalent substitutes and require an explicit specification/ADR change before any future consideration.
 3. **User activity data is private context.** Bookmarks, likes, follows, lists, blocks, mutes, and similar relationship/activity data are treated as sensitive even when referenced posts or accounts are public.
-4. **Canonical normalized output precedes integrations.** Consumers such as ChatGPT, other AI tools, Obsidian, Markdown exporters, or agents should depend on x-context's normalized contract rather than provider-specific payloads.
-5. **Scope is staged.** A capability appearing in this map is not implementation authorization. Each implementation slice requires its own accepted requirements, acceptance criteria, tests, and work item.
-6. **External platform facts remain external facts.** Endpoint availability, scopes, pricing, owned-read treatment, rate limits, and policy constraints must be verified against current X documentation when a capability is promoted into an implementation specification.
+4. **Personal-context reads are subject-explicit.** Capabilities described as the authenticated user's own data must preserve which authenticated subject the data belongs to; broader arbitrary-user targeting is a separate capability decision, not an implementation convenience.
+5. **Canonical normalized output precedes integrations.** Consumers such as ChatGPT, other AI tools, Obsidian, Markdown exporters, or agents should depend on x-context's normalized contract rather than provider-specific payloads.
+6. **Scope is staged.** A capability appearing in this map is not implementation authorization. Each implementation slice requires its own accepted requirements, acceptance criteria, tests, and work item.
+7. **External platform facts remain external facts.** Endpoint availability, scopes, pricing, owned-read treatment, rate limits, and policy constraints must be verified against current X documentation when a capability is promoted into an implementation specification.
 
 ## 3. Capability map
 
@@ -32,6 +33,7 @@ Defined by SPEC-0001.
 - Normalize results into canonical JSON.
 - Expose a stable CLI/error contract.
 - Preserve read-only, official-API-only, fail-closed behavior.
+- Bind authenticated collection reads to the current authenticated subject rather than accepting arbitrary target users.
 
 **Why Likes are included in P0:** Likes provide a second authenticated-user activity collection with semantics different from bookmarks. Supporting both in the first slice tests whether the canonical model and privacy boundary work across more than one owned/read-only activity endpoint without yet expanding into relationship graphs or synchronization features.
 
@@ -52,7 +54,7 @@ Candidate read-only capabilities identified during discovery:
 - blocks;
 - mutes.
 
-For each P1 capability, a future implementation specification must verify current official endpoint availability, authorization scopes, pricing/usage semantics, pagination/completeness behavior, and privacy implications before implementation.
+For each P1 capability, a future implementation specification must verify current official endpoint availability, authorization scopes, pricing/usage semantics, pagination/completeness behavior, subject/target identity semantics, and privacy implications before implementation.
 
 P1 does **not** imply that all listed capabilities should be synchronized or persisted. One-shot read/return behavior remains the safer default until persistence is separately specified.
 
