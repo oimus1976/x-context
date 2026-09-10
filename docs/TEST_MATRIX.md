@@ -1,9 +1,9 @@
 # Test Matrix
 
 Related specification: `docs/specs/0001-mvp.md`  
-Related work item: Issue #1
+Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema)
 
-This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins.
+This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins; implemented slices should name their concrete automated evidence.
 
 | Requirement | Acceptance criteria | Planned automated evidence | Real-boundary evidence |
 |---|---|---|---|
@@ -11,7 +11,7 @@ This matrix is the traceability bridge from requirement IDs to acceptance tests.
 | FR-002 | AC-FR002-01..06 | provider-contract tests for success, authentication/authorization failure, unavailable resource, rate limit, and no-unofficial-fallback | One official X API post lookup using non-secret evidence only |
 | FR-003 | AC-FR003-01..10 | bookmark endpoint contract; authenticated-subject derivation/binding; reject subject mismatch before collection request; no arbitrary user-ID CLI; one-page bound; explicit continuation token; default 25; max-results 1..100; completeness semantics; no-default-persistence; missing-scope failure; no fallback | Authenticated bookmark read with payload redacted; verify subject matches authenticated user, one request/page, and explicit continuation behavior |
 | FR-004 | AC-FR004-01..10 | likes endpoint contract; authenticated-subject derivation/binding; reject subject mismatch before collection request; no arbitrary user-ID CLI; one-page bound; explicit continuation token; default 25; max-results 1..100; completeness semantics; no-default-persistence; missing-scope failure; no fallback | Authenticated liked-post read with payload redacted; verify subject matches authenticated user, one request/page, and explicit continuation behavior |
-| FR-005 | AC-FR005-01..07 | schema validation, optional/unknown semantics, secret redaction, provider-decoupling, UTC `retrieved_at`, `next_token`/`complete` consistency, authenticated collection `subject` provenance | Spot-check normalized output without publishing private payloads; confirm collection subject identity provenance |
+| FR-005 | AC-FR005-01..07 | Current `read` slice: `test_FR_005_read_envelope_shape_and_schema_version`, `test_FR_005_retrieved_at_is_normalized_to_utc`, `test_FR_005_rejects_naive_retrieved_at`, `test_FR_005_read_subject_and_page_contract`, `test_FR_005_page_rejects_complete_with_next_token`, `test_FR_005_unrequested_optional_fields_are_not_fabricated`, `test_FR_005_provider_or_secret_passthrough_is_not_part_of_model`, `test_FR_005_rejects_non_ascii_or_non_numeric_post_id`; later collection slices must add authenticated `subject` provenance and optional/known-empty coverage for the canonical fields they introduce | Spot-check normalized output without publishing private payloads; confirm collection subject identity provenance when authenticated collection slices are implemented |
 | FR-006 | AC-FR006-01..08 | CLI stdout/stderr separation, exit codes, stable error categories including `subject_mismatch` and `usage_blocked`, credential non-disclosure, page-token single-page behavior, local max-results bounds/no-network rejection, no target-user argument | CLI smoke against official API after implementation |
 | NFR-001 | official API only | provider boundary tests; source scan/review for unofficial acquisition paths | Verify real smoke destination is official API |
 | NFR-002 | read-only/same-subject boundary | auth-scope configuration tests; no mutation command registration; authenticated collection target must equal authenticated subject | Verify granted/requested scopes and subject binding without token material |
@@ -19,6 +19,10 @@ This matrix is the traceability bridge from requirement IDs to acceptance tests.
 | NFR-004 | fail closed | all provider failure paths assert no fallback provider invocation | Induce/observe a safe official-API failure where practical |
 | NFR-005 | usage observability | request count, item count, requested page size, continuation state, safe rate/usage metadata tests; assert no payload-body logging and no hard-coded monetary-cost promise | Verify useful non-secret usage metadata and inspect logs for private-data absence |
 | NFR-006 | private activity handling | tests assert no persistence side effect by default; continuation tokens excluded from diagnostics; subject provenance minimized | Inspect local filesystem/logs before/after bookmark/like smoke |
+
+## FR-005 staging note
+
+Issue #5 implements only the minimal canonical model needed by `read`. In this slice an item serializes the normalized numeric post ID as `id` and the post text as `text`. Optional expansion-backed fields that are not yet requested/resolved are omitted; omission means unrequested/unresolved/not represented, not known-empty. The later FR-002/provider slice must update this matrix before introducing any additional canonical item fields, and authenticated collection subject semantics remain deferred to their collection workstreams. Issue #5 must not be used as evidence that FR-005 is complete for bookmarks/likes.
 
 ## Error-model cross-cutting tests
 
