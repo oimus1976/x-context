@@ -7,9 +7,9 @@
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
 - **Current phase:** P0 implementation, second slice (Issue #5 / FR-005 minimal canonical `read` schema).
 - **Last completed:** Issue #3 / PR #4 (FR-001 URL parsing) merged to `main` at `be3715cfb8a54059fe6d740498e9092c9c9f56a4`; FR-001 local tests 6/6 passed and adversarial review found no MAJOR/MODERATE defect.
-- **Now working on:** Draft PR #6 for the local-only canonical JSON envelope/item model, with no provider/network/auth behavior.
-- **Next:** Validate the exact PR #6 head with FR-001 + FR-005 tests and `git diff --check`, then complete adversarial review of schema leakage/unknown semantics before human Ready consideration.
-- **Human decision pending:** Ready/merge for PR #6 remain human-final after exact-head validation and review evidence.
+- **Now working on:** Ready-evidence normalization for Draft PR #6 after successful operator validation of implementation head `bc2a6870fba813ada37589d1451777fa375ff081`.
+- **Next:** Re-run FR-001 + FR-005 tests and `git diff --check` on the documentation-updated exact PR head, then record that SHA/evidence in PR #6 before human Ready consideration.
+- **Human decision pending:** Ready/merge for PR #6 remain human-final after final exact-head validation and review evidence.
 - **Main risks:** Specification drift and accidentally letting provider-specific/raw/secret data become public schema; persistent project facets remain private data, credentials, and X platform dependency, although Issue #5 itself is local deterministic modeling only.
 - **Required comprehension level:** C1
 
@@ -52,7 +52,8 @@ Change-specific Issue #5 behavior is local-only canonical modeling and introduce
 - The minimum current post item is normalized `id` + `text`; unrequested/unresolved optional expansion-backed fields are omitted rather than fabricated as known-empty.
 - The exact `id` / `text` staging contract and omission semantics are recorded as Issue #5 acceptance clarification so they are not inferred only from implementation.
 - `page.complete = true` with a non-null continuation token is rejected by the shared page model.
-- A local mirror run of the proposed branch content passed 14 tests total (6 FR-001 regressions + 8 FR-005 tests). This is development evidence only; exact Git branch-head validation in the operator checkout is still required before Ready.
+- Operator checkout validation on exact head `bc2a6870fba813ada37589d1451777fa375ff081` passed 14 tests total (6 FR-001 regressions + 8 FR-005 tests), `git diff --check` returned 0, and the worktree was clean/synchronized. Because this status update itself changes the PR head, one final exact-head revalidation is still required before Ready.
+- Adversarial review at implementation head `bc2a6870fba813ada37589d1451777fa375ff081` found no remaining MAJOR/MODERATE defect after the Issue #5 staging-contract clarification.
 - GitHub Actions remains unavailable due to exhausted monthly Actions minutes; local/static validation is required and CI success must not be claimed.
 
 ## Current implementation scope
@@ -80,7 +81,7 @@ Explicitly not authorized in Issue #5:
 
 ## Known limitations / residual risks
 
-- The GitHub branch has not yet been validated in the operator's canonical local checkout; the 14-test pass currently comes from a reconstructed local mirror of the relevant package/tests.
+- The implementation head was validated in the operator checkout, but this documentation-only evidence normalization moves the PR head; the resulting exact head must be revalidated once before Ready.
 - FR-005 is not complete for collection operations. Authenticated `subject` provenance and collection-specific optional/known-empty semantics remain deferred to later workstreams.
 - Optional author/created-at/canonical-URL/reference/media/link fields are intentionally not yet introduced. Their provider-backed shape must be verified against official X API behavior before they become canonical public fields.
 - GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; this is an evidence-availability limitation, not evidence of test failure or success.
