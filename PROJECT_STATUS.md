@@ -6,10 +6,10 @@
 
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
 - **Current phase:** P0 implementation, first vertical slice (Issue #3 / FR-001).
-- **Last completed:** Issue #1 / PR #2 established and merged the accepted SPEC-0000/SPEC-0001 baseline after adversarial and independent review.
-- **Now working on:** FR-001 strict local parsing of supported X/Twitter status URLs with acceptance tests.
-- **Next:** Run local FR-001 tests and static diff validation, then review the exact topic head before any Ready decision.
-- **Human decision pending:** Ready/merge for the FR-001 implementation PR after evidence review.
+- **Last completed:** FR-001 local parser implementation passed 6 local acceptance/adversarial tests and `git diff --check`; adversarial implementation review found no MAJOR/MODERATE defect on code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`.
+- **Now working on:** Exact-head revalidation after documentation-only review/status updates.
+- **Next:** Re-run FR-001 tests and static diff validation on the new exact topic head, then present PR #4 for human Ready decision.
+- **Human decision pending:** Ready/merge for PR #4 after exact-head evidence review.
 - **Main risks:** Specification drift and accidental scope expansion; persistent project facets remain private data, credentials, and X platform dependency, although Issue #3 itself is local deterministic parsing only.
 - **Required comprehension level:** C1
 
@@ -42,10 +42,13 @@ Change-specific Issue #3 behavior is local-only parsing and introduces no creden
 - Accepted specification baseline merge commit: `2af03c4c9a7ae94158ebe3cfa6fdb4ba131e0991`.
 - Issue #1 is closed/completed and PR #2 is merged.
 - Active work item: Issue #3, `Implement FR-001 X status URL parsing contract`.
+- Active PR: #4, Draft until human Ready decision.
 - Active branch: `feat/issue-3-fr001-url-parsing`.
 - SPEC-0001 FR-001 accepts only HTTPS X/Twitter status URL families for exact numeric post-ID extraction; query/fragment do not alter the ID.
 - Invalid FR-001 input must fail locally before any network/provider access.
-- The initial Issue #3 implementation uses only the Python standard library and adds no X API/OAuth behavior.
+- Issue #3 implementation uses only the Python standard library and adds no X API/OAuth behavior.
+- On code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`, local validation ran 6 tests successfully and `git diff --check` was clean.
+- Review-0003 found no MAJOR/MODERATE implementation defect on that validated code head.
 - GitHub Actions remains unavailable due to exhausted monthly Actions minutes; local/static validation is required and CI success must not be claimed.
 
 ## Current implementation scope
@@ -53,7 +56,7 @@ Change-specific Issue #3 behavior is local-only parsing and introduces no creden
 Issue #3 is limited to FR-001:
 
 - strict supported-host/scheme/path parsing;
-- exact numeric post-ID extraction;
+- exact ASCII-numeric post-ID extraction;
 - query/fragment ignoring;
 - explicit invalid-input failure;
 - no-network behavior for invalid input;
@@ -71,8 +74,9 @@ Explicitly not authorized in Issue #3:
 
 ## Known limitations / residual risks
 
-- The implementation and tests on the active topic branch are not yet validated by local execution; do not treat the code as passing until local evidence is recorded.
+- The current branch includes documentation-only commits after the validated code head; exact-head tests/static checks must be rerun before Ready evidence is current.
 - GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; this is an evidence-availability limitation, not evidence of test failure or success.
+- FR-001 intentionally validates URL shape, not provider-side semantic validity of the `{user}` segment.
 - X API pricing, endpoints, OAuth scopes, Owned Read qualification, billing behavior, and rate-limit semantics remain external facts for later work and are not part of FR-001.
 - Bookmark Folders remain a non-blocking P1 candidate gap and are unrelated to Issue #3.
 
@@ -90,7 +94,7 @@ Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied 
 
 ## Recovery / first diagnostic entry points
 
-- For Issue #3, inspect this status record, Issue #3, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/url_parser.py`, and `tests/test_fr001_url_parser.py`.
+- For Issue #3, inspect this status record, Issue #3, PR #4, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `docs/reviews/0003-fr001-implementation-review.md`, `x_context/url_parser.py`, and `tests/test_fr001_url_parser.py`.
 - Rollback/recovery entry point: Git history and the accepted specification baseline; do not broaden accepted URL families to make a failing parser convenient.
 - No local credential or private X activity data is required or authorized for Issue #3 validation.
 
