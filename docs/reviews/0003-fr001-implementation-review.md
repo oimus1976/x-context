@@ -1,28 +1,50 @@
 # Review-0003 — FR-001 implementation review
 
-- **Status:** Pending local validation
+- **Status:** Completed for current exact topic head
 - **Date:** 2026-09-10
-- **Related:** Issue #3
+- **Related:** Issue #3, PR #4
 - **Scope:** FR-001 local status-URL parser and tests only
 
 ## Review target
 
 Validate that the first implementation slice conforms to SPEC-0001 without expanding authority or URL support beyond the accepted contract.
 
-## Required checks
+## Evidence
 
-- accepted HTTPS X/Twitter hosts return the exact ASCII-numeric post ID;
-- query strings and fragments do not alter the extracted ID;
-- foreign/lookalike hosts fail explicitly;
-- malformed or non-numeric status paths fail explicitly;
-- invalid input performs no network access;
-- userinfo and explicit ports are rejected rather than normalized into accepted URLs;
-- extra path segments and trailing-slash variants are not silently broadened into accepted families;
-- no X API, OAuth, private-data, persistence, or external-write behavior is introduced;
-- local tests and `git diff --check` pass on the exact topic head before Ready.
+Local validation was recorded on topic head `aeb3fa8378110856ac69e71918ca80eaccefb30d` before this documentation-only review update:
 
-## Evidence state
+- `python -m unittest discover -s tests -p "test_fr001_url_parser.py" -v`
+- 6 tests run, all passed
+- `git diff --check` produced no output
+- branch was clean/tracking `origin/feat/issue-3-fr001-url-parsing`
+- invalid-input no-network test passed
 
-Implementation and automated tests have been added to the topic branch, but local execution evidence has not yet been recorded. GitHub Actions remains unavailable because the account monthly Actions-minute quota is exhausted.
+GitHub Actions remains unavailable because the account monthly Actions-minute quota is exhausted; no CI success is claimed.
 
-No Ready/merge conclusion is authorized by this record. Ready/merge remain human-final.
+## Adversarial review findings
+
+No MAJOR or MODERATE implementation defect was identified.
+
+The implementation:
+
+- accepts the four specified HTTPS X/Twitter host families;
+- extracts only ASCII-decimal post IDs from the exact `/{user}/status/{id}` path shape;
+- ignores query strings and fragments for ID extraction;
+- rejects foreign/lookalike hosts;
+- rejects non-HTTPS schemes, userinfo, explicit ports, malformed/non-numeric paths, extra segments, and trailing-slash variants;
+- uses only local standard-library parsing (`urllib.parse`, `re`) and contains no provider/network path;
+- introduces no X API, OAuth, credential, private-data, persistence, or write behavior.
+
+The no-network acceptance criterion is supported both by the passing socket-connect guard test and by source inspection showing no network/provider dependency in the parser implementation.
+
+## Residual uncertainty
+
+- FR-001 intentionally does not validate the semantic validity of the `{user}` segment beyond the accepted URL-shape contract; doing so would broaden this work item beyond the specification.
+- GitHub Actions evidence is unavailable due to account quota exhaustion.
+- This review predates any later remediation; any code/test change invalidates the exact-head evidence and requires revalidation.
+
+## Gate recommendation
+
+From the FR-001 implementation-contract perspective, no blocking review finding remains on the validated code head. A fresh exact-head local test/static validation should be recorded after this documentation-only commit before human Ready review.
+
+Ready/merge remain human-final.
