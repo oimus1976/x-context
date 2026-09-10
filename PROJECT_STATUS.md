@@ -5,12 +5,12 @@
 ## 30-second state
 
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
-- **Current phase:** Specification baseline and independent review (Issue #1, spec-only).
-- **Last completed:** Review-0002 remediated the remaining MAJOR same-subject gap for authenticated bookmark/like reads.
-- **Now working on:** Local/static validation of the amended specification contract and human acceptance review of P0 boundaries.
-- **Next:** Verify local diff/evidence while GitHub Actions is unavailable; keep PR #2 Draft until the owner accepts the amended spec.
-- **Human decision pending:** Accept the staged product scope plus the amended P0 same-subject, pagination, usage, authority, and privacy boundaries before product implementation.
-- **Main risks:** Private activity data, credentials, X API/platform dependency, usage cost/spec drift.
+- **Current phase:** P0 implementation, first vertical slice (Issue #3 / FR-001).
+- **Last completed:** FR-001 local parser implementation passed 6 local acceptance/adversarial tests and `git diff --check`; adversarial implementation review found no MAJOR/MODERATE defect on code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`.
+- **Now working on:** Exact-head revalidation after documentation-only review/status updates.
+- **Next:** Re-run FR-001 tests and static diff validation on the new exact topic head, then present PR #4 for human Ready decision.
+- **Human decision pending:** Ready/merge for PR #4 after exact-head evidence review.
+- **Main risks:** Specification drift and accidental scope expansion; persistent project facets remain private data, credentials, and X platform dependency, although Issue #3 itself is local deterministic parsing only.
 - **Required comprehension level:** C1
 
 ## Current authority summary
@@ -26,81 +26,77 @@ See `PROJECT_PROFILE.toml`; baseline rules live only in `BASELINE.md`.
 
 ## Current risk facets
 
+Persistent project facets:
+
 - PRIVATE_DATA
 - CREDENTIALS
 - PLATFORM_DEPENDENT
 
 Default project risk level: `ELEVATED`.
 
+Change-specific Issue #3 behavior is local-only parsing and introduces no credential, private-data, external-write, or real-provider access path.
+
 ## Validated facts
 
 - Repository: `oimus1976/x-context`.
-- Initial `main` commit: `a25fc4bd957d3c150837071765653111c9ee30b4`.
-- Issue #1 defines a spec-only bootstrap contract.
-- Current specification branch: `spec/issue-1-mvp-contract`.
-- SPEC-0000 records the broader read-only personal X context product direction and staged P0-P3 capability map.
-- SPEC-0001 defines only the P0 implementation slice: arbitrary post read, authenticated bookmarks, and authenticated likes.
-- Review-0001 identified two MAJOR gaps (unbounded/undefined pagination continuation and non-normative usage handling), one MODERATE provenance gap, and one MINOR capability-map omission; the MAJOR/MODERATE findings were remediated.
-- Review-0002 identified one remaining MAJOR gap: authenticated bookmark/like collection requests were not mechanically bound to the authenticated subject identity.
-- The Review-0002 MAJOR finding is remediated in SPEC-0001/TEST_MATRIX: authenticated subject derivation/verification, same-subject enforcement before collection request, no arbitrary target-user CLI, `subject_mismatch`, and minimal collection subject provenance.
-- Independent review after that remediation found no additional MAJOR specification defect in the current P0 contract.
-- Bookmark-folder support remains a non-blocking P1 candidate gap; it is not authorized in P0.
-- ADR-0003 proposes official-X-API-only acquisition.
-- ADR-0004 proposes a read-only authentication/product authority boundary.
-- Current official X documentation was checked during reviews for pay-per-use/Owned Reads and bookmark/like behavior, but those external platform facts are not frozen as durable product constants.
-- GitHub Actions is not usable at present because the account monthly Actions-minute quota has been exhausted; local/static validation is required and CI success must not be claimed.
+- Accepted specification baseline merge commit: `2af03c4c9a7ae94158ebe3cfa6fdb4ba131e0991`.
+- Issue #1 is closed/completed and PR #2 is merged.
+- Active work item: Issue #3, `Implement FR-001 X status URL parsing contract`.
+- Active PR: #4, Draft until human Ready decision.
+- Active branch: `feat/issue-3-fr001-url-parsing`.
+- SPEC-0001 FR-001 accepts only HTTPS X/Twitter status URL families for exact numeric post-ID extraction; query/fragment do not alter the ID.
+- Invalid FR-001 input must fail locally before any network/provider access.
+- Issue #3 implementation uses only the Python standard library and adds no X API/OAuth behavior.
+- On code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`, local validation ran 6 tests successfully and `git diff --check` was clean.
+- Review-0003 found no MAJOR/MODERATE implementation defect on that validated code head.
+- GitHub Actions remains unavailable due to exhausted monthly Actions minutes; local/static validation is required and CI success must not be claimed.
 
 ## Current implementation scope
 
-No product implementation is authorized by Issue #1.
+Issue #3 is limited to FR-001:
 
-Current deliverables are documentation/configuration/review evidence only:
+- strict supported-host/scheme/path parsing;
+- exact ASCII-numeric post-ID extraction;
+- query/fragment ignoring;
+- explicit invalid-input failure;
+- no-network behavior for invalid input;
+- planned/adversarial automated tests.
 
-- `docs/specs/0000-product-scope.md`
-- `docs/specs/0001-mvp.md`
-- `docs/TEST_MATRIX.md`
-- `docs/adr/0003-official-x-api-boundary.md`
-- `docs/adr/0004-read-only-auth-boundary.md`
-- `docs/reviews/0001-spec-adversarial-review.md`
-- `docs/reviews/0002-spec-independent-review.md`
-- project-specific `PROJECT_PROFILE.toml`
-- this status record
-- semantic CHANGELOG entry
+Explicitly not authorized in Issue #3:
+
+- FR-002 provider calls;
+- OAuth/credentials;
+- canonical response-model work beyond FR-001 needs;
+- bookmarks/likes;
+- persistence;
+- pricing/rate-limit logic;
+- unofficial acquisition fallback.
 
 ## Known limitations / residual risks
 
-- X API pricing, endpoint availability, scopes, Owned Read qualification, billing behavior, and rate-limit semantics are external and may change.
-- SPEC-0000 deliberately records capability categories rather than freezing endpoint names/prices as durable facts; these must be re-verified when promoted into implementation specs.
-- Reviews intentionally do not specify an exact monetary-cost calculator; a future exact-cost feature requires a verified pricing source/freshness contract.
-- Bookmark Folders are visible in current official documentation but are not yet represented in SPEC-0000 P1; this omission is non-blocking for P0 and should be revisited when P1 is prioritized.
-- The current project profile declares but does not yet independently verify branch protection / required CI enforcement.
+- The current branch includes documentation-only commits after the validated code head; exact-head tests/static checks must be rerun before Ready evidence is current.
 - GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; this is an evidence-availability limitation, not evidence of test failure or success.
-- Real-boundary smoke requires live credentials and must not expose tokens, opaque continuation tokens, or private bookmark/like payloads.
-- Exact OAuth/scope details and provider error mappings remain implementation-time external facts to verify against current official X documentation.
+- FR-001 intentionally validates URL shape, not provider-side semantic validity of the `{user}` segment.
+- X API pricing, endpoints, OAuth scopes, Owned Read qualification, billing behavior, and rate-limit semantics remain external facts for later work and are not part of FR-001.
+- Bookmark Folders remain a non-blocking P1 candidate gap and are unrelated to Issue #3.
 
 ## Deferred work
 
-Product-level candidates preserved in SPEC-0000 but not authorized by SPEC-0001 include:
+After FR-001, the accepted preferred P0 implementation order remains:
 
-- own-post reads and mentions;
-- followers/following and list-related reads;
-- blocks and mutes;
-- Markdown/Obsidian export and user-controlled persistence;
-- LLM summarization/classification/context retrieval;
-- AI/agent consumers of normalized X context;
-- background monitoring or automation.
+- FR-005 minimal canonical schema needed by `read`;
+- FR-002 official post lookup;
+- FR-006 `read` CLI;
+- FR-003 bookmarks;
+- FR-004 likes.
 
-Explicitly outside the intended direction absent a future product-level decision:
-
-- any X write operation;
-- silent unofficial acquisition fallback;
-- DM access (including read) without a separate privacy/necessity decision.
+Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied by Issue #3.
 
 ## Recovery / first diagnostic entry points
 
-- First place to inspect on failure: `PROJECT_STATUS.md`, then `docs/specs/0000-product-scope.md`, `docs/specs/0001-mvp.md`, both spec review records, relevant ADRs, and the active Issue/PR.
-- Rollback/recovery entry point: Git history and the previous accepted specification/ADR state; do not bypass official-API/read-only/same-subject boundaries as a recovery shortcut.
-- Data/source that must not be overwritten: Local credentials and private X activity data; they are not repository state.
+- For Issue #3, inspect this status record, Issue #3, PR #4, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `docs/reviews/0003-fr001-implementation-review.md`, `x_context/url_parser.py`, and `tests/test_fr001_url_parser.py`.
+- Rollback/recovery entry point: Git history and the accepted specification baseline; do not broaden accepted URL families to make a failing parser convenient.
+- No local credential or private X activity data is required or authorized for Issue #3 validation.
 
 ## Recent meaningful changes
 

@@ -14,6 +14,10 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### FR-001 URL parsing
+
+- Began the first post-spec implementation slice under Issue #3: strict local extraction of numeric post IDs from the accepted HTTPS X/Twitter status URL families. The implementation uses only Python standard-library URL parsing, rejects foreign/lookalike hosts, non-HTTPS schemes, userinfo, explicit ports, malformed/non-numeric status paths, and extra path segments, while ignoring query/fragment data for ID extraction. Added FR-001 acceptance/adversarial unit tests including a socket-connect guard proving invalid-input handling remains local. No X API, OAuth, private-data, persistence, or external-write behavior is introduced. Local test evidence is still required before the slice is treated as validated.
+
 ### x-context bootstrap
 
 - Independent review found that the authenticated bookmark/like contract did not mechanically bind provider target identity to the currently authenticated user. SPEC-0001/TEST_MATRIX now require authenticated-subject derivation/verification, fail-closed same-subject enforcement before collection access, no arbitrary target-user CLI argument, `subject_mismatch`, minimal subject provenance in canonical collection output, and exclusion of opaque continuation tokens from diagnostics/evidence. No additional MAJOR specification defect was identified after remediation. See Review-0002 and Issue #1.
