@@ -7,9 +7,9 @@
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
 - **Current phase:** P0 implementation, second slice (Issue #5 / FR-005 minimal canonical `read` schema).
 - **Last completed:** Issue #3 / PR #4 (FR-001 URL parsing) merged to `main` at `be3715cfb8a54059fe6d740498e9092c9c9f56a4`; FR-001 local tests 6/6 passed and adversarial review found no MAJOR/MODERATE defect.
-- **Now working on:** Local-only canonical JSON envelope/item model for successful `read` output, with no provider/network/auth behavior.
-- **Next:** Validate the exact Issue #5 branch head with FR-001 + FR-005 tests and static diff checks, then adversarially review schema leakage/unknown semantics before opening or advancing a Draft PR.
-- **Human decision pending:** Ready/merge only after exact-head validation and review evidence; no protected decision is currently implied.
+- **Now working on:** Draft PR #6 for the local-only canonical JSON envelope/item model, with no provider/network/auth behavior.
+- **Next:** Validate the exact PR #6 head with FR-001 + FR-005 tests and `git diff --check`, then complete adversarial review of schema leakage/unknown semantics before human Ready consideration.
+- **Human decision pending:** Ready/merge for PR #6 remain human-final after exact-head validation and review evidence.
 - **Main risks:** Specification drift and accidentally letting provider-specific/raw/secret data become public schema; persistent project facets remain private data, credentials, and X platform dependency, although Issue #5 itself is local deterministic modeling only.
 - **Required comprehension level:** C1
 
@@ -45,10 +45,12 @@ Change-specific Issue #5 behavior is local-only canonical modeling and introduce
 - Current `main`: `be3715cfb8a54059fe6d740498e9092c9c9f56a4`.
 - PR #4 exact head: `8b3d0a2f771ce1a31fc205d7ab3b6af4194e78e3`.
 - Active work item: Issue #5, `Implement FR-005 minimal canonical schema for read`.
+- Active PR: #6, Draft; Ready/merge remain human-final.
 - Active branch: `feat/issue-5-fr005-canonical-schema`.
 - No FR-002 provider call, OAuth, bookmark, like, persistence, pricing, rate-limit, or unofficial-provider behavior is authorized in Issue #5.
 - The current FR-005 slice uses `schema_version = "1"`, `source = "x"`, `operation = "read"`, `subject = null`, a UTC `retrieved_at`, and a complete/no-token page envelope.
 - The minimum current post item is normalized `id` + `text`; unrequested/unresolved optional expansion-backed fields are omitted rather than fabricated as known-empty.
+- The exact `id` / `text` staging contract and omission semantics are recorded as Issue #5 acceptance clarification so they are not inferred only from implementation.
 - `page.complete = true` with a non-null continuation token is rejected by the shared page model.
 - A local mirror run of the proposed branch content passed 14 tests total (6 FR-001 regressions + 8 FR-005 tests). This is development evidence only; exact Git branch-head validation in the operator checkout is still required before Ready.
 - GitHub Actions remains unavailable due to exhausted monthly Actions minutes; local/static validation is required and CI success must not be claimed.
@@ -99,7 +101,7 @@ Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied 
 
 ## Recovery / first diagnostic entry points
 
-- For Issue #5, inspect this status record, Issue #5, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/canonical.py`, `tests/test_fr005_canonical.py`, and `x_context/__init__.py`.
+- For Issue #5, inspect this status record, Issue #5, PR #6, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/canonical.py`, `tests/test_fr005_canonical.py`, and `x_context/__init__.py`.
 - Rollback/recovery entry point: Git history and the accepted specification baseline; do not add provider/raw fields merely to mirror a later X response conveniently.
 - No local credential, private X activity data, or live X API access is required or authorized for Issue #5 validation.
 
