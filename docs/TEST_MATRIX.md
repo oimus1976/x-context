@@ -1,7 +1,7 @@
 # Test Matrix
 
-Related specification: `docs/specs/0001-mvp.md`  
-Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup)
+Related specification: `docs/specs/0001-mvp.md` and `docs/specs/0001-fr006-read-clarification.md`  
+Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI)
 
 This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins; implemented slices should name their concrete automated evidence.
 
@@ -12,12 +12,13 @@ This matrix is the traceability bridge from requirement IDs to acceptance tests.
 | FR-003 | AC-FR003-01..10 | bookmark endpoint contract; authenticated-subject derivation/binding; reject subject mismatch before collection request; no arbitrary user-ID CLI; one-page bound; explicit continuation token; default 25; max-results 1..100; completeness semantics; no-default-persistence; missing-scope failure; no fallback | Authenticated bookmark read with payload redacted; verify subject matches authenticated user, one request/page, and explicit continuation behavior |
 | FR-004 | AC-FR004-01..10 | likes endpoint contract; authenticated-subject derivation/binding; reject subject mismatch before collection request; no arbitrary user-ID CLI; one-page bound; explicit continuation token; default 25; max-results 1..100; completeness semantics; no-default-persistence; missing-scope failure; no fallback | Authenticated liked-post read with payload redacted; verify subject matches authenticated user, one request/page, and explicit continuation behavior |
 | FR-005 | AC-FR005-01..07 | Current `read` slice: `test_FR_005_read_envelope_shape_and_schema_version`, `test_FR_005_retrieved_at_is_normalized_to_utc`, `test_FR_005_rejects_naive_retrieved_at`, `test_FR_005_read_subject_and_page_contract`, `test_FR_005_page_rejects_complete_with_next_token`, `test_FR_005_unrequested_optional_fields_are_not_fabricated`, `test_FR_005_provider_or_secret_passthrough_is_not_part_of_model`, `test_FR_005_rejects_non_ascii_or_non_numeric_post_id`; later collection slices must add authenticated `subject` provenance and optional/known-empty coverage for the canonical fields they introduce | Spot-check normalized output without publishing private payloads; confirm collection subject identity provenance when authenticated collection slices are implemented |
-| FR-006 | AC-FR006-01..08 | CLI stdout/stderr separation, exit codes, stable error categories including `subject_mismatch` and `usage_blocked`, credential non-disclosure, page-token single-page behavior, local max-results bounds/no-network rejection, no target-user argument | CLI smoke against official API after implementation |
+| FR-006 `read` slice | AC-FR006-R01..R13 | Planned: `test_FR_006_read_success_writes_canonical_json_only_to_stdout`, `test_FR_006_read_success_writes_usage_diagnostics_to_stderr`, `test_FR_006_read_rejects_direct_post_id`, `test_FR_006_read_invalid_url_is_local_exit_2_without_network`, `test_FR_006_read_provider_incompatible_id_is_local_exit_2_without_transport`, `test_FR_006_read_missing_credential_is_configuration_exit_2_without_transport`, `test_FR_006_read_unsafe_credential_is_configuration_exit_2_without_transport`, `test_FR_006_read_provider_categories_exit_3`, `test_FR_006_read_success_exposes_only_safe_rate_metadata`, `test_FR_006_read_missing_rate_metadata_is_not_fabricated`, `test_FR_006_read_diagnostics_report_request_and_item_counts`, `test_FR_006_read_has_no_token_cli_argument`, `test_FR_006_read_does_not_leak_token_raw_body_or_arbitrary_headers`, `test_FR_006_read_provider_wrapper_remains_compatible` | Optional intentional CLI smoke against official single-Post API; canonical payload may be inspected locally but evidence retains only non-secret/non-raw diagnostic facts |
+| FR-006 collections | AC-FR006-01..08 collection portions | Deferred with FR-003/FR-004: page-token single-page behavior, max-results 1..100/no-network rejection, no target-user argument | Deferred until authenticated collection implementation |
 | NFR-001 | official API only | provider boundary tests; source scan/review for unofficial acquisition paths | Verify real smoke destination is official API |
 | NFR-002 | read-only/same-subject boundary | auth-scope configuration tests; no mutation command registration; authenticated collection target must equal authenticated subject | Verify granted/requested scopes and subject binding without token material |
-| NFR-003 | credential protection | secret-pattern regression tests; fixtures use fake credentials; error redaction tests | Review smoke logs/artifacts for credential absence |
+| NFR-003 | credential protection | secret-pattern regression tests; fixtures use fake credentials; FR-006 stdout/stderr/traceback/repr redaction tests | Review smoke logs/artifacts for credential absence |
 | NFR-004 | fail closed | all provider failure paths assert no fallback provider invocation | Induce/observe a safe official-API failure where practical |
-| NFR-005 | usage observability | request count, item count, requested page size, continuation state, safe rate/usage metadata tests; assert no payload-body logging and no hard-coded monetary-cost promise | Verify useful non-secret usage metadata and inspect logs for private-data absence |
+| NFR-005 | usage observability | FR-006 `read`: operation, provider-request count, returned-item count, continuation=false, safe rate/usage metadata when present, zero-request diagnostics for local rejection; collection slices later add requested page size and continuation-token state; assert no payload-body logging and no hard-coded monetary-cost promise | Verify useful non-secret usage metadata and inspect logs for private-data/credential absence |
 | NFR-006 | private activity handling | tests assert no persistence side effect by default; continuation tokens excluded from diagnostics; subject provenance minimized | Inspect local filesystem/logs before/after bookmark/like smoke |
 
 ## FR-002 provider-boundary staging note
@@ -31,6 +32,16 @@ Current provider rate limits, prices, monthly caps, and Owned Read qualification
 ## FR-005 staging note
 
 Issue #5 implements only the minimal canonical model needed by `read`. In this slice an item serializes the normalized numeric post ID as `id` and the post text as `text`. Optional expansion-backed fields that are not yet requested/resolved are omitted; omission means unrequested/unresolved/not represented, not known-empty. The later FR-002/provider slice must update this matrix before introducing any additional canonical item fields, and authenticated collection subject semantics remain deferred to their collection workstreams. Issue #5 must not be used as evidence that FR-005 is complete for bookmarks/likes.
+
+## FR-006 `read` staging note
+
+Issue #9 composes the completed FR-001, FR-002, and FR-005 boundaries. The CLI accepts only a supported status URL and obtains the app-only token from `X_CONTEXT_BEARER_TOKEN`; direct Post-ID and token CLI arguments are intentionally absent.
+
+Successful stdout is canonical JSON only. NFR-005 diagnostics go to stderr and remain outside the canonical schema. Exit codes are intentionally grouped: `0` success, `2` local/parser/input/configuration failure, and `3` provider/read failure; the existing stable error category supplies the finer cause.
+
+The existing `lookup_post(...) -> CanonicalEnvelope` behavior remains a compatibility contract. Any success-diagnostic provider wrapper/helper introduced for FR-006 must not force existing callers to consume provider metadata and must expose only allow-listed non-secret rate metadata.
+
+For `read`, requested page size is not applicable and must not be fabricated. Invalid URL, provider-incompatible extracted ID, and local credential rejection must remain zero-request paths. No price, monthly cap, current rate-limit number, or Owned Read classification becomes a behavioral constant.
 
 ## Error-model cross-cutting tests
 
