@@ -1,6 +1,6 @@
 # Test Matrix
 
-Related specification: `docs/specs/0001-mvp.md` and `docs/specs/0001-fr006-read-clarification.md`  
+Related specification: `docs/specs/0001-mvp.md` and `docs/specs/0001-fr006-read-clarification.md`
 Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI)
 
 This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins; implemented slices should name their concrete automated evidence.
