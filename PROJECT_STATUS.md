@@ -5,12 +5,12 @@
 ## 30-second state
 
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
-- **Current phase:** P0 implementation, first vertical slice (Issue #3 / FR-001).
-- **Last completed:** FR-001 local parser implementation passed 6 local acceptance/adversarial tests and `git diff --check`; adversarial implementation review found no MAJOR/MODERATE defect on code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`.
-- **Now working on:** Exact-head revalidation after documentation-only review/status updates.
-- **Next:** Re-run FR-001 tests and static diff validation on the new exact topic head, then present PR #4 for human Ready decision.
-- **Human decision pending:** Ready/merge for PR #4 after exact-head evidence review.
-- **Main risks:** Specification drift and accidental scope expansion; persistent project facets remain private data, credentials, and X platform dependency, although Issue #3 itself is local deterministic parsing only.
+- **Current phase:** P0 implementation, second slice (Issue #5 / FR-005 minimal canonical `read` schema).
+- **Last completed:** Issue #3 / PR #4 (FR-001 URL parsing) merged to `main` at `be3715cfb8a54059fe6d740498e9092c9c9f56a4`; FR-001 local tests 6/6 passed and adversarial review found no MAJOR/MODERATE defect.
+- **Now working on:** Ready-evidence normalization for Draft PR #6 after successful operator validation of implementation head `bc2a6870fba813ada37589d1451777fa375ff081`.
+- **Next:** Re-run FR-001 + FR-005 tests and `git diff --check` on the documentation-updated exact PR head, then record that SHA/evidence in PR #6 before human Ready consideration.
+- **Human decision pending:** Ready/merge for PR #6 remain human-final after final exact-head validation and review evidence.
+- **Main risks:** Specification drift and accidentally letting provider-specific/raw/secret data become public schema; persistent project facets remain private data, credentials, and X platform dependency, although Issue #5 itself is local deterministic modeling only.
 - **Required comprehension level:** C1
 
 ## Current authority summary
@@ -34,69 +34,77 @@ Persistent project facets:
 
 Default project risk level: `ELEVATED`.
 
-Change-specific Issue #3 behavior is local-only parsing and introduces no credential, private-data, external-write, or real-provider access path.
+Change-specific Issue #5 behavior is local-only canonical modeling and introduces no credential loading, private-data access, external write, network request, OAuth flow, or real-provider access path.
 
 ## Validated facts
 
 - Repository: `oimus1976/x-context`.
 - Accepted specification baseline merge commit: `2af03c4c9a7ae94158ebe3cfa6fdb4ba131e0991`.
 - Issue #1 is closed/completed and PR #2 is merged.
-- Active work item: Issue #3, `Implement FR-001 X status URL parsing contract`.
-- Active PR: #4, Draft until human Ready decision.
-- Active branch: `feat/issue-3-fr001-url-parsing`.
-- SPEC-0001 FR-001 accepts only HTTPS X/Twitter status URL families for exact numeric post-ID extraction; query/fragment do not alter the ID.
-- Invalid FR-001 input must fail locally before any network/provider access.
-- Issue #3 implementation uses only the Python standard library and adds no X API/OAuth behavior.
-- On code head `aeb3fa8378110856ac69e71918ca80eaccefb30d`, local validation ran 6 tests successfully and `git diff --check` was clean.
-- Review-0003 found no MAJOR/MODERATE implementation defect on that validated code head.
+- Issue #3 is closed/completed and PR #4 is merged.
+- Current `main`: `be3715cfb8a54059fe6d740498e9092c9c9f56a4`.
+- PR #4 exact head: `8b3d0a2f771ce1a31fc205d7ab3b6af4194e78e3`.
+- Active work item: Issue #5, `Implement FR-005 minimal canonical schema for read`.
+- Active PR: #6, Draft; Ready/merge remain human-final.
+- Active branch: `feat/issue-5-fr005-canonical-schema`.
+- No FR-002 provider call, OAuth, bookmark, like, persistence, pricing, rate-limit, or unofficial-provider behavior is authorized in Issue #5.
+- The current FR-005 slice uses `schema_version = "1"`, `source = "x"`, `operation = "read"`, `subject = null`, a UTC `retrieved_at`, and a complete/no-token page envelope.
+- The minimum current post item is normalized `id` + `text`; unrequested/unresolved optional expansion-backed fields are omitted rather than fabricated as known-empty.
+- The exact `id` / `text` staging contract and omission semantics are recorded as Issue #5 acceptance clarification so they are not inferred only from implementation.
+- `page.complete = true` with a non-null continuation token is rejected by the shared page model.
+- Operator checkout validation on exact head `bc2a6870fba813ada37589d1451777fa375ff081` passed 14 tests total (6 FR-001 regressions + 8 FR-005 tests), `git diff --check` returned 0, and the worktree was clean/synchronized. Because this status update itself changes the PR head, one final exact-head revalidation is still required before Ready.
+- Adversarial review at implementation head `bc2a6870fba813ada37589d1451777fa375ff081` found no remaining MAJOR/MODERATE defect after the Issue #5 staging-contract clarification.
 - GitHub Actions remains unavailable due to exhausted monthly Actions minutes; local/static validation is required and CI success must not be claimed.
 
 ## Current implementation scope
 
-Issue #3 is limited to FR-001:
+Issue #5 is limited to the minimal canonical schema needed by `read`:
 
-- strict supported-host/scheme/path parsing;
-- exact ASCII-numeric post-ID extraction;
-- query/fragment ignoring;
-- explicit invalid-input failure;
-- no-network behavior for invalid input;
-- planned/adversarial automated tests.
+- canonical `read` envelope constants and shape;
+- UTC/RFC3339 acquisition timestamp normalization;
+- `subject = null` for arbitrary post read;
+- minimum post item representation using normalized numeric `id` and `text`;
+- no raw/provider response passthrough fields;
+- explicit shared `next_token` / `complete` invariant;
+- deterministic unit tests and TEST_MATRIX traceability.
 
-Explicitly not authorized in Issue #3:
+Explicitly not authorized in Issue #5:
 
 - FR-002 provider calls;
-- OAuth/credentials;
-- canonical response-model work beyond FR-001 needs;
+- FR-006 CLI wiring;
+- OAuth/credentials/scopes;
+- authenticated-subject resolution;
 - bookmarks/likes;
 - persistence;
-- pricing/rate-limit logic;
+- pricing/rate-limit/Owned Read logic;
 - unofficial acquisition fallback.
 
 ## Known limitations / residual risks
 
-- The current branch includes documentation-only commits after the validated code head; exact-head tests/static checks must be rerun before Ready evidence is current.
+- The implementation head was validated in the operator checkout, but this documentation-only evidence normalization moves the PR head; the resulting exact head must be revalidated once before Ready.
+- FR-005 is not complete for collection operations. Authenticated `subject` provenance and collection-specific optional/known-empty semantics remain deferred to later workstreams.
+- Optional author/created-at/canonical-URL/reference/media/link fields are intentionally not yet introduced. Their provider-backed shape must be verified against official X API behavior before they become canonical public fields.
 - GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; this is an evidence-availability limitation, not evidence of test failure or success.
-- FR-001 intentionally validates URL shape, not provider-side semantic validity of the `{user}` segment.
-- X API pricing, endpoints, OAuth scopes, Owned Read qualification, billing behavior, and rate-limit semantics remain external facts for later work and are not part of FR-001.
-- Bookmark Folders remain a non-blocking P1 candidate gap and are unrelated to Issue #3.
+- X API pricing, endpoints, OAuth scopes, Owned Read qualification, billing behavior, and rate-limit semantics remain external facts for FR-002 or later and must be re-verified against official information before implementation.
+- Bookmark Folders remain a non-blocking P1 candidate gap and are unrelated to Issue #5.
 
 ## Deferred work
 
-After FR-001, the accepted preferred P0 implementation order remains:
+After Issue #5, the accepted preferred P0 implementation order remains:
 
-- FR-005 minimal canonical schema needed by `read`;
 - FR-002 official post lookup;
 - FR-006 `read` CLI;
+- authenticated-subject resolution/binding contract for collections;
 - FR-003 bookmarks;
 - FR-004 likes.
 
-Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied by Issue #3.
+Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied by Issue #5.
 
 ## Recovery / first diagnostic entry points
 
-- For Issue #3, inspect this status record, Issue #3, PR #4, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `docs/reviews/0003-fr001-implementation-review.md`, `x_context/url_parser.py`, and `tests/test_fr001_url_parser.py`.
-- Rollback/recovery entry point: Git history and the accepted specification baseline; do not broaden accepted URL families to make a failing parser convenient.
-- No local credential or private X activity data is required or authorized for Issue #3 validation.
+- For Issue #5, inspect this status record, Issue #5, PR #6, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/canonical.py`, `tests/test_fr005_canonical.py`, and `x_context/__init__.py`.
+- Rollback/recovery entry point: Git history and the accepted specification baseline; do not add provider/raw fields merely to mirror a later X response conveniently.
+- No local credential, private X activity data, or live X API access is required or authorized for Issue #5 validation.
 
 ## Recent meaningful changes
 
