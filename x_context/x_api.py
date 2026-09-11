@@ -69,6 +69,10 @@ def _is_provider_compatible_post_id(value: object) -> bool:
     )
 
 
+def _is_safe_bearer_token(value: object) -> bool:
+    return isinstance(value, str) and bool(value) and "\r" not in value and "\n" not in value
+
+
 def _header(headers: Mapping[str, str], name: str) -> str | None:
     target = name.lower()
     for key, value in headers.items():
@@ -99,7 +103,7 @@ def _json_object(body: bytes) -> dict[str, object] | None:
     try:
         decoded = body.decode("utf-8")
         value = json.loads(decoded)
-    except (UnicodeDecodeError, json.JSONDecodeError):
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) else None
 
@@ -171,7 +175,7 @@ def lookup_post(
 
     if not _is_provider_compatible_post_id(post_id):
         raise XApiError("invalid_input")
-    if not isinstance(bearer_token, str) or not bearer_token:
+    if not _is_safe_bearer_token(bearer_token):
         raise XApiError("configuration_error")
 
     request = HttpRequest(
