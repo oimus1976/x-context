@@ -5,10 +5,10 @@
 ## 30-second state
 
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
-- **Current phase:** P0 implementation, FR-002 official single-Post lookup (Issue #7), pre-PR validation gate.
+- **Current phase:** P0 implementation, FR-002 official single-Post lookup (Issue #7), Draft-PR preparation/final exact-head gate.
 - **Last completed:** Issue #5 / PR #6 (FR-005 minimal canonical `read` schema), merged to `main` at `d8efde8f4156fd56c03831763b3d1cd3dfcd4d9a` with 14/14 post-merge regression passing.
-- **Now working on:** FR-002 provider contract and implementation are on `issue-7-fr002-official-post-lookup`; SPEC-0001 and TEST_MATRIX were aligned before implementation.
-- **Next:** Validate the final topic-branch exact head locally (FR-001 + FR-002 + FR-005, `git diff --check`, clean/synchronized worktree), then create a Draft PR. Ready/merge remain human-final.
+- **Now working on:** FR-002 provider contract and implementation are on `issue-7-fr002-official-post-lookup`; implementation head `4783bf1a6bfbe6cd35967e0ec8c545c4c294b42e` passed exact-head checkout validation with 31/31 product tests and `git diff --check` exit 0.
+- **Next:** Create the Draft PR, then revalidate the documentation-updated PR head once more before human Ready consideration. Ready/merge remain human-final.
 - **Main risks:** X API platform facts can change; provider/raw/credential data must not leak into public schema or diagnostics; GitHub Actions minutes are exhausted, so local/static evidence is required.
 - **Required comprehension level:** C1
 
@@ -42,7 +42,6 @@ Issue #7 introduces a real official-provider read path and credential-bearing HT
 - Issue #5 is closed/completed and PR #6 is merged.
 - Active work item: Issue #7, `FR-002: official single-post lookup via X API`.
 - Active branch: `issue-7-fr002-official-post-lookup`.
-- No PR has been created for Issue #7 yet.
 - Official-provider research was rechecked before implementation and source provenance is recorded on Issue #7.
 - The first FR-002 slice uses only `GET https://api.x.com/2/tweets/{id}` with OAuth 2.0 app-only Bearer authorization.
 - OAuth 1.0a User Context and OAuth 2.0 Authorization Code with PKCE are provider-supported for Post lookup but intentionally not implemented in Issue #7.
@@ -53,7 +52,8 @@ Issue #7 introduces a real official-provider read path and credential-bearing HT
 - Rate-limit diagnostics allow-list only the standard limit/remaining/reset headers; provider response bodies and arbitrary headers are not surfaced.
 - Authorization-bearing request headers are excluded from dataclass `repr`; transport exception chaining is suppressed; CR/LF-bearing Bearer values are rejected before transport.
 - Current X pricing/rate-limit/monthly-cap/Owned Read values are not hard-coded as product behavior. Official X documentation currently publishes conflicting monthly pay-per-use Post-read cap figures, so the implementation deliberately does not choose one.
-- A source-reconstructed local behavior check passed 31 tests: FR-001 6, FR-002 17, FR-005 8. This is useful preflight evidence but is not a substitute for the required exact-head checkout validation.
+- Exact-head checkout validation on implementation head `4783bf1a6bfbe6cd35967e0ec8c545c4c294b42e` passed 31 tests total: FR-001 6, FR-002 17, FR-005 8; `TEST_EXIT=0`; `git diff --check origin/main...HEAD` exit 0. The first wrapper attempt produced `TEST_EXIT=-1` and a false-positive PASS marker due to Windows PowerShell 5.1 native stderr handling; it is retained as validator-failure evidence, not implementation PASS evidence. The corrected retry merged native stderr inside `cmd.exe` and used `$LASTEXITCODE` as authority.
+- This PROJECT_STATUS update moves the topic-branch head, so one final exact-head revalidation remains necessary before human Ready consideration.
 - GitHub Actions remains unavailable due to exhausted monthly Actions minutes.
 
 ## Current implementation scope
@@ -82,7 +82,7 @@ Explicitly not authorized in Issue #7:
 
 ## Known limitations / residual risks
 
-- Final exact-head validation in an actual Git checkout is still required before a Draft PR is created.
+- The implementation head has been exact-head validated, but this status update changes the branch head; the resulting PR head must be revalidated once before Ready.
 - A live API smoke is optional qualification evidence only and must be intentionally authorized because reads may consume paid usage; no live call is required for unit/contract correctness.
 - Success-path per-command usage diagnostics required by NFR-005 will be completed when FR-006 wires the CLI; Issue #7 preserves the provider boundary and safe failure metadata without making provider response details part of canonical JSON.
 - Optional author/created-at/canonical-URL/reference/media/link fields remain deferred until their canonical shapes are separately specified and tested.
@@ -102,7 +102,7 @@ Product-level P1-P3 candidates remain governed by SPEC-0000 and are not implied 
 
 ## Recovery / first diagnostic entry points
 
-- Inspect Issue #7, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/x_api.py`, `tests/test_fr002_x_api.py`, and `tests/test_fr002_security.py`.
+- Inspect Issue #7, the Draft PR, `docs/specs/0001-mvp.md`, `docs/TEST_MATRIX.md`, `x_context/x_api.py`, `tests/test_fr002_x_api.py`, and `tests/test_fr002_security.py`.
 - Compare the topic branch against `main` before Ready/merge; do not expand into FR-006 or authenticated collections to solve an FR-002 issue.
 - For local validation, use fake credentials only unless an intentional live smoke is separately chosen; never retain Authorization headers or raw provider bodies in evidence logs.
 
