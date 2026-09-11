@@ -47,7 +47,7 @@ class PostLookupResult:
 
     envelope: CanonicalEnvelope
     rate_limit: RateLimitMetadata
-    requests_attempted: int = 1
+    requests_attempted: int
 
 
 class XApiError(RuntimeError):
@@ -202,7 +202,7 @@ def lookup_post_with_diagnostics(
     selected_transport = _urllib_transport if transport is None else transport
     try:
         provider_response = selected_transport(request)
-    except OSError:
+    except Exception:
         raise XApiError("provider_error", requests_attempted=1) from None
 
     if not isinstance(provider_response, HttpResponse):
