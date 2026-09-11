@@ -52,6 +52,15 @@ class FR002SecurityTests(unittest.TestCase):
         self.assertNotIn(provider_detail_secret, str(error))
         self.assertIsNone(error.__cause__)
 
+    def test_FR_002_rejects_header_injection_token_without_network(self):
+        for token in ("fake\r\nInjected: value", "fake\nInjected: value"):
+            with self.subTest(token=token):
+                transport = CapturingTransport()
+                with self.assertRaises(XApiError) as raised:
+                    lookup_post("123", bearer_token=token, transport=transport)
+                self.assertEqual(raised.exception.category, "configuration_error")
+                self.assertIsNone(transport.request)
+
 
 if __name__ == "__main__":
     unittest.main()
