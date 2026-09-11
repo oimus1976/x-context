@@ -1,4 +1,4 @@
-"""Official X API single-Post lookup provider for FR-002."""
+"""Official X API single-Post lookup provider for FR-002/FR-006."""
 
 from __future__ import annotations
 
@@ -41,8 +41,17 @@ class RateLimitMetadata:
     reset: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PostLookupResult:
+    """Canonical success plus non-canonical safe diagnostics for FR-006."""
+
+    envelope: CanonicalEnvelope
+    rate_limit: RateLimitMetadata
+    requests_attempted: int = 1
+
+
 class XApiError(RuntimeError):
-    """Stable FR-002 provider failure without raw response or credential data."""
+    """Stable provider failure without raw response or credential data."""
 
     def __init__(
         self,
@@ -50,11 +59,13 @@ class XApiError(RuntimeError):
         *,
         status_code: int | None = None,
         rate_limit: RateLimitMetadata | None = None,
+        requests_attempted: int = 0,
     ) -> None:
         super().__init__(category)
         self.category = category
         self.status_code = status_code
         self.rate_limit = RateLimitMetadata() if rate_limit is None else rate_limit
+        self.requests_attempted = requests_attempted
 
 
 Transport = Callable[[HttpRequest], HttpResponse]
@@ -139,6 +150,7 @@ def _raise_for_provider_failure(response: HttpResponse) -> None:
         category,
         status_code=response.status,
         rate_limit=rate_limit,
+        requests_attempted=1,
     )
 
 
@@ -165,13 +177,13 @@ def _urllib_transport(request: HttpRequest) -> HttpResponse:
         raise OSError("X API transport failed") from None
 
 
-def lookup_post(
+def lookup_post_with_diagnostics(
     post_id: str,
     *,
     bearer_token: str | None,
     transport: Transport | None = None,
-) -> CanonicalEnvelope:
-    """Fetch one Post through the official X API and normalize id/text only."""
+) -> PostLookupResult:
+    """Fetch one Post and retain only allow-listed success diagnostics."""
 
     if not _is_provider_compatible_post_id(post_id):
         raise XApiError("invalid_input")
@@ -191,28 +203,68 @@ def lookup_post(
     try:
         provider_response = selected_transport(request)
     except OSError:
-        raise XApiError("provider_error") from None
+        raise XApiError("provider_error", requests_attempted=1) from None
 
     if not isinstance(provider_response, HttpResponse):
-        raise XApiError("provider_error")
+        raise XApiError("provider_error", requests_attempted=1)
     if provider_response.status != 200:
         _raise_for_provider_failure(provider_response)
 
     payload = _json_object(provider_response.body)
     if payload is None:
-        raise XApiError("provider_error", status_code=provider_response.status)
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
 
     data = payload.get("data")
     if not isinstance(data, dict):
-        raise XApiError("provider_error", status_code=provider_response.status)
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
 
     provider_id = data.get("id")
     text = data.get("text")
     if not isinstance(provider_id, str) or not _is_provider_compatible_post_id(provider_id):
-        raise XApiError("provider_error", status_code=provider_response.status)
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
     if provider_id != post_id:
-        raise XApiError("provider_error", status_code=provider_response.status)
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
     if not isinstance(text, str):
-        raise XApiError("provider_error", status_code=provider_response.status)
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
 
-    return make_read_envelope([CanonicalPost(id=provider_id, text=text)])
+    envelope = make_read_envelope([CanonicalPost(id=provider_id, text=text)])
+    return PostLookupResult(
+        envelope=envelope,
+        rate_limit=_rate_limit_metadata(provider_response.headers),
+        requests_attempted=1,
+    )
+
+
+def lookup_post(
+    post_id: str,
+    *,
+    bearer_token: str | None,
+    transport: Transport | None = None,
+) -> CanonicalEnvelope:
+    """Fetch one Post through the official X API and normalize id/text only."""
+
+    return lookup_post_with_diagnostics(
+        post_id,
+        bearer_token=bearer_token,
+        transport=transport,
+    ).envelope
