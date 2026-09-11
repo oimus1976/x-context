@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
@@ -20,7 +20,7 @@ class HttpRequest:
 
     method: str
     url: str
-    headers: Mapping[str, str]
+    headers: Mapping[str, str] = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +157,8 @@ def _urllib_transport(request: HttpRequest) -> HttpResponse:
             headers={} if exc.headers is None else dict(exc.headers.items()),
             body=exc.read(),
         )
-    except URLError as exc:
-        raise OSError("X API transport failed") from exc
+    except URLError:
+        raise OSError("X API transport failed") from None
 
 
 def lookup_post(
@@ -186,8 +186,8 @@ def lookup_post(
     selected_transport = _urllib_transport if transport is None else transport
     try:
         provider_response = selected_transport(request)
-    except OSError as exc:
-        raise XApiError("provider_error") from exc
+    except OSError:
+        raise XApiError("provider_error") from None
 
     if not isinstance(provider_response, HttpResponse):
         raise XApiError("provider_error")
