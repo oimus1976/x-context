@@ -61,8 +61,8 @@ final_branch = "main"
 
 [enforcement.validation_workspace]
 desired = "profile-derived paths and fail-closed final-state validation"
-state = "DECLARED" # moves to ENFORCED only when helper is wired; VERIFIED only after negative tests pass
-evidence = "Issue #14 tracks implementation and negative-test evidence"
+state = "VERIFIED"
+evidence = "Issue #14 exact-head validation on Windows PowerShell 5.1: 65/65 tests PASS; invalid temp/log paths and final-state mismatches rejected; runner returned to canonical main with HEAD=origin/main and durable log present"
 
 [verification]
 real_boundary_smoke_required = true
