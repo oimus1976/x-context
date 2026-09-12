@@ -4,6 +4,7 @@ import argparse
 import json
 import ntpath
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -25,6 +26,9 @@ class WorkspacePolicy:
     worktree_root: str
     durable_log_dir: str
     final_branch: str
+
+
+_SAFE_WORKTREE_COMPONENT = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _expand_windows_env(value: str, environ: Mapping[str, str]) -> str:
@@ -74,6 +78,15 @@ def _is_strict_child(path: str, root: str) -> bool:
     return common == nroot and npath != nroot
 
 
+def _require_safe_worktree_components(path: str, root: str) -> None:
+    relative = ntpath.relpath(path, root)
+    components = [part for part in re.split(r"[\\/]", relative) if part]
+    if not components or any(not _SAFE_WORKTREE_COMPONENT.fullmatch(part) for part in components):
+        raise WorkspacePolicyError(
+            "worktree path components must use only ASCII letters, digits, '.', '_' or '-': " + path
+        )
+
+
 def load_policy(profile_path: Path, *, environ: Mapping[str, str] | None = None) -> WorkspacePolicy:
     env = os.environ if environ is None else environ
     with profile_path.open("rb") as handle:
@@ -121,6 +134,8 @@ def validate_disposable_path(path: str, policy: WorkspacePolicy, *, kind: str) -
     root = policy.worktree_root if kind == "worktree" else policy.disposable_root
     if not _is_strict_child(path, root):
         raise WorkspacePolicyError(f"{kind} path must be beneath '{root}': {path}")
+    if kind == "worktree":
+        _require_safe_worktree_components(path, root)
 
 
 def validate_durable_log_path(path: str, policy: WorkspacePolicy) -> None:
