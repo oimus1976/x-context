@@ -56,12 +56,6 @@ New-Item -ItemType Directory -Force -Path $worktreeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 "" | Set-Content -LiteralPath $log -Encoding UTF8
 
-$repoPrefix = $repo.TrimEnd('\') + '\'
-if (-not $log.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "Durable log is not beneath canonical repo: $log"
-}
-$logRelative = $log.Substring($repoPrefix.Length).Replace('\', '/')
-
 $failure = $null
 $worktreeAdded = $false
 
@@ -80,6 +74,22 @@ function Add-Failure {
     }
     Write-Log "FAIL: $Message"
 }
+
+function Get-RepoRelativePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Child
+    )
+
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
+    $childFull = [System.IO.Path]::GetFullPath($Child)
+    $rootUri = New-Object System.Uri($rootFull)
+    $childUri = New-Object System.Uri($childFull)
+    $relativeUri = $rootUri.MakeRelativeUri($childUri)
+    return [System.Uri]::UnescapeDataString($relativeUri.ToString()).Replace('/', '/')
+}
+
+$logRelative = Get-RepoRelativePath -Root $repo -Child $log
 
 try {
     Write-Log "=== x-context exact-head validation ==="
@@ -106,6 +116,8 @@ try {
     $preStatus = @(git status --short --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { throw "git status --short failed" }
 
+    # The durable log may be ignored by local/global Git configuration; if it is
+    # visible as untracked, only this exact current log entry is permitted.
     $unexpectedPre = @($preStatus | Where-Object {
         $_ -and $_ -ne "?? $logRelative"
     })
