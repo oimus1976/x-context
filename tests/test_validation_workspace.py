@@ -50,6 +50,18 @@ final_branch = "main"
             kind="worktree",
         )
 
+    def test_rejects_unsafe_worktree_path_components_before_cmd_boundary(self):
+        invalid = (
+            r'C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad"name',
+            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad%TEMP%",
+            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad|name",
+            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\nested dir\leaf",
+        )
+        for path in invalid:
+            with self.subTest(path=path):
+                with self.assertRaises(WorkspacePolicyError):
+                    validate_disposable_path(path, self.policy, kind="worktree")
+
     def test_rejects_temp_root_sibling_worktree_paths(self):
         invalid = (
             r"C:\Users\oimus\AppData\Local\Temp\x-context-issue14",
