@@ -130,6 +130,26 @@ def validate_durable_log_path(path: str, policy: WorkspacePolicy) -> None:
         )
 
 
+def _allowed_log_status_line(line: str, log_path: str, policy: WorkspacePolicy) -> bool:
+    if not line.startswith("?? "):
+        return False
+    reported = line[3:].strip().replace("/", "\\")
+    expected = ntpath.relpath(log_path, policy.canonical_repo)
+    return _norm(reported) == _norm(expected)
+
+
+def validate_effective_clean_status(
+    status_lines: list[str], *, log_path: str, policy: WorkspacePolicy
+) -> None:
+    unexpected = [
+        line for line in status_lines if line and not _allowed_log_status_line(line, log_path, policy)
+    ]
+    if unexpected:
+        raise WorkspacePolicyError(
+            "final canonical working tree has unexpected status entries: " + " | ".join(unexpected)
+        )
+
+
 def validate_final_state(
     *,
     location: str,
@@ -151,9 +171,8 @@ def validate_final_state(
         raise WorkspacePolicyError(
             f"final HEAD/origin mismatch: HEAD='{head}', origin/main='{origin_main}'"
         )
-    if status_lines:
-        raise WorkspacePolicyError("final canonical working tree is not clean")
     validate_durable_log_path(log_path, policy)
+    validate_effective_clean_status(status_lines, log_path=log_path, policy=policy)
     if not log_exists:
         raise WorkspacePolicyError(f"durable verification log does not exist: {log_path}")
     if log_size <= 0:
@@ -191,9 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     p_log.add_argument("path")
 
     args = parser.parse_args(argv)
-    policy = load_policy(Path(args.profile))
-
     try:
+        policy = load_policy(Path(args.profile))
         if args.command == "paths":
             print(_policy_json(policy))
         elif args.command == "check-repo":
