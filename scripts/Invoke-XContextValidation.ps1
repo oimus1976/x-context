@@ -56,12 +56,18 @@ New-Item -ItemType Directory -Force -Path $worktreeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 "" | Set-Content -LiteralPath $log -Encoding UTF8
 
+$repoPrefix = $repo.TrimEnd('\') + '\'
+if (-not $log.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Durable log is not beneath canonical repo: $log"
+}
+$logRelative = $log.Substring($repoPrefix.Length).Replace('\', '/')
+
 $failure = $null
 $worktreeAdded = $false
 
 function Write-Log {
     param([string]$Message = "")
-    $Message | Tee-Object -LiteralPath $log -Append
+    $Message | Tee-Object -FilePath $log -Append
 }
 
 function Add-Failure {
@@ -100,8 +106,6 @@ try {
     $preStatus = @(git status --short --untracked-files=all)
     if ($LASTEXITCODE -ne 0) { throw "git status --short failed" }
 
-    # The newly created durable log is the only allowed preflight residue.
-    $logRelative = [System.IO.Path]::GetRelativePath($repo, $log).Replace('\', '/')
     $unexpectedPre = @($preStatus | Where-Object {
         $_ -and $_ -ne "?? $logRelative"
     })
@@ -121,7 +125,7 @@ try {
 
     Write-Log ""
     Write-Log "=== git fetch origin ==="
-    cmd.exe /d /c "git fetch origin 2>&1" | Tee-Object -LiteralPath $log -Append
+    cmd.exe /d /c "git fetch origin 2>&1" | Tee-Object -FilePath $log -Append
     $fetchExit = $LASTEXITCODE
     Write-Log "FETCH_EXIT=$fetchExit"
     if ($fetchExit -ne 0) { throw "git fetch origin failed with exit code $fetchExit" }
@@ -154,7 +158,7 @@ try {
     }
 
     cmd.exe /d /c "git worktree add --detach `"$verify`" $ExpectedTestHead 2>&1" |
-        Tee-Object -LiteralPath $log -Append
+        Tee-Object -FilePath $log -Append
     $worktreeExit = $LASTEXITCODE
     Write-Log "WORKTREE_ADD_EXIT=$worktreeExit"
     if ($worktreeExit -ne 0) { throw "git worktree add failed with exit code $worktreeExit" }
@@ -169,7 +173,7 @@ try {
     Write-Log ""
     Write-Log "=== tests ==="
     cmd.exe /d /c "python -m unittest discover -s tests -v 2>&1" |
-        Tee-Object -LiteralPath $log -Append
+        Tee-Object -FilePath $log -Append
     $testExit = $LASTEXITCODE
     Write-Log "TEST_EXIT=$testExit"
     if ($testExit -ne 0) { throw "Full unittest regression failed with exit code $testExit" }
@@ -177,7 +181,7 @@ try {
     Write-Log ""
     Write-Log "=== diff check ==="
     cmd.exe /d /c "git diff --check origin/main...HEAD 2>&1" |
-        Tee-Object -LiteralPath $log -Append
+        Tee-Object -FilePath $log -Append
     $diffExit = $LASTEXITCODE
     Write-Log "DIFF_EXIT=$diffExit"
     if ($diffExit -ne 0) { throw "git diff --check failed with exit code $diffExit" }
@@ -194,7 +198,7 @@ try {
     Write-Log ""
     Write-Log "=== remove verification worktree ==="
     cmd.exe /d /c "git worktree remove `"$verify`" 2>&1" |
-        Tee-Object -LiteralPath $log -Append
+        Tee-Object -FilePath $log -Append
     $removeExit = $LASTEXITCODE
     Write-Log "WORKTREE_REMOVE_EXIT=$removeExit"
     if ($removeExit -ne 0) {
