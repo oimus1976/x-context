@@ -50,6 +50,20 @@ desired = true
 state = "UNKNOWN"
 evidence = "GitHub Actions desired when available; current account Actions-minute exhaustion prevents CI evidence for this spec-only PR"
 
+# Project-specific validation workspace authority. These values are consumed by
+# tracked validation tooling; ad-hoc chat snippets are not authoritative.
+[validation_workspace]
+canonical_repo = "C:\\Users\\oimus\\x-context"
+disposable_root = "%TEMP%\\x-context"
+worktree_root = "%TEMP%\\x-context\\worktrees"
+durable_log_dir = "C:\\Users\\oimus\\x-context\\logs\\verification"
+final_branch = "main"
+
+[enforcement.validation_workspace]
+desired = "profile-derived paths and fail-closed final-state validation"
+state = "DECLARED" # moves to ENFORCED only when helper is wired; VERIFIED only after negative tests pass
+evidence = "Issue #14 tracks implementation and negative-test evidence"
+
 [verification]
 real_boundary_smoke_required = true
 test_matrix_required = true
