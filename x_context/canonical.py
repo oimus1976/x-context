@@ -69,7 +69,7 @@ class Page:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalEnvelope:
-    """Successful read or authenticated bookmarks envelope."""
+    """Successful read or authenticated collection envelope."""
 
     operation: str
     retrieved_at: datetime
@@ -87,9 +87,9 @@ class CanonicalEnvelope:
                 raise ValueError("read envelopes must use subject = null")
             if self.page.next_token is not None or not self.page.complete:
                 raise ValueError("read envelopes must use a complete page with no next_token")
-        elif self.operation == "bookmarks":
+        elif self.operation in ("bookmarks", "likes"):
             if not isinstance(self.subject, AuthenticatedSubject):
-                raise ValueError("bookmarks require an authenticated subject")
+                raise ValueError(f"{self.operation} require an authenticated subject")
         else:
             raise ValueError("unsupported operation")
         if not isinstance(self.items, tuple) or not all(

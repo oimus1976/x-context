@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### FR-004 bounded liked-post CLI
+
+- Issue #21 adds `likes [--max-results 1..100] [--page-token ...]`, defaulting to 25 and at most one official GET liked_tweets collection request. Only `X_CONTEXT_USER_ACCESS_TOKEN` supplies authority; each invocation first resolves `/2/users/me` and binds the exact subject. No app-only fallback or target-user argument is accepted.
+- A small shared collection helper reuses the FR-003 validation, transport, canonical normalization, and error/accounting flow. The bookmarks public helper/result type and observable behavior are preserved. Likes output uses the existing Post representation and subject provenance; completeness depends only on provider continuation. Shared diagnostics retain separate endpoint rates and omit private contents, credentials, arbitrary headers, and page-token values. No default persistence, mutations, retries, or automatic pagination are added.
+- TEST_MATRIX and failing FR-004 contract/security tests preceded product changes in a separate test commit. Initial fake-transport validation passed 18 FR-004 and 115 total tests. Final exact-head validation/review is recorded separately; real X qualification remains unverified because this task prohibits live credentials and reads.
+
 ### FR-003 bounded bookmarks CLI
 
 - Issue #19 adds `bookmarks [--max-results 1..100] [--page-token ...]`, defaulting to 25 and one collection request. Each invocation resolves `/2/users/me` with only `X_CONTEXT_USER_ACCESS_TOKEN` and passes its exact ID through the shared binding guard before official GET bookmarks lookup. No app-only fallback or target-user argument is accepted.

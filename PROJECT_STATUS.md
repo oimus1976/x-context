@@ -3,40 +3,50 @@
 ## 30-second state
 
 - **Goal:** Read-only official X API context reader.
-- **Current work:** Issue #19, FR-003 authenticated bookmarks with bounded one-page CLI, on `issue-19-fr003-bookmarks`.
-- **Starting HEAD:** `bfeb8a020f54c1638e63a3cd3945c57926692b9c`, independently matched to the GitHub topic branch before implementation.
-- **Dependency:** Issue #11 / PR #18 authenticated-subject boundary is available; GitHub main was independently observed at `d36a8cab3263d662eb5706e563aadd55a05b0c6e`.
-- **Implementation:** One-page bookmarks provider and CLI, canonical subject/page integration, and safe aggregate diagnostics added locally.
-- **Validation:** Contract tests were added before product code and failed (10 failures, 4 missing-behavior errors); initial implementation passed 14 FR-003 and 97 total tests. Independent review found a transport-error category leak; regression and remediation added. Final exact-head validation/review evidence belongs to the final task report and durable validation log.
-- **Human decision:** No PR or Ready transition is authorized in this task. Ready / merge remain human-final.
+- **Current work:** Issue #21, FR-004 authenticated liked-post lookup with bounded one-page CLI, on `issue-21-fr004-likes`.
+- **Starting HEAD:** `28d4cf24e421f802648a72ec6b02ec2c87f95e84`, independently matched to the GitHub topic branch before implementation.
+- **Dependency:** FR-003 / PR #20 and the shared authenticated-subject boundary are present; canonical main was observed at `cc0ef49cb452a3431b49cba4f20550314fe334d5`.
+- **Implementation:** `likes` now uses the existing bounded collection flow, with canonical subject/page output and aggregate safe diagnostics.
+- **Validation:** TEST_MATRIX preceded tests; test commit `cbc020f` preceded product code. The 18 FR-004 tests initially produced 13 failures and 4 missing-behavior errors. Initial implementation passed all 18 targeted and 115 total tests. Final exact-head validation and independent review belong to the durable evidence and task report.
+- **Human decision:** No PR or Ready transition is authorized. Ready / merge remain human-final.
 - **Qualification:** No live credentials or X account reads; real API behavior remains unverified.
 
 ## Authority and risk
 
-GitHub Issues and accepted specifications own scope; Git owns source revisions. `PROJECT_PROFILE.toml` records authority and validation workspace paths; `BASELINE.md` defines governance.
+GitHub Issue #21 and accepted specifications own scope; Git owns source revisions. `PROJECT_PROFILE.toml` records authority and validation workspace paths; `BASELINE.md` defines governance.
 
-Issue #19 facets: `CREDENTIALS`, `SECURITY_BOUNDARY`, `PRIVATE_DATA`, `PLATFORM_DEPENDENT`. Derived risk: **HIGH_IMPACT**. Independent review and exact-head evidence are required before any human final action. Required comprehension is C2: the owner should understand subject authority, private output handling, bounded requests, conservative failure, and recovery.
+Issue #21 facets: `CREDENTIALS`, `SECURITY_BOUNDARY`, `PRIVATE_DATA`, `PLATFORM_DEPENDENT`. Derived risk: **HIGH_IMPACT**. Final exact-head validation and L2 independent review are required. C2 comprehension covers subject authority, private output handling, bounded requests, conservative failure, and recovery.
 
 ## Command and authority boundary
 
-`python -m x_context bookmarks [--max-results 1..100] [--page-token <token>]`
+`python -m x_context likes [--max-results 1..100] [--page-token <token>]`
 
-- Only `X_CONTEXT_USER_ACCESS_TOKEN` supplies user-context authority. `X_CONTEXT_BEARER_TOKEN` continues to supply only the existing `read` command.
-- Every valid invocation resolves the official `/2/users/me` subject anew, then calls `bind_collection_subject` with that exact ID before one official GET `/2/users/{id}/bookmarks` request.
-- There is no target-user argument, automatic traversal, retry, or redirect following in this collection path. Default page size is 25, cap is 100; invalid local inputs stop before transport.
-- Successful stdout contains canonical JSON: `operation=bookmarks`, resolved subject ID/optional username, existing Post id/text, and explicit page state. Only absence of provider continuation supports `complete=true`; item count alone does not.
-- Canonical stdout is private activity output, including its continuation token. Default behavior does not save it. Diagnostics on stderr contain no private contents or opaque tokens.
+- Only `X_CONTEXT_USER_ACCESS_TOKEN` supplies collection user authority. `X_CONTEXT_BEARER_TOKEN` continues to supply only `read`.
+- Every valid invocation resolves official `/2/users/me`, then calls `bind_collection_subject` with that exact ID before one official GET `/2/users/{id}/liked_tweets` request.
+- There is no target-user argument, automatic traversal, retry, or redirect following in this collection path. Default page size is 25; accepted range is 1..100. Invalid local inputs stop before transport.
+- Canonical stdout contains `operation=likes`, resolved subject ID/optional username, existing Post id/text, and explicit page state. A continuation token means `complete=false`; only absence of continuation supports `complete=true`, regardless of item count.
+- Canonical stdout is private activity output, including any continuation token. Default behavior does not save it. Diagnostics on stderr contain no private contents or opaque tokens.
 
-## Failure and diagnostics
+## FR-003 reuse and compatibility
 
-Request attempts include subject lookup and the bookmark request. Safe rate metadata is reported separately under `rate_limits.subject` and `rate_limits.bookmarks` because these are distinct provider budgets. Failures report zero returned items and no returned continuation; an invalid page size is not echoed. Parser failure reports requested size as unknown.
+A small private `_lookup_collection` helper holds the existing FR-003 algorithm. A closed mapping selects bookmarks or liked_tweets; it accepts no arbitrary endpoint or target. `lookup_bookmarks` retains its signature and `BookmarksLookupResult` result type; `lookup_likes` adds the corresponding typed entry point. Both result types share diagnostic fields. The existing redirect-refusing transport is reused unchanged.
 
-Existing stable categories remain in force. Subject mismatch stops before collection transport. Ambiguous failures (including bookmark 404 and ambiguous 429), malformed/contradictory success, and transport exceptions fail closed as `provider_error`. Available safe subject rates are retained even if subject payload validation fails. Recovery is to inspect the category and safe request/rate facts, correct local input or authorization, and explicitly retry; no unofficial fallback is available.
+CLI option construction and diagnostic formatting are shared. Bookmarks retains its canonical operation and `rate_limits.bookmarks` key; likes uses `rate_limits.likes`. Existing FR-003 tests are unchanged. There are no additional canonical Post fields or changes to the authenticated-subject implementation or read flow.
 
-## Evidence and remaining work
+## Failure, diagnostics, and recovery
 
-See `docs/TEST_MATRIX.md`, `tests/test_fr003_bookmarks.py`, and `docs/specs/0001-fr003-bookmarks-clarification.md`. Unit/contract evidence uses fake credentials/transports only. Full regression command: `python -m unittest discover -s tests -v`.
+Request attempts aggregate subject resolution and collection retrieval. Safe rates remain separate under `rate_limits.subject` and `rate_limits.likes`, because the endpoints have distinct budgets. Failures report zero returned items and no returned continuation. Invalid page sizes are not echoed; parser failures report requested size as unknown.
 
-Authoritative exact-head validation uses tracked `scripts/Invoke-XContextValidation.ps1` and the profile-declared canonical repository, disposable worktree root, and durable log directory. A local passing suite alone is not a claim of authoritative validation, CI, real-boundary qualification, or acceptance.
+Subject mismatch stops before collection transport. Ambiguous failures (including collection 404 and ambiguous 429), malformed/contradictory success, and transport exceptions fail closed as `provider_error`. Safe subject rates survive subject-payload validation failure. Recovery is to inspect the stable category and safe request/rate facts, correct local input or authorization, and explicitly retry. No unofficial fallback is available.
 
-OAuth browser/PKCE, refresh-token persistence, FR-004 likes, multi-page behavior, mutation, arbitrary targets, scraping, cookies, and internal GraphQL remain out of scope. No default bookmark persistence was added. No live smoke is permitted in this task; that qualification remains deferred to a separately authorized action.
+## Evidence and remaining uncertainty
+
+See `docs/TEST_MATRIX.md`, `tests/test_fr004_likes.py`, and `docs/specs/0001-fr004-likes-clarification.md`. Tests use fake credentials/transports only. Commands:
+
+- `python -m unittest discover -s tests -p test_fr004_likes.py -v`
+- `python -m unittest discover -s tests -v`
+- `git diff --check`
+
+Authoritative validation uses tracked `scripts/Invoke-XContextValidation.ps1`, the profile-declared canonical repository, disposable worktree root, and durable log directory. Passing unit tests do not establish CI, real API qualification, or human acceptance.
+
+OAuth browser/PKCE, refresh-token persistence, multi-page behavior, mutations, arbitrary targets, scraping, cookies, and internal GraphQL remain out of scope. No default private-data persistence was added. Live smoke is prohibited for this task and remains deferred to a separately authorized action.

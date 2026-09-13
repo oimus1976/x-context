@@ -420,7 +420,7 @@ def _bookmarks_transport(request: HttpRequest) -> HttpResponse:
 
 
 @dataclass(frozen=True, slots=True)
-class BookmarksLookupResult:
+class CollectionLookupResult:
     envelope: CanonicalEnvelope = field(repr=False)
     subject_rate_limit: RateLimitMetadata
     rate_limit: RateLimitMetadata
@@ -428,11 +428,45 @@ class BookmarksLookupResult:
     requested_page_size: int
 
 
+@dataclass(frozen=True, slots=True)
+class BookmarksLookupResult(CollectionLookupResult):
+    """Bookmark canonical output and safe per-endpoint diagnostics."""
+
+
+@dataclass(frozen=True, slots=True)
+class LikesLookupResult(CollectionLookupResult):
+    """Liked-post canonical output and safe per-endpoint diagnostics."""
+
+
 def lookup_bookmarks(
     *, user_access_token: str | None, max_results: int = 25,
     page_token: str | None = None, transport: Transport | None = None,
 ) -> BookmarksLookupResult:
     """Resolve the user, bind the target, and fetch exactly one bookmark page."""
+    return _lookup_collection("bookmarks", user_access_token=user_access_token,
+                              max_results=max_results, page_token=page_token, transport=transport)
+
+
+def lookup_likes(
+    *, user_access_token: str | None, max_results: int = 25,
+    page_token: str | None = None, transport: Transport | None = None,
+) -> LikesLookupResult:
+    """Resolve the user, bind the target, and fetch exactly one liked-post page."""
+    return _lookup_collection("likes", user_access_token=user_access_token,
+                              max_results=max_results, page_token=page_token, transport=transport)
+
+
+def _lookup_collection(
+    operation: str, *, user_access_token: str | None, max_results: int,
+    page_token: str | None, transport: Transport | None,
+) -> BookmarksLookupResult | LikesLookupResult:
+    # Closed operation mapping: callers cannot supply an endpoint or target user.
+    if operation == "bookmarks":
+        collection_path, result_type = "bookmarks", BookmarksLookupResult
+    elif operation == "likes":
+        collection_path, result_type = "liked_tweets", LikesLookupResult
+    else:
+        raise XApiError("invalid_input")
     if type(max_results) is not int or not 1 <= max_results <= 100:
         raise XApiError("invalid_input")
     if page_token is not None and (
@@ -470,7 +504,7 @@ def lookup_bookmarks(
     attempted = resolution.requests_attempted + 1
     rate = RateLimitMetadata()
     try:
-        request = HttpRequest("GET", f"{OFFICIAL_X_API_ORIGIN}/2/users/{target}/bookmarks?{urlencode(query)}",
+        request = HttpRequest("GET", f"{OFFICIAL_X_API_ORIGIN}/2/users/{target}/{collection_path}?{urlencode(query)}",
                               {"Authorization": f"Bearer {user_access_token}", "Accept": "application/json"})
         try:
             reply = selected_transport(request)
@@ -500,7 +534,7 @@ def lookup_bookmarks(
             if not isinstance(post, dict) or not _is_provider_compatible_post_id(post.get("id")) or not isinstance(post.get("text"), str):
                 raise XApiError("provider_error")
             items.append(CanonicalPost(post["id"], post["text"]))
-        envelope = CanonicalEnvelope("bookmarks", datetime.now(timezone.utc), resolution.subject,
+        envelope = CanonicalEnvelope(operation, datetime.now(timezone.utc), resolution.subject,
                                      tuple(items), Page(next_token, next_token is None))
     except Exception as exc:
         # Reconstruct only safe fields, suppressing arbitrary transport/decoder text.
@@ -509,4 +543,4 @@ def lookup_bookmarks(
                             rate_limit=rate, requests_attempted=attempted)
         failure.subject_rate_limit = resolution.rate_limit
         raise failure from None
-    return BookmarksLookupResult(envelope, resolution.rate_limit, rate, attempted, max_results)
+    return result_type(envelope, resolution.rate_limit, rate, attempted, max_results)
