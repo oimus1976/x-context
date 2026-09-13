@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import json
 from typing import Callable, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, HTTPRedirectHandler, build_opener
+from urllib.parse import urlencode
 
-from .canonical import CanonicalEnvelope, CanonicalPost, make_read_envelope
+from .canonical import CanonicalEnvelope, CanonicalPost, Page, make_read_envelope
 
 OFFICIAL_X_API_ORIGIN = "https://api.x.com"
 _SINGLE_POST_PATH = "/2/tweets/{post_id}"
@@ -20,7 +22,7 @@ class HttpRequest:
     """Small transport-neutral request contract used by the provider."""
 
     method: str
-    url: str
+    url: str = field(repr=False)
     headers: Mapping[str, str] = field(repr=False)
 
 
@@ -29,8 +31,8 @@ class HttpResponse:
     """Small transport-neutral response contract used by the provider."""
 
     status: int
-    headers: Mapping[str, str]
-    body: bytes
+    headers: Mapping[str, str] = field(repr=False)
+    body: bytes = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,3 +402,111 @@ def bind_collection_subject(subject: AuthenticatedSubject, target_user_id: str) 
     if target_user_id != subject.id:
         raise XApiError("subject_mismatch")
     return target_user_id
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _bookmarks_transport(request: HttpRequest) -> HttpResponse:
+    """No redirects/retries: each call is one attempt at the authorized endpoint."""
+    req = Request(request.url, method=request.method, headers=dict(request.headers))
+    try:
+        with build_opener(_NoRedirect()).open(req, timeout=30) as reply:
+            return HttpResponse(reply.getcode(), dict(reply.headers.items()), reply.read())
+    except HTTPError as exc:
+        return HttpResponse(exc.code, {} if exc.headers is None else dict(exc.headers.items()), exc.read())
+
+
+@dataclass(frozen=True, slots=True)
+class BookmarksLookupResult:
+    envelope: CanonicalEnvelope = field(repr=False)
+    subject_rate_limit: RateLimitMetadata
+    rate_limit: RateLimitMetadata
+    requests_attempted: int
+    requested_page_size: int
+
+
+def lookup_bookmarks(
+    *, user_access_token: str | None, max_results: int = 25,
+    page_token: str | None = None, transport: Transport | None = None,
+) -> BookmarksLookupResult:
+    """Resolve the user, bind the target, and fetch exactly one bookmark page."""
+    if type(max_results) is not int or not 1 <= max_results <= 100:
+        raise XApiError("invalid_input")
+    if page_token is not None and (
+        not isinstance(page_token, str) or not page_token or any(ord(c) < 32 or ord(c) == 127 for c in page_token)
+    ):
+        raise XApiError("invalid_input")
+    selected_transport = _bookmarks_transport if transport is None else transport
+    subject_rate = RateLimitMetadata()
+    subject_attempts = 0
+
+    def subject_transport(request: HttpRequest) -> HttpResponse:
+        nonlocal subject_rate, subject_attempts
+        subject_attempts += 1
+        reply = selected_transport(request)
+        if isinstance(reply, HttpResponse):
+            subject_rate = _rate_limit_metadata(reply.headers)
+        return reply
+
+    try:
+        resolution = resolve_authenticated_subject(user_access_token=user_access_token, transport=subject_transport)
+    except XApiError as exc:
+        exc.rate_limit = subject_rate
+        raise
+    except Exception:
+        raise XApiError("provider_error", rate_limit=subject_rate, requests_attempted=subject_attempts) from None
+    try:
+        target = bind_collection_subject(resolution.subject, resolution.subject.id)
+    except XApiError as exc:
+        exc.requests_attempted += resolution.requests_attempted
+        exc.subject_rate_limit = resolution.rate_limit
+        raise
+    query = {"max_results": max_results}
+    if page_token is not None:
+        query["pagination_token"] = page_token
+    attempted = resolution.requests_attempted + 1
+    rate = RateLimitMetadata()
+    try:
+        request = HttpRequest("GET", f"{OFFICIAL_X_API_ORIGIN}/2/users/{target}/bookmarks?{urlencode(query)}",
+                              {"Authorization": f"Bearer {user_access_token}", "Accept": "application/json"})
+        try:
+            reply = selected_transport(request)
+        except Exception:
+            raise XApiError("provider_error") from None
+        if not isinstance(reply, HttpResponse):
+            raise XApiError("provider_error")
+        rate = _rate_limit_metadata(reply.headers)
+        if reply.status != 200:
+            raise XApiError(_provider_failure_category(reply, allow_resource_unavailable=False), status_code=reply.status)
+        payload = _json_object(reply.body)
+        if payload is None or payload.get("errors") not in (None, []):
+            raise XApiError("provider_error")
+        meta = payload.get("meta", {})
+        if not isinstance(meta, dict):
+            raise XApiError("provider_error")
+        data = payload.get("data", [] if type(meta.get("result_count")) is int and meta["result_count"] == 0 else None)
+        if not isinstance(data, list) or len(data) > max_results:
+            raise XApiError("provider_error")
+        if "result_count" in meta and (type(meta["result_count"]) is not int or meta["result_count"] != len(data)):
+            raise XApiError("provider_error")
+        next_token = meta.get("next_token")
+        if next_token is not None and (not isinstance(next_token, str) or not next_token):
+            raise XApiError("provider_error")
+        items = []
+        for post in data:
+            if not isinstance(post, dict) or not _is_provider_compatible_post_id(post.get("id")) or not isinstance(post.get("text"), str):
+                raise XApiError("provider_error")
+            items.append(CanonicalPost(post["id"], post["text"]))
+        envelope = CanonicalEnvelope("bookmarks", datetime.now(timezone.utc), resolution.subject,
+                                     tuple(items), Page(next_token, next_token is None))
+    except Exception as exc:
+        # Reconstruct only safe fields, suppressing arbitrary transport/decoder text.
+        failure = XApiError(exc.category if isinstance(exc, XApiError) else "provider_error",
+                            status_code=exc.status_code if isinstance(exc, XApiError) else None,
+                            rate_limit=rate, requests_attempted=attempted)
+        failure.subject_rate_limit = resolution.rate_limit
+        raise failure from None
+    return BookmarksLookupResult(envelope, resolution.rate_limit, rate, attempted, max_results)
