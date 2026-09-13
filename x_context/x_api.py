@@ -352,6 +352,14 @@ def resolve_authenticated_subject(
             requests_attempted=1,
         )
 
+    errors = payload.get("errors")
+    if errors not in (None, []):
+        raise XApiError(
+            "provider_error",
+            status_code=provider_response.status,
+            requests_attempted=1,
+        )
+
     data = payload.get("data")
     if not isinstance(data, dict):
         raise XApiError(

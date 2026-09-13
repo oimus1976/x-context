@@ -6,10 +6,10 @@
 
 - **Goal:** Establish a read-only official-X-API context reader with specification-driven traceability and a broader staged personal-context roadmap.
 - **Current phase:** P0 authenticated-subject resolution/binding boundary (Issue #11).
-- **Last completed:** Issue #9 / PR #10 (FR-006 `read` CLI), squash-merged to `main` at `b13cfb1b8518826bf93328cced89a0d6e0dda1b8`.
-- **Last closeout evidence:** exact merged `main` passed 45/45 product tests; detached verification worktree was clean; canonical local `main` was then fast-forwarded to the same GitHub SHA with clean status.
+- **Last completed:** Issue #14 / PR #15 (validation workspace guard), merged to `main` at `70dd4c502aa45c8f361baf2ff91ca9d5063e03c0`.
+- **Last closeout evidence:** Issue #14 exact-head validation passed with a clean disposable verification worktree; the canonical repository returned to `main` synchronized with `origin/main`, with clean status and a non-empty durable verification log.
 - **Now working on:** `issue-11-authenticated-subject-binding`, adding the shared official `/2/users/me` subject boundary required before bookmarks/likes.
-- **Next:** authoritative local regression and exact-head validation of Issue #11; remediate before Draft PR.
+- **Next:** finish Issue #11 adversarial remediation/documentation, then run the tracked exact-head validation runner before Draft PR.
 - **Human decision pending:** Ready / merge remain human-final.
 - **Main risks:** confusing app-only and user-context credentials; leaking user token/raw provider data; allowing a future collection target to diverge from the authenticated subject; hiding the extra `/users/me` request from NFR-005 accounting.
 - **Required comprehension level:** C1
@@ -41,7 +41,8 @@ Issue #11 adds user-context identity resolution but still does not retrieve book
 
 - Repository: `oimus1976/x-context`.
 - Issue #9 is closed/completed and PR #10 is merged.
-- Issue #11 base `main`: `b13cfb1b8518826bf93328cced89a0d6e0dda1b8`.
+- Issue #11 originally branched from `main` at `b13cfb1b8518826bf93328cced89a0d6e0dda1b8`; the topic branch has since incorporated current `main` at `70dd4c502aa45c8f361baf2ff91ca9d5063e03c0`.
+- The repository-enforced validation workspace guard from Issue #14 / PR #15 is now available to this workstream.
 - Completed dependencies: FR-001 URL parsing, FR-005 minimal canonical `read`, FR-002 official single-Post lookup, FR-006 `read` CLI.
 - Existing app-only CLI credential source remains `X_CONTEXT_BEARER_TOKEN`.
 - Existing `lookup_post(...) -> CanonicalEnvelope` compatibility contract remains in force.
@@ -91,7 +92,7 @@ Authoritative operator validation must use an exact checkout of the current GitH
 - clean verification worktree;
 - final canonical working directory, branch, HEAD, status, and log path.
 
-The validation wrapper must fail closed if the final working directory is not `C:\Users\oimus\x-context`, if branch/head are unexpected, if status is dirty, or if the verification log was not created/non-empty. On Windows PowerShell 5.1, native command success is governed by `$LASTEXITCODE`; merge native stderr inside `cmd.exe` before piping to PowerShell when capturing unittest output.
+Authoritative validation must use tracked `scripts/Invoke-XContextValidation.ps1` and the workspace authority declared in `PROJECT_PROFILE.toml`; ad-hoc `%TEMP%` worktrees or temporary-only evidence are not substitutes. The runner enforces the canonical repository, disposable worktree root, durable log directory, expected topic head, final `main`/`origin/main` synchronization, clean status, and non-empty durable log. Failed diagnostic worktrees are retained rather than force-removed.
 
 ## Adversarial review focus
 

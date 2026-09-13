@@ -109,6 +109,24 @@ class AuthenticatedSubjectTests(unittest.TestCase):
 
         self.assertEqual(result.subject, AuthenticatedSubject(id="123", username=None))
 
+    def test_AUTH_SUBJ_empty_errors_does_not_make_success_contradictory(self):
+        transport = FakeTransport(
+            response=response(
+                200,
+                {"data": {"id": "123", "username": "alice"}, "errors": []},
+            )
+        )
+
+        result = resolve_authenticated_subject(
+            user_access_token="fake-user-token",
+            transport=transport,
+        )
+
+        self.assertEqual(
+            result.subject,
+            AuthenticatedSubject(id="123", username="alice"),
+        )
+
     def test_AUTH_SUBJ_rejects_malformed_subject_payload(self):
         malformed = (
             {},
@@ -120,6 +138,10 @@ class AuthenticatedSubjectTests(unittest.TestCase):
             {"data": {"id": "１２３"}},
             {"data": {"id": "123", "username": ""}},
             {"data": {"id": "123", "username": 99}},
+            {
+                "data": {"id": "123", "username": "alice"},
+                "errors": [{"message": "contradictory success payload"}],
+            },
         )
 
         for payload in malformed:
