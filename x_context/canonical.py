@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .x_api import AuthenticatedSubject
 
 SCHEMA_VERSION = "1"
 SOURCE = "x"
@@ -32,8 +35,8 @@ class CanonicalPost:
     Their absence means unrequested/unresolved/not represented, not known-empty.
     """
 
-    id: str
-    text: str
+    id: str = field(repr=False)
+    text: str = field(repr=False)
 
     def __post_init__(self) -> None:
         _require_ascii_numeric_post_id(self.id)
@@ -48,7 +51,7 @@ class CanonicalPost:
 class Page:
     """Canonical page metadata shared with later collection slices."""
 
-    next_token: str | None = None
+    next_token: str | None = field(default=None, repr=False)
     complete: bool = True
 
     def __post_init__(self) -> None:
@@ -66,23 +69,29 @@ class Page:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalEnvelope:
-    """Successful canonical envelope for the currently implemented `read` slice."""
+    """Successful read or authenticated bookmarks envelope."""
 
     operation: str
     retrieved_at: datetime
-    subject: None
-    items: tuple[CanonicalPost, ...]
+    subject: AuthenticatedSubject | None
+    items: tuple[CanonicalPost, ...] = field(repr=False)
     page: Page
     schema_version: str = field(default=SCHEMA_VERSION, init=False)
     source: str = field(default=SOURCE, init=False)
 
     def __post_init__(self) -> None:
-        if self.operation != "read":
-            raise ValueError("only the read operation is implemented in this FR-005 slice")
-        if self.subject is not None:
-            raise ValueError("read envelopes must use subject = null")
-        if self.page.next_token is not None or not self.page.complete:
-            raise ValueError("read envelopes must use a complete page with no next_token")
+        from .x_api import AuthenticatedSubject
+
+        if self.operation == "read":
+            if self.subject is not None:
+                raise ValueError("read envelopes must use subject = null")
+            if self.page.next_token is not None or not self.page.complete:
+                raise ValueError("read envelopes must use a complete page with no next_token")
+        elif self.operation == "bookmarks":
+            if not isinstance(self.subject, AuthenticatedSubject):
+                raise ValueError("bookmarks require an authenticated subject")
+        else:
+            raise ValueError("unsupported operation")
         if not isinstance(self.items, tuple) or not all(
             isinstance(item, CanonicalPost) for item in self.items
         ):
@@ -99,7 +108,10 @@ class CanonicalEnvelope:
             "source": self.source,
             "operation": self.operation,
             "retrieved_at": _format_rfc3339_utc(self.retrieved_at),
-            "subject": None,
+            "subject": None if self.subject is None else {
+                "id": self.subject.id,
+                **({"username": self.subject.username} if self.subject.username is not None else {}),
+            },
             "items": [item.to_dict() for item in self.items],
             "page": self.page.to_dict(),
         }

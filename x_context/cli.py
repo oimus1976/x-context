@@ -9,7 +9,7 @@ import sys
 from typing import Mapping, TextIO
 
 from .url_parser import InvalidStatusUrl, extract_post_id
-from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics
+from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks
 
 _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error"})
@@ -30,6 +30,9 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     read_parser = subparsers.add_parser("read", add_help=True)
     read_parser.add_argument("status_url")
+    bookmarks_parser = subparsers.add_parser("bookmarks", add_help=True, allow_abbrev=False)
+    bookmarks_parser.add_argument("--max-results", type=int, default=25)
+    bookmarks_parser.add_argument("--page-token")
     return parser
 
 
@@ -91,12 +94,27 @@ def main(
     try:
         args = parser.parse_args(selected_argv)
     except _CliUsageError:
+        if selected_argv and selected_argv[0] == "bookmarks":
+            _bookmarks_diagnostic(selected_stderr, error=XApiError("invalid_input"))
+            return 2
         _write_error(
             selected_stderr,
             category="invalid_input",
             requests_attempted=0,
         )
         return 2
+
+    if args.command == "bookmarks":
+        try:
+            result = lookup_bookmarks(user_access_token=selected_environ.get("X_CONTEXT_USER_ACCESS_TOKEN"),
+                                      max_results=args.max_results, page_token=args.page_token, transport=transport)
+        except XApiError as exc:
+            _bookmarks_diagnostic(selected_stderr, error=exc,
+                                  page_size=args.max_results if 1 <= args.max_results <= 100 else None)
+            return _exit_code_for_category(exc.category)
+        selected_stdout.write(result.envelope.to_json() + "\n")
+        _bookmarks_diagnostic(selected_stderr, result=result, page_size=result.requested_page_size)
+        return 0
 
     if args.command != "read":
         _write_error(
@@ -146,3 +164,28 @@ def main(
         },
     )
     return 0
+
+
+def _bookmarks_diagnostic(stream, *, result=None, error=None, page_size=None):
+    """Per-endpoint rates are distinct budgets, never added together."""
+    subject_rate = RateLimitMetadata()
+    bookmark_rate = RateLimitMetadata()
+    if result is not None:
+        subject_rate, bookmark_rate = result.subject_rate_limit, result.rate_limit
+    elif error is not None:
+        if hasattr(error, "subject_rate_limit"):
+            subject_rate, bookmark_rate = error.subject_rate_limit, error.rate_limit
+        else:
+            subject_rate = error.rate_limit
+    value = {
+        "diagnostic": "error" if error is not None else "usage",
+        "operation": "bookmarks",
+        "provider_requests_attempted": error.requests_attempted if error is not None else result.requests_attempted,
+        "returned_item_count": 0 if error is not None else len(result.envelope.items),
+        "requested_page_size": page_size,
+        "continuation_returned": False if error is not None else result.envelope.page.next_token is not None,
+        "rate_limits": {"subject": _rate_limit_dict(subject_rate), "bookmarks": _rate_limit_dict(bookmark_rate)},
+    }
+    if error is not None:
+        value["error_category"] = error.category
+    _write_json_line(stream, value)

@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### FR-003 bounded bookmarks CLI
+
+- Issue #19 adds `bookmarks [--max-results 1..100] [--page-token ...]`, defaulting to 25 and one collection request. Each invocation resolves `/2/users/me` with only `X_CONTEXT_USER_ACCESS_TOKEN` and passes its exact ID through the shared binding guard before official GET bookmarks lookup. No app-only fallback or target-user argument is accepted.
+- Canonical bookmarks output carries minimal authenticated subject provenance, existing Post id/text fields, and explicit continuation/completeness. Payloads are returned without default persistence. Diagnostics count both provider attempts and keep safe rate metadata separate by endpoint; private Post fields, request URLs, raw responses, and continuation values are excluded from repr/diagnostics. The bookmarks transport refuses redirects and transport exceptions are reduced to stable conservative errors.
+- TEST_MATRIX and failing contract/security tests preceded production changes. Fake-transport validation covers 14 FR-003 test methods plus existing regressions. Live qualification is unverified because this task prohibits live credentials. OAuth ceremony, storage, likes, mutations, arbitrary targets, and automatic pagination remain deferred.
+
 ### Authenticated subject boundary
 
 - Began Issue #11 as the shared identity boundary required before FR-003 bookmarks and FR-004 likes. Authenticated subject resolution uses only the official `GET /2/users/me` endpoint with an explicit user-context access token and does not fall back to the app-only `X_CONTEXT_BEARER_TOKEN`. The domain contract retains only an ASCII-decimal user ID plus optional username, exposes only allow-listed rate metadata and provider-request accounting outside canonical JSON, and fails closed for malformed or contradictory success payloads, ambiguous provider states, and transport failures. `bind_collection_subject(...)` permits only exact equality with the resolved subject and rejects invalid or different targets locally before any future collection request. No bookmarks/likes payload retrieval, OAuth browser ceremony, token persistence, write authority, arbitrary-user collection access, or unofficial fallback is introduced. See Issue #11.
