@@ -54,14 +54,34 @@ if ($LASTEXITCODE -ne 0) {
 
 New-Item -ItemType Directory -Force -Path $worktreeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-"" | Set-Content -LiteralPath $log -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($log, "", $utf8NoBom)
 
 $failure = $null
 $worktreeAdded = $false
 
 function Write-Log {
     param([string]$Message = "")
-    $Message | Tee-Object -FilePath $log -Append
+    Write-Host $Message
+    [System.IO.File]::AppendAllText(
+        $log,
+        $Message + [Environment]::NewLine,
+        $utf8NoBom
+    )
+}
+
+function Invoke-LoggedNative {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandLine
+    )
+
+    & cmd.exe /d /c $CommandLine 2>&1 |
+        ForEach-Object {
+            Write-Log ([string]$_)
+        }
+
+    return [int]$LASTEXITCODE
 }
 
 function Add-Failure {
@@ -93,6 +113,8 @@ $logRelative = Get-RepoRelativePath -Root $repo -Child $log
 
 try {
     Write-Log "=== x-context exact-head validation ==="
+    $utf8Probe = "UTF8_PROBE=" + [char]0x65E5 + [char]0x672C + [char]0x8A9E
+    Write-Log $utf8Probe
     Write-Log "START_TIME=$(Get-Date -Format o)"
     Write-Log "PROFILE=$profile"
     Write-Log "CANONICAL_REPO=$repo"
@@ -137,8 +159,7 @@ try {
 
     Write-Log ""
     Write-Log "=== git fetch origin ==="
-    cmd.exe /d /c "git fetch origin 2>&1" | Tee-Object -FilePath $log -Append
-    $fetchExit = $LASTEXITCODE
+    $fetchExit = Invoke-LoggedNative "git fetch origin 2>&1"
     Write-Log "FETCH_EXIT=$fetchExit"
     if ($fetchExit -ne 0) { throw "git fetch origin failed with exit code $fetchExit" }
 
@@ -169,9 +190,7 @@ try {
         throw "Verification worktree path already exists: $verify"
     }
 
-    cmd.exe /d /c "git worktree add --detach `"$verify`" $ExpectedTestHead 2>&1" |
-        Tee-Object -FilePath $log -Append
-    $worktreeExit = $LASTEXITCODE
+    $worktreeExit = Invoke-LoggedNative "git worktree add --detach `"$verify`" $ExpectedTestHead 2>&1"
     Write-Log "WORKTREE_ADD_EXIT=$worktreeExit"
     if ($worktreeExit -ne 0) { throw "git worktree add failed with exit code $worktreeExit" }
     $worktreeAdded = $true
@@ -184,17 +203,13 @@ try {
 
     Write-Log ""
     Write-Log "=== tests ==="
-    cmd.exe /d /c "python -m unittest discover -s tests -v 2>&1" |
-        Tee-Object -FilePath $log -Append
-    $testExit = $LASTEXITCODE
+    $testExit = Invoke-LoggedNative "python -m unittest discover -s tests -v 2>&1"
     Write-Log "TEST_EXIT=$testExit"
     if ($testExit -ne 0) { throw "Full unittest regression failed with exit code $testExit" }
 
     Write-Log ""
     Write-Log "=== diff check ==="
-    cmd.exe /d /c "git diff --check origin/main...HEAD 2>&1" |
-        Tee-Object -FilePath $log -Append
-    $diffExit = $LASTEXITCODE
+    $diffExit = Invoke-LoggedNative "git diff --check origin/main...HEAD 2>&1"
     Write-Log "DIFF_EXIT=$diffExit"
     if ($diffExit -ne 0) { throw "git diff --check failed with exit code $diffExit" }
 
@@ -209,9 +224,7 @@ try {
     Set-Location $repo
     Write-Log ""
     Write-Log "=== remove verification worktree ==="
-    cmd.exe /d /c "git worktree remove `"$verify`" 2>&1" |
-        Tee-Object -FilePath $log -Append
-    $removeExit = $LASTEXITCODE
+    $removeExit = Invoke-LoggedNative "git worktree remove `"$verify`" 2>&1"
     Write-Log "WORKTREE_REMOVE_EXIT=$removeExit"
     if ($removeExit -ne 0) {
         throw "Normal verification worktree removal failed; no force removal attempted"
