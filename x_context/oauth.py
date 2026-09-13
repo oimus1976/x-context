@@ -245,6 +245,8 @@ def _normalize_token_result(
     refresh_token = payload.get("refresh_token")
     if refresh_token is not None and not _safe_text(refresh_token):
         raise OAuthError("provider_error", callback_received=True, token_exchange_attempted=True)
+    if refresh_token is not None and not attempt.refresh_capable:
+        raise OAuthError("provider_error", callback_received=True, token_exchange_attempted=True)
 
     token_type = payload.get("token_type")
     if token_type is not None and not _safe_text(token_type):
