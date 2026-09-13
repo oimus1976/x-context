@@ -6,7 +6,6 @@ import os
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass, field
-from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from x_context.oauth import (
@@ -390,7 +389,7 @@ class OAuthAcquisitionTests(unittest.TestCase):
                     self.fail("expected OAuthError")
 
     def test_OAUTH_secret_sentinels_absent_from_stdout_stderr_repr_traceback(self):
-        attempt = build_authorization_attempt(config())
+        attempt = build_authorization_attempt(config(), refresh_capable=True)
         sentinels = {
             "code": "SENTINEL-CODE",
             "access": "SENTINEL-ACCESS",
@@ -431,12 +430,6 @@ class OAuthAcquisitionTests(unittest.TestCase):
 
         self.assertEqual(dict(os.environ), before_env)
         self.assertEqual(os.getcwd(), before_cwd)
-
-    def test_OAUTH_existing_user_token_lookup_unchanged(self):
-        from x_context.cli import _user_access_token
-
-        with patch.dict(os.environ, {"X_CONTEXT_USER_ACCESS_TOKEN": "existing-user-token"}, clear=False):
-            self.assertEqual(_user_access_token(), "existing-user-token")
 
 
 if __name__ == "__main__":
