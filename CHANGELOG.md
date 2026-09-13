@@ -14,6 +14,10 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### Authenticated subject boundary
+
+- Began Issue #11 as the shared identity boundary required before FR-003 bookmarks and FR-004 likes. Authenticated subject resolution uses only the official `GET /2/users/me` endpoint with an explicit user-context access token and does not fall back to the app-only `X_CONTEXT_BEARER_TOKEN`. The domain contract retains only an ASCII-decimal user ID plus optional username, exposes only allow-listed rate metadata and provider-request accounting outside canonical JSON, and fails closed for malformed or contradictory success payloads, ambiguous provider states, and transport failures. `bind_collection_subject(...)` permits only exact equality with the resolved subject and rejects invalid or different targets locally before any future collection request. No bookmarks/likes payload retrieval, OAuth browser ceremony, token persistence, write authority, arbitrary-user collection access, or unofficial fallback is introduced. See Issue #11.
+
 ### Validation log encoding
 
 - Issue #16 hardens the authoritative Windows PowerShell 5.1 validation runner so durable evidence is written explicitly as UTF-8 rather than appended through `Tee-Object`, avoiding NUL-interleaved/mixed-encoding logs observed during Issue #11 remediation. Native command output still remains visible while exit status continues to come from the native process, workspace/final-state fail-closed checks are unchanged, and failed diagnostic worktrees are still never force-removed. A non-ASCII UTF-8 probe is recorded in authoritative logs so the encoding contract can be verified from exact-head evidence. See Issue #16.
