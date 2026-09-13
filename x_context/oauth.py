@@ -56,7 +56,7 @@ class OAuthConfig:
 class OAuthAuthorizationAttempt:
     """One bounded authorization ceremony; verifier/state are secret."""
 
-    authorization_url: str
+    authorization_url: str = field(repr=False)
     scopes: tuple[str, ...]
     refresh_capable: bool
     state: str = field(repr=False)

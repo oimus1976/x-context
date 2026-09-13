@@ -125,6 +125,11 @@ class OAuthAcquisitionTests(unittest.TestCase):
         self.assertNotEqual(first.state, second.state)
         self.assertNotEqual(first.code_verifier, second.code_verifier)
 
+        rendered = repr(first)
+        self.assertNotIn(first.state, rendered)
+        self.assertNotIn(first.code_verifier, rendered)
+        self.assertNotIn(first.authorization_url, rendered)
+
     def test_OAUTH_derives_s256_challenge_without_plain_fallback(self):
         attempt = build_authorization_attempt(config())
         query = parse_qs(urlparse(attempt.authorization_url).query)
