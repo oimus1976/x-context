@@ -17,45 +17,87 @@ from scripts.validation_workspace import (
 class ValidationWorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.policy = WorkspacePolicy(
-            canonical_repo=r"C:\Users\oimus\x-context",
-            disposable_root=r"C:\Users\oimus\AppData\Local\Temp\x-context",
-            worktree_root=r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees",
-            durable_log_dir=r"C:\Users\oimus\x-context\logs\verification",
+            canonical_repo=r"C:\Users\example-user\x-context",
+            disposable_root=r"C:\Temp\x-context",
+            worktree_root=r"C:\Temp\x-context\worktrees",
+            durable_log_dir=r"C:\Users\example-user\x-context\logs\verification",
             final_branch="main",
         )
-        self.log = r"C:\Users\oimus\x-context\logs\verification\issue14-test.log"
+        self.log = r"C:\Users\example-user\x-context\logs\verification\issue14-test.log"
 
-    def test_policy_loads_and_expands_temp(self):
+    def test_policy_loads_and_expands_userprofile_and_temp(self):
         with tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / "PROJECT_PROFILE.toml"
             profile.write_text(
                 """
 [validation_workspace]
-canonical_repo = "C:\\\\Users\\\\oimus\\\\x-context"
+canonical_repo = "%USERPROFILE%\\\\x-context"
 disposable_root = "%TEMP%\\\\x-context"
 worktree_root = "%TEMP%\\\\x-context\\\\worktrees"
-durable_log_dir = "C:\\\\Users\\\\oimus\\\\x-context\\\\logs\\\\verification"
+durable_log_dir = "%USERPROFILE%\\\\x-context\\\\logs\\\\verification"
 final_branch = "main"
 """.strip(),
                 encoding="utf-8",
             )
-            policy = load_policy(profile, environ={"TEMP": r"C:\Temp"})
+            policy = load_policy(
+                profile,
+                environ={
+                    "USERPROFILE": r"C:\Users\example-user",
+                    "TEMP": r"C:\Temp",
+                },
+            )
+        self.assertEqual(policy.canonical_repo, r"C:\Users\example-user\x-context")
         self.assertEqual(policy.disposable_root, r"C:\Temp\x-context")
         self.assertEqual(policy.worktree_root, r"C:\Temp\x-context\worktrees")
+        self.assertEqual(
+            policy.durable_log_dir,
+            r"C:\Users\example-user\x-context\logs\verification",
+        )
+
+    def test_tracked_profile_expands_with_neutral_environment(self):
+        profile = Path(__file__).resolve().parents[1] / "PROJECT_PROFILE.toml"
+        user_profiles = (
+            r"C:\Users\example-user-a",
+            r"D:\Profiles\example-user-b",
+        )
+        for user_profile in user_profiles:
+            with self.subTest(user_profile=user_profile):
+                policy = load_policy(
+                    profile,
+                    environ={
+                        "USERPROFILE": user_profile,
+                        "TEMP": r"C:\Temp",
+                    },
+                )
+                self.assertEqual(policy.canonical_repo, user_profile + r"\x-context")
+                self.assertEqual(policy.disposable_root, r"C:\Temp\x-context")
+                self.assertEqual(policy.worktree_root, r"C:\Temp\x-context\worktrees")
+                self.assertEqual(
+                    policy.durable_log_dir,
+                    user_profile + r"\x-context\logs\verification",
+                )
+
+    def test_missing_userprofile_fails_closed(self):
+        profile = Path(__file__).resolve().parents[1] / "PROJECT_PROFILE.toml"
+        with self.assertRaisesRegex(
+            WorkspacePolicyError,
+            "required environment variable is not set: USERPROFILE",
+        ):
+            load_policy(profile, environ={"TEMP": r"C:\Temp"})
 
     def test_accepts_dedicated_worktree_path(self):
         validate_disposable_path(
-            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\issue14-abc",
+            r"C:\Temp\x-context\worktrees\issue14-abc",
             self.policy,
             kind="worktree",
         )
 
     def test_rejects_unsafe_worktree_path_components_before_cmd_boundary(self):
         invalid = (
-            r'C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad"name',
-            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad%TEMP%",
-            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\bad|name",
-            r"C:\Users\oimus\AppData\Local\Temp\x-context\worktrees\nested dir\leaf",
+            r'C:\Temp\x-context\worktrees\bad"name',
+            r"C:\Temp\x-context\worktrees\bad%TEMP%",
+            r"C:\Temp\x-context\worktrees\bad|name",
+            r"C:\Temp\x-context\worktrees\nested dir\leaf",
         )
         for path in invalid:
             with self.subTest(path=path):
@@ -64,9 +106,9 @@ final_branch = "main"
 
     def test_rejects_temp_root_sibling_worktree_paths(self):
         invalid = (
-            r"C:\Users\oimus\AppData\Local\Temp\x-context-issue14",
-            r"C:\Users\oimus\AppData\Local\Temp\issue14-abc",
-            r"C:\Users\oimus\AppData\Local\Temp\x-context",
+            r"C:\Temp\x-context-issue14",
+            r"C:\Temp\issue14-abc",
+            r"C:\Temp\x-context",
         )
         for path in invalid:
             with self.subTest(path=path):
@@ -87,20 +129,20 @@ final_branch = "main"
     def test_rejects_temp_log_as_durable_evidence(self):
         with self.assertRaises(WorkspacePolicyError):
             validate_durable_log_path(
-                r"C:\Users\oimus\AppData\Local\Temp\issue14.log",
+                r"C:\Temp\issue14.log",
                 self.policy,
             )
 
     def test_rejects_other_repo_directory_for_durable_log(self):
         with self.assertRaises(WorkspacePolicyError):
             validate_durable_log_path(
-                r"C:\Users\oimus\x-context\docs\issue14.log",
+                r"C:\Users\example-user\x-context\docs\issue14.log",
                 self.policy,
             )
 
     def test_rejects_wrong_canonical_repo(self):
         with self.assertRaises(WorkspacePolicyError):
-            validate_canonical_repo(r"C:\Users\oimus\other", self.policy)
+            validate_canonical_repo(r"C:\Users\example-user\other", self.policy)
 
     def test_effective_clean_status_allows_only_current_untracked_log(self):
         validate_effective_clean_status(

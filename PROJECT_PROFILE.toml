@@ -53,10 +53,10 @@ evidence = "GitHub Actions desired when available; current account Actions-minut
 # Project-specific validation workspace authority. These values are consumed by
 # tracked validation tooling; ad-hoc chat snippets are not authoritative.
 [validation_workspace]
-canonical_repo = "C:\\Users\\oimus\\x-context"
+canonical_repo = "%USERPROFILE%\\x-context"
 disposable_root = "%TEMP%\\x-context"
 worktree_root = "%TEMP%\\x-context\\worktrees"
-durable_log_dir = "C:\\Users\\oimus\\x-context\\logs\\verification"
+durable_log_dir = "%USERPROFILE%\\x-context\\logs\\verification"
 final_branch = "main"
 
 [enforcement.validation_workspace]
