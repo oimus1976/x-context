@@ -213,6 +213,29 @@ class OAuthAcquisitionTests(unittest.TestCase):
         self.assertEqual(raised.exception.category, "callback_listener_failed")
         self.assertEqual(browser.urls, [])
 
+    def test_OAUTH_browser_launch_failure_closes_listener_without_wait_or_exchange(self):
+        listener = FakeListener(
+            callback_url="http://127.0.0.1:8765/oauth/callback?unused=1"
+        )
+        transport = FakeTransport()
+
+        for browser in (
+            FakeBrowser(result=False),
+            FakeBrowser(error=RuntimeError("browser failure with secret-shaped noise")),
+        ):
+            with self.subTest(browser=browser):
+                with self.assertRaises(OAuthError) as raised:
+                    acquire_user_token(
+                        config(),
+                        browser_launcher=browser,
+                        listener_factory=lambda _: listener,
+                        transport=transport,
+                    )
+
+                self.assertEqual(raised.exception.category, "browser_launch_failed")
+                self.assertEqual(listener.waits, 0)
+                self.assertEqual(transport.requests, [])
+
     def test_OAUTH_external_browser_boundary_is_single_launch(self):
         attempt_holder = {}
 
@@ -290,6 +313,32 @@ class OAuthAcquisitionTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.category, "oauth_attempt_complete")
         self.assertEqual(len(transport.requests), 1)
+
+    def test_OAUTH_unrelated_request_does_not_terminate_loopback_wait(self):
+        from x_context.oauth import LoopbackCallbackListener
+
+        class FakeServer:
+            def __init__(self):
+                self.callback_target = None
+                self.timeout = None
+                self.calls = 0
+
+            def handle_request(self):
+                self.calls += 1
+                if self.calls == 2:
+                    self.callback_target = "/oauth/callback?code=fake-code&state=fake-state"
+
+        listener = LoopbackCallbackListener(config().redirect_uri)
+        fake_server = FakeServer()
+        listener._server = fake_server
+
+        callback = listener.wait_for_callback(1.0)
+
+        self.assertEqual(fake_server.calls, 2)
+        self.assertEqual(
+            callback,
+            "http://127.0.0.1:8765/oauth/callback?code=fake-code&state=fake-state",
+        )
 
     def test_OAUTH_timeout_closes_listener_without_exchange(self):
         browser = FakeBrowser()

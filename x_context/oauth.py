@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import secrets
+from time import monotonic
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
@@ -396,16 +397,24 @@ def exchange_callback(
 
 class _CallbackHTTPServer(HTTPServer):
     callback_target: str | None = None
+    expected_path: str = ""
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
     server: _CallbackHTTPServer
 
     def do_GET(self) -> None:
-        if self.server.callback_target is None:
-            self.server.callback_target = self.path
-        body = b"Authorization response received. You may close this window."
-        self.send_response(200)
+        request_path = urlparse(self.path).path
+        if request_path == self.server.expected_path:
+            if self.server.callback_target is None:
+                self.server.callback_target = self.path
+            status = 200
+            body = b"Authorization response received. You may close this window."
+        else:
+            status = 404
+            body = b"Not found."
+
+        self.send_response(status)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
@@ -431,6 +440,7 @@ class LoopbackCallbackListener:
     def __enter__(self) -> "LoopbackCallbackListener":
         assert self._port is not None
         self._server = _CallbackHTTPServer(("127.0.0.1", self._port), _CallbackHandler)
+        self._server.expected_path = urlparse(self._redirect_uri).path
         return self
 
     def wait_for_callback(self, timeout: float) -> str:
@@ -438,12 +448,16 @@ class LoopbackCallbackListener:
             raise RuntimeError("listener is not active")
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
             raise OAuthError("configuration_error")
-        self._server.timeout = float(timeout)
-        self._server.handle_request()
-        target = self._server.callback_target
-        if target is None:
-            raise TimeoutError("OAuth callback timed out")
-        return f"{self._origin}{target}"
+
+        deadline = monotonic() + float(timeout)
+        while self._server.callback_target is None:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError("OAuth callback timed out")
+            self._server.timeout = remaining
+            self._server.handle_request()
+
+        return f"{self._origin}{self._server.callback_target}"
 
     def __exit__(self, exc_type, exc, tb) -> bool:
         if self._server is not None:
