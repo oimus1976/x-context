@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### OAuth 2.0 Authorization Code + PKCE acquisition
+
+- Issue #23 adds a native/public-client OAuth acquisition boundary using only the official X authorization and token endpoints. Each bounded attempt generates fresh independent state and PKCE verifier material, requires S256, binds a fixed registered IPv4 loopback callback before launching the external system browser, accepts only the configured callback path/state, and performs at most one authorization-code exchange.
+- The acquisition result is secret-bearing and in-memory only. Client secret use, write scopes, OAuth 1.0a/unofficial/browser-cookie fallback, automatic retry/relaunch, token persistence, clipboard/environment export, refresh lifecycle assumptions, and changes to the existing `X_CONTEXT_USER_ACCESS_TOKEN` collection source remain out of scope. `offline.access` is requested only by explicit refresh-capable acquisition, and unexpected refresh authority fails closed.
+- Security remediation additionally hides the state-bearing authorization URL from object repr and prevents unrelated loopback requests such as `/favicon.ico` from terminating the callback listener. Authoritative exact-head validation on implementation head `f1205d11625cfa4d15d318067b5615292abe6c62` passed all 139 tests, `git diff --check`, clean verification worktree removal, and clean/synchronized canonical `main`. Real OAuth/browser qualification remains unperformed and human-gated.
+
 ### FR-004 bounded liked-post CLI
 
 - Issue #21 adds `likes [--max-results 1..100] [--page-token ...]`, defaulting to 25 and at most one official GET liked_tweets collection request. Only `X_CONTEXT_USER_ACCESS_TOKEN` supplies authority; each invocation first resolves `/2/users/me` and binds the exact subject. No app-only fallback or target-user argument is accepted.

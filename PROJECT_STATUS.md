@@ -5,7 +5,7 @@
 - **Goal:** Read-only official X API context reader with safe native OAuth user-token acquisition.
 - **Current work:** Issue #23, OAuth 2.0 Authorization Code + PKCE user-token acquisition, on `issue-23-oauth-acquisition`.
 - **Starting main:** `328aa09f8448630c3798810489d66e838ea4dccb` (PR #22 merge).
-- **Current topic head:** `1793448079d75d15dbc93f6852c1c8c7603a754b` after normative OAuth clarification, OAuth-specific test mapping, test-first contracts, minimal acquisition implementation, and a refresh-authority hardening follow-up.
+- **Last validated implementation head:** `f1205d11625cfa4d15d318067b5615292abe6c62`; authoritative validation passed 139 tests plus diff/workspace/final-state checks before this documentation-only closeout.
 - **Completed dependencies:** FR-001/002/003/004/005/006 and authenticated-subject binding are on main.
 - **Human decision:** No PR / Ready / merge transition is authorized. Ready / merge remain human-final.
 - **Qualification:** No live OAuth, real user token, browser authorization, or private collection read has been performed in Issue #23.
@@ -46,16 +46,16 @@ Normative clarification:
 
 - `docs/specs/0002-oauth-acquisition-clarification.md`
 
-OAuth-specific planned test mapping:
+Canonical traceability:
 
-- `docs/specs/0002-oauth-acquisition-test-matrix.md`
+- `docs/TEST_MATRIX.md`
 
-Contract tests:
+Contract/security tests:
 
 - `tests/test_oauth_acquisition.py`
 - `tests/test_oauth_acquisition_security.py`
 
-The normal canonical `docs/TEST_MATRIX.md` update was attempted before test implementation but the connected GitHub write path rejected that large replacement through its safety guard. The OAuth-specific matrix preserves the required ordering and exact mappings, but **integration back into `docs/TEST_MATRIX.md` remains mandatory before PR**. Do not treat Issue #23 documentation as complete until that integration is performed and reviewed.
+OAuth acceptance criteria are integrated into the canonical TEST_MATRIX using the concrete test names from the validated implementation. The temporary OAuth-only mapping file used while the connected write path was blocked is removed during this closeout so traceability has one canonical source.
 
 ## Implementation state
 
@@ -94,17 +94,20 @@ Tests use fake secret-shaped values only. Real OAuth qualification remains human
 
 ## Validation state
 
-GitHub is the source of truth for committed/shared state. The current environment used to author these commits cannot execute the repository's authoritative Windows validation runner, so no passing test claim is made for `1793448079d75d15dbc93f6852c1c8c7603a754b`.
+GitHub is the source of truth for committed/shared state. Authoritative Windows exact-head validation on implementation head `f1205d11625cfa4d15d318067b5615292abe6c62` completed successfully on 2026-09-14:
 
-Required next validation sequence:
+- 139/139 tests passed;
+- `git diff --check` passed;
+- expected/origin/actual topic heads matched exactly;
+- verification worktree was clean and removed normally;
+- canonical `main` remained clean and synchronized with `origin/main`;
+- durable evidence: `logs/verification/issue-23-oauth-callback-remediation-20260914-093122.log`.
 
-1. run targeted OAuth tests on the canonical Windows workspace;
-2. remediate any concrete failures without weakening the security contract;
-3. run full regression;
-4. integrate OAuth mappings into canonical `docs/TEST_MATRIX.md`;
-5. update CHANGELOG as appropriate;
-6. run tracked `scripts/Invoke-XContextValidation.ps1` against the final exact head with durable evidence under `logs/verification`;
-7. perform independent L2 review;
-8. only then consider one intentional live OAuth qualification and Draft PR.
+This documentation closeout moves the topic head without changing product behavior. Required remaining sequence:
+
+1. review the final documentation-only diff and canonical TEST_MATRIX integration;
+2. run authoritative exact-head validation again on the final documentation head;
+3. perform independent L2/adversarial review on that exact head;
+4. only then consider an intentional real OAuth qualification and Draft PR.
 
 No live credential may be placed into tests, Issue/PR text, chat logs, or retained validation evidence.
