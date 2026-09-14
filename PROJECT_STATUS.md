@@ -2,51 +2,112 @@
 
 ## 30-second state
 
-- **Goal:** Read-only official X API context reader.
-- **Current work:** Issue #21, FR-004 authenticated liked-post lookup with bounded one-page CLI, on `issue-21-fr004-likes`.
-- **Starting HEAD:** `28d4cf24e421f802648a72ec6b02ec2c87f95e84`, independently matched to the GitHub topic branch before implementation.
-- **Dependency:** FR-003 / PR #20 and the shared authenticated-subject boundary are present; canonical main was observed at `cc0ef49cb452a3431b49cba4f20550314fe334d5`.
-- **Implementation:** `likes` now uses the existing bounded collection flow, with canonical subject/page output and aggregate safe diagnostics.
-- **Validation:** TEST_MATRIX preceded tests; test commit `cbc020f` preceded product code. The 18 FR-004 tests initially produced 13 failures and 4 missing-behavior errors. Initial implementation passed all 18 targeted and 115 total tests. Final exact-head validation and independent review belong to the durable evidence and task report.
-- **Human decision:** No PR or Ready transition is authorized. Ready / merge remain human-final.
-- **Qualification:** No live credentials or X account reads; real API behavior remains unverified.
+- **Goal:** Read-only official X API context reader with safe native OAuth user-token acquisition.
+- **Current work:** Issue #23, OAuth 2.0 Authorization Code + PKCE user-token acquisition, on `issue-23-oauth-acquisition`.
+- **Starting main:** `328aa09f8448630c3798810489d66e838ea4dccb` (PR #22 merge).
+- **Last validated implementation head:** `f1205d11625cfa4d15d318067b5615292abe6c62`; authoritative validation passed 139 tests plus diff/workspace/final-state checks before this documentation-only closeout.
+- **Completed dependencies:** FR-001/002/003/004/005/006 and authenticated-subject binding are on main.
+- **Human decision:** No PR / Ready / merge transition is authorized. Ready / merge remain human-final.
+- **Qualification:** No live OAuth, real user token, browser authorization, or private collection read has been performed in Issue #23.
 
-## Authority and risk
+## Issue #23 scope
 
-GitHub Issue #21 and accepted specifications own scope; Git owns source revisions. `PROJECT_PROFILE.toml` records authority and validation workspace paths; `BASELINE.md` defines governance.
+This workstream adds only the native/public-client OAuth acquisition ceremony:
 
-Issue #21 facets: `CREDENTIALS`, `SECURITY_BOUNDARY`, `PRIVATE_DATA`, `PLATFORM_DEPENDENT`. Derived risk: **HIGH_IMPACT**. Final exact-head validation and L2 independent review are required. C2 comprehension covers subject authority, private output handling, bounded requests, conservative failure, and recovery.
+1. fixed registered IPv4 loopback callback using `http://127.0.0.1:<port>/<path>`;
+2. fresh state and PKCE verifier per attempt;
+3. S256 challenge only;
+4. external system-browser launch after successful listener bind;
+5. bounded one-callback handling and exact state/path validation;
+6. one official authorization-code token exchange;
+7. secret-bearing token result held in memory only.
 
-## Command and authority boundary
+Secure persistence, automatic refresh, refresh-token rotation assumptions, Windows Credential Manager / DPAPI integration, revoke/logout, and migration away from the existing `X_CONTEXT_USER_ACCESS_TOKEN` collection source remain out of scope.
 
-`python -m x_context likes [--max-results 1..100] [--page-token <token>]`
+## Verified external facts
 
-- Only `X_CONTEXT_USER_ACCESS_TOKEN` supplies collection user authority. `X_CONTEXT_BEARER_TOKEN` continues to supply only `read`.
-- Every valid invocation resolves official `/2/users/me`, then calls `bind_collection_subject` with that exact ID before one official GET `/2/users/{id}/liked_tweets` request.
-- There is no target-user argument, automatic traversal, retry, or redirect following in this collection path. Default page size is 25; accepted range is 1..100. Invalid local inputs stop before transport.
-- Canonical stdout contains `operation=likes`, resolved subject ID/optional username, existing Post id/text, and explicit page state. A continuation token means `complete=false`; only absence of continuation supports `complete=true`, regardless of item count.
-- Canonical stdout is private activity output, including any continuation token. Default behavior does not save it. Diagnostics on stderr contain no private contents or opaque tokens.
+Current X official documentation was re-verified on 2026-09-14 before implementation:
 
-## FR-003 reuse and compatibility
+- Native App is a public client and uses PKCE rather than a client secret.
+- authorize endpoint is `https://x.com/i/oauth2/authorize`.
+- token endpoint is `POST https://api.x.com/2/oauth2/token`.
+- callback URLs require exact registration match.
+- local callback guidance uses `http://127.0.0.1`, not `localhost`.
+- provider supports S256/plain PKCE; product requires S256 only.
+- default access-token lifetime is currently documented as two hours.
+- `offline.access` causes issuance of a refresh token; without it refresh capability is not established.
+- read scope set for current MVP is `tweet.read users.read bookmark.read like.read`, with optional explicit `offline.access`.
 
-A small private `_lookup_collection` helper holds the existing FR-003 algorithm. A closed mapping selects bookmarks or liked_tweets; it accepts no arbitrary endpoint or target. `lookup_bookmarks` retains its signature and `BookmarksLookupResult` result type; `lookup_likes` adds the corresponding typed entry point. Both result types share diagnostic fields. The existing redirect-refusing transport is reused unchanged.
+Refresh-token rotation/reuse behavior is not sufficiently explicit in current provider documentation and is deliberately not encoded by Issue #23.
 
-CLI option construction and diagnostic formatting are shared. Bookmarks retains its canonical operation and `rate_limits.bookmarks` key; likes uses `rate_limits.likes`. Existing FR-003 tests are unchanged. There are no additional canonical Post fields or changes to the authenticated-subject implementation or read flow.
+## Requirement -> AC -> Test state
 
-## Failure, diagnostics, and recovery
+Normative clarification:
 
-Request attempts aggregate subject resolution and collection retrieval. Safe rates remain separate under `rate_limits.subject` and `rate_limits.likes`, because the endpoints have distinct budgets. Failures report zero returned items and no returned continuation. Invalid page sizes are not echoed; parser failures report requested size as unknown.
+- `docs/specs/0002-oauth-acquisition-clarification.md`
 
-Subject mismatch stops before collection transport. Ambiguous failures (including collection 404 and ambiguous 429), malformed/contradictory success, and transport exceptions fail closed as `provider_error`. Safe subject rates survive subject-payload validation failure. Recovery is to inspect the stable category and safe request/rate facts, correct local input or authorization, and explicitly retry. No unofficial fallback is available.
+Canonical traceability:
 
-## Evidence and remaining uncertainty
+- `docs/TEST_MATRIX.md`
 
-See `docs/TEST_MATRIX.md`, `tests/test_fr004_likes.py`, and `docs/specs/0001-fr004-likes-clarification.md`. Tests use fake credentials/transports only. Commands:
+Contract/security tests:
 
-- `python -m unittest discover -s tests -p test_fr004_likes.py -v`
-- `python -m unittest discover -s tests -v`
-- `git diff --check`
+- `tests/test_oauth_acquisition.py`
+- `tests/test_oauth_acquisition_security.py`
 
-Authoritative validation uses tracked `scripts/Invoke-XContextValidation.ps1`, the profile-declared canonical repository, disposable worktree root, and durable log directory. Passing unit tests do not establish CI, real API qualification, or human acceptance.
+OAuth acceptance criteria are integrated into the canonical TEST_MATRIX using the concrete test names from the validated implementation. The temporary OAuth-only mapping file used while the connected write path was blocked is removed during this closeout so traceability has one canonical source.
 
-OAuth browser/PKCE, refresh-token persistence, multi-page behavior, mutations, arbitrary targets, scraping, cookies, and internal GraphQL remain out of scope. No default private-data persistence was added. Live smoke is prohibited for this task and remains deferred to a separately authorized action.
+## Implementation state
+
+New module:
+
+- `x_context/oauth.py`
+
+Current design boundaries:
+
+- `OAuthConfig` accepts non-secret public-client configuration only.
+- redirect configuration is constrained to fixed `http://127.0.0.1:<port>/<non-root-path>` with no query/fragment/userinfo.
+- `build_authorization_attempt()` generates fresh state/verifier and exact read scopes, adding `offline.access` only when explicitly requested.
+- `exchange_callback()` validates callback destination/state/code before one token POST and marks a validated attempt terminal before transport.
+- token request carries `client_id` in the form body and no client secret/Basic authorization.
+- a provider-returned refresh token is rejected unless refresh-capable acquisition explicitly requested `offline.access`; no unexpected refresh authority is accepted.
+- `OAuthTokenResult`, HTTP request/response bodies, state, verifier, and token values are repr-redacted where represented by project objects.
+- provider/transport exceptions are normalized without verbatim exception chaining.
+- `LoopbackCallbackListener` binds only `127.0.0.1` and suppresses default HTTP request logging so callback query strings are not logged.
+- `acquire_user_token()` binds the listener before browser launch and has no automatic browser/token retry loop.
+- no persistence/environment/clipboard behavior is introduced.
+
+## Security boundary
+
+The following values must not enter stdout/stderr, durable validation logs, callback response pages, normal repr/debug strings, or controlled traceback chaining:
+
+- access token;
+- refresh token;
+- authorization code;
+- state;
+- PKCE verifier;
+- Authorization header material;
+- raw token response;
+- full callback query.
+
+Tests use fake secret-shaped values only. Real OAuth qualification remains human-gated until automated exact-head validation and independent review are complete.
+
+## Validation state
+
+GitHub is the source of truth for committed/shared state. Authoritative Windows exact-head validation on implementation head `f1205d11625cfa4d15d318067b5615292abe6c62` completed successfully on 2026-09-14:
+
+- 139/139 tests passed;
+- `git diff --check` passed;
+- expected/origin/actual topic heads matched exactly;
+- verification worktree was clean and removed normally;
+- canonical `main` remained clean and synchronized with `origin/main`;
+- durable evidence: `logs/verification/issue-23-oauth-callback-remediation-20260914-093122.log`.
+
+This documentation closeout moves the topic head without changing product behavior. Required remaining sequence:
+
+1. review the final documentation-only diff and canonical TEST_MATRIX integration;
+2. run authoritative exact-head validation again on the final documentation head;
+3. perform independent L2/adversarial review on that exact head;
+4. only then consider an intentional real OAuth qualification and Draft PR.
+
+No live credential may be placed into tests, Issue/PR text, chat logs, or retained validation evidence.
