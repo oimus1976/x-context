@@ -314,6 +314,51 @@ class OAuthAcquisitionTests(unittest.TestCase):
         self.assertEqual(raised.exception.category, "oauth_attempt_complete")
         self.assertEqual(len(transport.requests), 1)
 
+    def test_OAUTH_loopback_handler_ignores_unrelated_path(self):
+        from io import BytesIO
+        from x_context.oauth import _CallbackHandler
+
+        class FakeServer:
+            expected_path = "/oauth/callback"
+            callback_target = None
+
+        class DirectHandler(_CallbackHandler):
+            def __init__(self, path, server):
+                self.path = path
+                self.server = server
+                self.wfile = BytesIO()
+                self.status = None
+
+            def send_response(self, code, message=None):
+                self.status = code
+
+            def send_header(self, keyword, value):
+                pass
+
+            def end_headers(self):
+                pass
+
+        server = FakeServer()
+
+        unrelated = DirectHandler("/favicon.ico?secret-shaped=noise", server)
+        unrelated.do_GET()
+
+        self.assertEqual(unrelated.status, 404)
+        self.assertIsNone(server.callback_target)
+        self.assertEqual(unrelated.wfile.getvalue(), b"Not found.")
+
+        expected = DirectHandler(
+            "/oauth/callback?code=fake-code&state=fake-state",
+            server,
+        )
+        expected.do_GET()
+
+        self.assertEqual(expected.status, 200)
+        self.assertEqual(
+            server.callback_target,
+            "/oauth/callback?code=fake-code&state=fake-state",
+        )
+
     def test_OAUTH_unrelated_request_does_not_terminate_loopback_wait(self):
         from x_context.oauth import LoopbackCallbackListener
 
