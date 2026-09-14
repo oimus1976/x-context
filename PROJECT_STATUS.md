@@ -2,112 +2,66 @@
 
 ## 30-second state
 
-- **Goal:** Read-only official X API context reader with safe native OAuth user-token acquisition.
-- **Current work:** Issue #23, OAuth 2.0 Authorization Code + PKCE user-token acquisition, on `issue-23-oauth-acquisition`.
-- **Starting main:** `328aa09f8448630c3798810489d66e838ea4dccb` (PR #22 merge).
-- **Last validated implementation head:** `f1205d11625cfa4d15d318067b5615292abe6c62`; authoritative validation passed 139 tests plus diff/workspace/final-state checks before this documentation-only closeout.
-- **Completed dependencies:** FR-001/002/003/004/005/006 and authenticated-subject binding are on main.
-- **Human decision:** No PR / Ready / merge transition is authorized. Ready / merge remain human-final.
-- **Qualification:** No live OAuth, real user token, browser authorization, or private collection read has been performed in Issue #23.
+- **Goal:** Read X content through the official X API for local tooling and AI-assisted analysis while preserving a narrow read-only authority boundary.
+- **Completed foundation:** OAuth 2.0 Authorization Code + PKCE acquisition was merged by PR #24. Its merge commit and former `main` baseline is `dec7b8c537dd8d5079db3402fe4af691bdf95107`.
+- **OAuth closeout evidence:** 140/140 tests passed; canonical `main` was clean and its `HEAD` matched `origin/main` at closeout.
+- **Audit workstream:** Issue #25 is open as the public-readiness audit/control plane.
+- **Current remediation:** Issue #28 is open on `issue-28-public-readiness-remediation`. R3/R4 are complete at the exact starting head `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`; this status refresh is R2.
+- **Repository state:** The repository is still private. Audit evidence does not currently require a history rewrite.
+- **Human decisions:** License selection, private-to-public visibility, destructive branch cleanup, final branch-protection/ruleset/fork policy, Ready, and merge remain human-final.
 
-## Issue #23 scope
+## Completed OAuth work
 
-This workstream adds only the native/public-client OAuth acquisition ceremony:
+The native/public-client OAuth acquisition work formerly tracked by Issue #23 is merged and is no longer the active implementation workstream. The merged boundary provides:
 
-1. fixed registered IPv4 loopback callback using `http://127.0.0.1:<port>/<path>`;
-2. fresh state and PKCE verifier per attempt;
-3. S256 challenge only;
-4. external system-browser launch after successful listener bind;
-5. bounded one-callback handling and exact state/path validation;
-6. one official authorization-code token exchange;
-7. secret-bearing token result held in memory only.
+- fixed IPv4 loopback callback handling on `127.0.0.1`;
+- fresh state and PKCE verifier per attempt with S256 only;
+- listener bind before external system-browser launch;
+- bounded callback validation and one official authorization-code token exchange;
+- in-memory token results with secret-bearing values excluded from normal logs and representations;
+- no client secret, secure persistence, automatic refresh, revoke/logout, clipboard, or environment mutation.
 
-Secure persistence, automatic refresh, refresh-token rotation assumptions, Windows Credential Manager / DPAPI integration, revoke/logout, and migration away from the existing `X_CONTEXT_USER_ACCESS_TOKEN` collection source remain out of scope.
+The authoritative post-merge validation recorded 140/140 tests passing with clean canonical `main` synchronized to `origin/main`. That evidence describes the OAuth merge closeout; it is not a claim about current public CI or a completed public transition.
 
-## Verified external facts
+## Public-readiness workstreams
 
-Current X official documentation was re-verified on 2026-09-14 before implementation:
+Issue #25 owns the audit/control-plane workstream. Issue #28 owns current-tree remediation and does not authorize repository publication or any other human-final effect.
 
-- Native App is a public client and uses PKCE rather than a client secret.
-- authorize endpoint is `https://x.com/i/oauth2/authorize`.
-- token endpoint is `POST https://api.x.com/2/oauth2/token`.
-- callback URLs require exact registration match.
-- local callback guidance uses `http://127.0.0.1`, not `localhost`.
-- provider supports S256/plain PKCE; product requires S256 only.
-- default access-token lifetime is currently documented as two hours.
-- `offline.access` causes issuance of a refresh token; without it refresh capability is not established.
-- read scope set for current MVP is `tweet.read users.read bookmark.read like.read`, with optional explicit `offline.access`.
+Issue #28 state:
 
-Refresh-token rotation/reuse behavior is not sufficiently explicit in current provider documentation and is deliberately not encoded by Issue #23.
+- **R3/R4 completed:** publication-safe validation workspace policy and neutral deterministic validation fixtures are committed at `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`.
+- **R3/R4 validation:** focused 18/18 passed, full suite 142/142 passed, `git diff --check` passed, and final independent/adversarial review reported `MUST_FIX=0`.
+- **R2 current change:** refresh this operational status from the obsolete pre-merge OAuth topic state.
+- **Remaining remediation:** R1 public-facing README; R5 explicit license human gate; R6 public CI and fork-safety readiness.
 
-## Requirement -> AC -> Test state
+Issue #28 remains open and is not complete. No current evidence establishes successful public CI, public repository visibility, or enforced branch protection. After remediation is merged, Issue #25 must refresh the public-readiness audit against then-current `main` before any visibility decision.
 
-Normative clarification:
+## Authority and safety boundaries
 
-- `docs/specs/0002-oauth-acquisition-clarification.md`
-
-Canonical traceability:
-
-- `docs/TEST_MATRIX.md`
-
-Contract/security tests:
-
-- `tests/test_oauth_acquisition.py`
-- `tests/test_oauth_acquisition_security.py`
-
-OAuth acceptance criteria are integrated into the canonical TEST_MATRIX using the concrete test names from the validated implementation. The temporary OAuth-only mapping file used while the connected write path was blocked is removed during this closeout so traceability has one canonical source.
-
-## Implementation state
-
-New module:
-
-- `x_context/oauth.py`
-
-Current design boundaries:
-
-- `OAuthConfig` accepts non-secret public-client configuration only.
-- redirect configuration is constrained to fixed `http://127.0.0.1:<port>/<non-root-path>` with no query/fragment/userinfo.
-- `build_authorization_attempt()` generates fresh state/verifier and exact read scopes, adding `offline.access` only when explicitly requested.
-- `exchange_callback()` validates callback destination/state/code before one token POST and marks a validated attempt terminal before transport.
-- token request carries `client_id` in the form body and no client secret/Basic authorization.
-- a provider-returned refresh token is rejected unless refresh-capable acquisition explicitly requested `offline.access`; no unexpected refresh authority is accepted.
-- `OAuthTokenResult`, HTTP request/response bodies, state, verifier, and token values are repr-redacted where represented by project objects.
-- provider/transport exceptions are normalized without verbatim exception chaining.
-- `LoopbackCallbackListener` binds only `127.0.0.1` and suppresses default HTTP request logging so callback query strings are not logged.
-- `acquire_user_token()` binds the listener before browser launch and has no automatic browser/token retry loop.
-- no persistence/environment/clipboard behavior is introduced.
-
-## Security boundary
-
-The following values must not enter stdout/stderr, durable validation logs, callback response pages, normal repr/debug strings, or controlled traceback chaining:
-
-- access token;
-- refresh token;
-- authorization code;
-- state;
-- PKCE verifier;
-- Authorization header material;
-- raw token response;
-- full callback query.
-
-Tests use fake secret-shaped values only. Real OAuth qualification remains human-gated until automated exact-head validation and independent review are complete.
+- GitHub Issues own planning and workstream state; Git commits own repository content and exact revisions.
+- The official X API remains the only supported data boundary; unofficial scraping, browser-cookie, and internal-GraphQL fallbacks remain excluded.
+- Actual credentials and private X data remain local runtime inputs and must not enter repository, Issue/PR, CI, or retained validation artifacts.
+- History rewrite is not currently required by audit evidence. Any later destructive history or branch cleanup decision remains human-final.
+- License selection is unresolved and human-final; no license is implied by repository availability.
+- Final branch protection, ruleset, and external-fork policy are unresolved human decisions and must not be described as enforced without platform verification.
+- Ready and merge are separate human-final gates. Passing implementation, tests, or review does not authorize either effect.
 
 ## Validation state
 
-GitHub is the source of truth for committed/shared state. Authoritative Windows exact-head validation on implementation head `f1205d11625cfa4d15d318067b5615292abe6c62` completed successfully on 2026-09-14:
+The latest completed remediation evidence applies to the R3/R4 commit `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`:
 
-- 139/139 tests passed;
-- `git diff --check` passed;
-- expected/origin/actual topic heads matched exactly;
-- verification worktree was clean and removed normally;
-- canonical `main` remained clean and synchronized with `origin/main`;
-- durable evidence: `logs/verification/issue-23-oauth-callback-remediation-20260914-093122.log`.
+- focused validation workspace tests: 18/18 passed;
+- full suite: 142/142 passed;
+- `git diff --check`: passed;
+- independent/adversarial review: final `MUST_FIX=0`.
 
-This documentation closeout moves the topic head without changing product behavior. Required remaining sequence:
+R2 is documentation-only and requires its own scope/diff checks on the resulting commit. Do not infer hosted CI success from local test results. R1, R5, and R6 are not completed by this change.
 
-1. review the final documentation-only diff and canonical TEST_MATRIX integration;
-2. run authoritative exact-head validation again on the final documentation head;
-3. perform independent L2/adversarial review on that exact head;
-4. only then consider an intentional real OAuth qualification and Draft PR.
+## Recovery / first diagnostic entry points
 
-No live credential may be placed into tests, Issue/PR text, chat logs, or retained validation evidence.
+- Confirm workstream authority and current acceptance criteria in GitHub Issues #25 and #28.
+- Confirm local execution state with `git branch --show-current`, `git rev-parse HEAD`, `git status --short`, and `git diff --cached --name-only` before editing or recovery.
+- Use `docs/TEST_MATRIX.md` for requirement-to-test traceability and `scripts/verify_repo.py` for baseline repository-policy checks.
+- For OAuth acquisition behavior, start with `docs/specs/0002-oauth-acquisition-clarification.md`, `x_context/oauth.py`, `tests/test_oauth_acquisition.py`, and `tests/test_oauth_acquisition_security.py`.
+- For validation workspace behavior, start with `scripts/validation_workspace.py`, `tests/test_validation_workspace.py`, and `tests/test_validation_runner_contract.py`.
+- Preserve unaccounted local work and fail closed on uncertain credentials, private-data exposure, destructive cleanup, publication, or governance state.
