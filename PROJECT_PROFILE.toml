@@ -14,7 +14,7 @@ planning = "GitHub Issues and accepted specs/ADRs"
 execution = "Git topic branches and pull requests"
 source_code = "git"
 private_actual_data = "local runtime only; never repository/PR/CI artifacts by default"
-ci_result = "GitHub Actions when available; local/static evidence when Actions minutes are unavailable"
+ci_result = "GitHub Actions when available; local/static evidence when Actions execution is unavailable"
 review_result = "GitHub pull-request review evidence and tracked review records"
 production_state = "N/A during experimental MVP"
 credentials = "local runtime configuration outside Git"
@@ -28,10 +28,10 @@ persistent_facets = ["PRIVATE_DATA", "CREDENTIALS", "PLATFORM_DEPENDENT"]
 # CREDENTIALS, DEPLOYMENT, CRYPTOGRAPHY, WORKFLOW_PERMISSION
 # AI_AGENT means runtime agent authority/mutation, not merely AI-assisted development.
 # Risk levels are named rather than numbered to reduce comprehension debt.
-default_level = "ELEVATED" # ROUTINE | ELEVATED | HIGH_IMPACT
+default_level = "HIGH_IMPACT" # ROUTINE | ELEVATED | HIGH_IMPACT
 
 [comprehension]
-required_level = "C1" # C0 Operate | C1 Diagnose | C2 Govern
+required_level = "C2" # C0 Operate | C1 Diagnose | C2 Govern
 owner_checkpoint = "Owner can explain official-API-only, read-only auth, same-subject personal collection binding, private activity handling, bounded pagination/usage, and fail-closed fallback boundaries before implementation is treated as accepted."
 
 [governance]
@@ -43,26 +43,26 @@ release = "project_specific"
 [enforcement.main_direct_write]
 desired = "forbidden_normal_path"
 state = "DECLARED" # DECLARED | ENFORCED | VERIFIED | UNKNOWN
-evidence = "AGENTS.md and project workflow; repository branch protection not yet verified"
+evidence = "AGENTS.md and project workflow; repository branch protection remains a separate publication gate"
 
 [enforcement.required_ci]
 desired = true
-state = "UNKNOWN"
-evidence = "GitHub Actions desired when available; current account Actions-minute exhaustion prevents CI evidence for this spec-only PR"
+state = "DECLARED"
+evidence = "project-ci.yml defines read-only product regression checks for push/main and pull_request; execution evidence is required before VERIFIED"
 
 # Project-specific validation workspace authority. These values are consumed by
 # tracked validation tooling; ad-hoc chat snippets are not authoritative.
 [validation_workspace]
-canonical_repo = "C:\\Users\\oimus\\x-context"
+canonical_repo = "%USERPROFILE%\\x-context"
 disposable_root = "%TEMP%\\x-context"
 worktree_root = "%TEMP%\\x-context\\worktrees"
-durable_log_dir = "C:\\Users\\oimus\\x-context\\logs\\verification"
+durable_log_dir = "%USERPROFILE%\\x-context\\logs\\verification"
 final_branch = "main"
 
 [enforcement.validation_workspace]
 desired = "profile-derived paths and fail-closed final-state validation"
 state = "VERIFIED"
-evidence = "Issue #14 exact-head validation on Windows PowerShell 5.1: 65/65 tests PASS; invalid temp/log paths and final-state mismatches rejected; runner returned to canonical main with HEAD=origin/main and durable log present"
+evidence = "Issue #14 exact-head validation on Windows PowerShell 5.1 established the workspace/final-state contract; Issue #26 preserves that contract while replacing user-specific literals with environment-derived paths"
 
 [verification]
 real_boundary_smoke_required = true

@@ -1,0 +1,42 @@
+name: project-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  product-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        # actions/checkout v7.0.1; keep the full commit SHA pinned.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Python
+        # actions/setup-python v7.0.0; keep the full commit SHA pinned.
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Compile product and validation boundary
+        run: >-
+          python -m py_compile
+          x_context/__init__.py
+          x_context/__main__.py
+          x_context/canonical.py
+          x_context/cli.py
+          x_context/oauth.py
+          x_context/url_parser.py
+          x_context/x_api.py
+          scripts/validation_workspace.py
+
+      - name: Run x-context regression suite
+        run: python -m unittest discover -s tests -v

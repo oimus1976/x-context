@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### Public-readiness remediation
+
+- Issue #26 replaces the inherited starter-facing README/status with x-context-specific public documentation and changes tracked validation workspace paths from workstation/user-specific literals to `%USERPROFILE%` / `%TEMP%` derived values. Validation tests use synthetic paths and add a fail-closed missing-`USERPROFILE` regression; product authority and OAuth behavior are unchanged.
+- Raw local `logs/verification/` evidence is ignored by Git, while publishable evidence remains sanitized summaries only. A dedicated `project-ci` workflow runs the x-context regression suite for ordinary pull requests and `main` pushes with read-only repository permissions, SHA-pinned actions, non-persistent checkout credentials, no secret dependency, and a bounded timeout.
+- The frozen pre-remediation public-readiness audit at `main@dec7b8c537dd8d5079db3402fe4af691bdf95107` found 0 Gitleaks findings in reachable patch history and all 170 unique reachable blobs. License selection, Ready, merge, history rewrite, destructive branch cleanup, branch/ruleset policy, and private-to-public visibility remain human-final.
+
 ### OAuth 2.0 Authorization Code + PKCE acquisition
 
 - Issue #23 adds a native/public-client OAuth acquisition boundary using only the official X authorization and token endpoints. Each bounded attempt generates fresh independent state and PKCE verifier material, requires S256, binds a fixed registered IPv4 loopback callback before launching the external system browser, accepts only the configured callback path/state, and performs at most one authorization-code exchange.
