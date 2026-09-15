@@ -8,7 +8,7 @@
 - **Audit workstream:** Issue #25 is open as the public-readiness audit/control plane.
 - **Current remediation:** Issue #28 is open on `issue-28-public-readiness-remediation`. R3/R4 are complete at the exact starting head `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`; this status refresh is R2.
 - **Repository state:** The repository is still private. Audit evidence does not currently require a history rewrite.
-- **Human decisions:** License selection, private-to-public visibility, destructive branch cleanup, final branch-protection/ruleset/fork policy, Ready, and merge remain human-final.
+- **Human decisions:** The human owner selected the MIT License. Private-to-public visibility, destructive branch cleanup, final branch-protection/ruleset/fork policy, Ready, and merge remain human-final.
 
 ## Completed OAuth work
 
@@ -32,7 +32,8 @@ Issue #28 state:
 - **R3/R4 completed:** publication-safe validation workspace policy and neutral deterministic validation fixtures are committed at `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`.
 - **R3/R4 validation:** focused 18/18 passed, full suite 142/142 passed, `git diff --check` passed, and final independent/adversarial review reported `MUST_FIX=0`.
 - **R2 current change:** refresh this operational status from the obsolete pre-merge OAuth topic state.
-- **Remaining remediation:** R1 public-facing README; R5 explicit license human gate; R6 public CI and fork-safety readiness.
+- **R5 completed:** The human owner selected the MIT License; root `LICENSE` and README license wording are committed at `42d247d7f3a9dbfd0adb2311b806234b3cbbda92`.
+- **Remaining remediation:** R1 public-facing README; R6 public CI and fork-safety readiness.
 
 Issue #28 remains open and is not complete. No current evidence establishes successful public CI, public repository visibility, or enforced branch protection. After remediation is merged, Issue #25 must refresh the public-readiness audit against then-current `main` before any visibility decision.
 
@@ -42,7 +43,7 @@ Issue #28 remains open and is not complete. No current evidence establishes succ
 - The official X API remains the only supported data boundary; unofficial scraping, browser-cookie, and internal-GraphQL fallbacks remain excluded.
 - Actual credentials and private X data remain local runtime inputs and must not enter repository, Issue/PR, CI, or retained validation artifacts.
 - History rewrite is not currently required by audit evidence. Any later destructive history or branch cleanup decision remains human-final.
-- License selection is unresolved and human-final; no license is implied by repository availability.
+- The human owner selected the MIT License, recorded in root `LICENSE`; no license is implied by repository availability.
 - Final branch protection, ruleset, and external-fork policy are unresolved human decisions and must not be described as enforced without platform verification.
 - Ready and merge are separate human-final gates. Passing implementation, tests, or review does not authorize either effect.
 
@@ -55,7 +56,7 @@ The latest completed remediation evidence applies to the R3/R4 commit `cd883093f
 - `git diff --check`: passed;
 - independent/adversarial review: final `MUST_FIX=0`.
 
-R2 is documentation-only and requires its own scope/diff checks on the resulting commit. Do not infer hosted CI success from local test results. R1, R5, and R6 are not completed by this change.
+R2 is documentation-only and requires its own scope/diff checks on the resulting commit. Do not infer hosted CI success from local test results. R1 and R6 are not completed by this change. R5 was completed separately at `42d247d7f3a9dbfd0adb2311b806234b3cbbda92` with the human-selected MIT License.
 
 ## Recovery / first diagnostic entry points
 
