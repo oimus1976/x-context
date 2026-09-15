@@ -61,7 +61,7 @@ python -m unittest discover -s tests -v
 
 The suite currently contains 142 tests covering URL parsing, official provider boundaries, canonical output, CLI behavior, authenticated-subject binding, credential and diagnostic redaction, OAuth acquisition, and validation-workspace policy.
 
-Repository policy tooling also exists in `scripts/verify_repo.py`, but project-specific public CI and fork-safety readiness remain open work. Do not treat local test success or the starter policy workflow as evidence that project CI is operational.
+The project CI workflow in `.github/workflows/project-ci.yml` and its fork-safety readiness are implemented locally. Local validation passes the full 142-test suite, `scripts/verify_repo.py`, and `git diff --check`. Hosted CI and external-fork execution have not been qualified because GitHub Actions execution is currently unavailable while the repository remains private. Public visibility and final publication controls remain separate human-final decisions.
 
 ## Status and limitations
 
