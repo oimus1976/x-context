@@ -69,4 +69,4 @@ Repository policy tooling also exists in `scripts/verify_repo.py`, but project-s
 
 The OAuth module has no stable CLI wrapper or persistent credential-provider integration. Packaging, release status, public CI readiness, and final repository publication controls are not established by this README.
 
-License: not yet selected.
+Licensed under the MIT License. See LICENSE.
