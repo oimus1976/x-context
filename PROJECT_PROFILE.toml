@@ -28,11 +28,11 @@ persistent_facets = ["PRIVATE_DATA", "CREDENTIALS", "PLATFORM_DEPENDENT"]
 # CREDENTIALS, DEPLOYMENT, CRYPTOGRAPHY, WORKFLOW_PERMISSION
 # AI_AGENT means runtime agent authority/mutation, not merely AI-assisted development.
 # Risk levels are named rather than numbered to reduce comprehension debt.
-default_level = "ELEVATED" # ROUTINE | ELEVATED | HIGH_IMPACT
+default_level = "HIGH_IMPACT" # ROUTINE | ELEVATED | HIGH_IMPACT
 
 [comprehension]
-required_level = "C1" # C0 Operate | C1 Diagnose | C2 Govern
-owner_checkpoint = "Owner can explain official-API-only, read-only auth, same-subject personal collection binding, private activity handling, bounded pagination/usage, and fail-closed fallback boundaries before implementation is treated as accepted."
+required_level = "C2" # C0 Operate | C1 Diagnose | C2 Govern
+owner_checkpoint = "Owner can explain and govern the official-API-only, read-only authorization boundary; same-subject personal collection binding; private activity and credential handling; bounded pagination/usage; fail-closed fallback behavior; unresolved credential lifecycle; and human-final protected effects before implementation is treated as accepted."
 
 [governance]
 ready = "human_final"
@@ -53,10 +53,10 @@ evidence = "GitHub Actions desired when available; current account Actions-minut
 # Project-specific validation workspace authority. These values are consumed by
 # tracked validation tooling; ad-hoc chat snippets are not authoritative.
 [validation_workspace]
-canonical_repo = "C:\\Users\\oimus\\x-context"
+canonical_repo = "%USERPROFILE%\\x-context"
 disposable_root = "%TEMP%\\x-context"
 worktree_root = "%TEMP%\\x-context\\worktrees"
-durable_log_dir = "C:\\Users\\oimus\\x-context\\logs\\verification"
+durable_log_dir = "%USERPROFILE%\\x-context\\logs\\verification"
 final_branch = "main"
 
 [enforcement.validation_workspace]

@@ -1,92 +1,72 @@
-# AI Development Starter v0.5
+# x-context
 
-A project starter for AI-assisted development that keeps human ownership, evidence, and recoverability ahead of implementation speed.
+`x-context` is an experimental, narrow Python tool and library for reading X content for local tooling and AI-assisted analysis. It uses the official X API and deliberately excludes scraping, browser-cookie reuse, and internal or unofficial API fallbacks.
 
-This is a **house baseline**, not a universal software-development standard. It was distilled from recent active projects and is intentionally risk-based: small experiments stay light, while changes that touch authority, private data, destructive I/O, deployment, credentials, security boundaries, real platform behavior, or broad system behavior receive stronger gates.
+The current product boundary is read-only. It normalizes successful results into a small canonical JSON envelope and emits separate structured diagnostics for operational visibility.
 
-## Core idea
+## Current capabilities
 
-AI output is a claim until verified by an authoritative source.
+| Interface | Current behavior | Credential |
+| --- | --- | --- |
+| `read` | Parses a supported `x.com` or `twitter.com` Post URL and reads that single Post through the official API. | App-only Bearer Token |
+| `bookmarks` | Resolves the authenticated user, binds the request to that subject, and reads at most one bookmark page. | OAuth 2.0 user access token |
+| `likes` | Resolves the authenticated user, binds the request to that subject, and reads at most one liked-Post page. | OAuth 2.0 user access token |
+| OAuth acquisition library | Runs one native/public-client Authorization Code + PKCE ceremony and returns the resulting token data in memory. | Client ID; no client secret |
 
-The starter therefore separates:
+`bookmarks` and `likes` do not accept a target user ID. Each invocation may request one caller-sized page only: `--max-results` defaults to 25 and accepts 1 through 100. An optional `--page-token` continues from a token returned by a previous call; there is no implicit traversal or fetch-all mode.
 
-- **authority** — which system owns which fact;
-- **risk** — which facets and named level apply to the change;
-- **evidence** — what actually proves the change;
-- **human comprehension** — whether the owner can still operate, diagnose, and govern the project;
-- **protected effects** — which actions require separate human decisions.
+## Credential model
 
-## Start here
+- `read` obtains its app-only credential from `X_CONTEXT_BEARER_TOKEN`.
+- `bookmarks` and `likes` obtain their user-context credential from `X_CONTEXT_USER_ACCESS_TOKEN`. They never fall back to the app-only token.
+- The command line has no credential argument. Supply credentials to the process environment through an appropriate local secret-management or shell-session mechanism; do not put them in command arguments, tracked files, examples, or retained logs.
+- Native/public-client acquisition in `x_context.oauth` accepts a Client ID and uses Authorization Code + PKCE with S256. It does not use or require a client secret.
 
-1. Copy this starter into a new repository.
-2. Optionally initialize name/purpose with `python scripts/bootstrap.py --name "..." --purpose "..."`.
-3. Complete `PROJECT_PROFILE.toml`.
-4. Complete the summary block at the top of `PROJECT_STATUS.md`.
-5. Read `BASELINE.md` and keep only the risk facets that actually apply.
-6. Add a project-specific `.github/workflows/project-ci.yml`. The starter does **not** copy an active dummy project CI workflow. Until your project CI exists, `policy-check` fails closed instead of presenting an unexplained green state.
-7. Run `python scripts/verify_repo.py`.
+OAuth acquisition is currently a library boundary, not a CLI command or a complete credential lifecycle. A successful ceremony returns an `OAuthTokenResult` in memory; it does not persist the token or set `X_CONTEXT_USER_ACCESS_TOKEN` for collection commands.
 
-`policy-check` can establish that the required project CI workflow has been deliberately added; it cannot prove that the workflow's tests are sufficient. Acceptance still requires evidence from the actual project CI run.
+The current OAuth implementation does not provide persistent token storage, Windows Credential Manager integration, automatic refresh, refresh-token rotation, revoke/logout, clipboard export, or parent-shell environment mutation. Refresh-capable acquisition can be requested explicitly at the library boundary, but storage, replacement, and refresh execution are not implemented.
 
-## Risk language
+## Usage
 
-Risk levels use names rather than `R1/R2/R3` codes:
+The repository currently defines no package installer or installed `x-context` console script. From the repository root, use the module entrypoint with a compatible Python interpreter after supplying the required environment credential outside the command line:
 
-- `ROUTINE` — ordinary bounded tracked change;
-- `ELEVATED` — broader impact or a meaningful external/platform/privacy/agent/workflow boundary;
-- `HIGH_IMPACT` — failure could authorize, expose, destroy, deploy, sign, corrupt critical state, or weaken a security boundary.
-
-Review findings also use words rather than reverse-numbered `P0/P1/...` labels: `CRITICAL`, `MAJOR`, `MINOR`, `NOTE`.
-
-## Default workflow
-
-```text
-exploration/spike
-    |
-    | keep it?
-    v
-tracked change
-    |
-    +--> durable intent record
-    +--> branch
-    +--> Draft PR
-    +--> risk-based verification
-    +--> review
-    +--> comprehension gate
-    +--> human Ready
-    +--> human merge
-    +--> post-merge local closeout
-         +--> non-destructive verify
-         +--> target-scoped cleanup when eligible
+```console
+python -m x_context read "https://x.com/example/status/1234567890"
+python -m x_context bookmarks
+python -m x_context bookmarks --max-results 50
+python -m x_context likes --max-results 25
+python -m x_context likes --page-token "<token-from-a-previous-page>"
 ```
 
-Exploration that is genuinely disposable does not need Issue/PR ceremony. Once work is intended to persist, it enters the tracked workflow.
+On success, stdout contains one canonical JSON document. Structured usage diagnostics are written separately to stderr. Handled failures leave stdout empty and report a stable error category on stderr.
 
-Post-merge cleanup is intentionally separate from verification. `post_merge_cleanup.py` reads merged-PR authority independently through authenticated GitHub CLI, plans by default, and requires `--execute` before changing local state. Remote branch deletion is a further explicit opt-in.
+Canonical output identifies the schema version, source, operation, retrieval time, normalized Post items, and page state. Personal-collection output also includes the authenticated subject and may include a continuation token for an explicit later invocation.
 
-## Files
+## Safety and privacy boundaries
 
-- `BASELINE.md` — single normative source for authority, risk, review, evidence, and comprehension gates.
-- `PROJECT_PROFILE.toml` — project-specific authority, risk, and governance choices.
-- `PROJECT_STATUS.md` — concise current state first, detail second.
-- `CHANGELOG.md` — meaningful changes, not a duplicate commit log.
-- `AGENTS.md` — instructions for AI coding agents.
-- `docs/adr/` — durable architecture decisions when warranted.
-- `.github/pull_request_template.md` — review/evidence/comprehension checklist.
-- `.github/workflows/policy-check.yml` — starter structural check; canonical starter regression tests run only in the template repository.
-- `.github/workflows/project-ci.yml` — intentionally **absent** from the template; each generated project must add its own real CI.
-- `scripts/bootstrap.py` — dependency-free identity initializer.
-- `scripts/verify_repo.py` — dependency-free starter consistency check.
-- `scripts/verify_local_closeout.py` — non-destructive local closeout verifier.
-- `scripts/closeout_state.py` — shared dependency-free Git/worktree state helpers used by closeout tooling.
-- `scripts/post_merge_cleanup.py` — fail-closed merged-PR cleanup planner/executor; dry-run by default.
-- `starter_tests/` — regression tests for ai-dev-starter itself.
-- `tests/` — reserved for generated projects' own tests.
+- Product authority is read-only; there are no commands for posting, deleting, liking, bookmarking, following, or other X mutations.
+- Bookmarks and liked-Post history are treated as private activity data. Collection results are process-and-return by default and are not persisted by the current implementation.
+- Credentials, authorization headers, raw provider responses, callback secrets, PKCE verifier/state values, and private collection contents are excluded from normal diagnostics and retained validation evidence.
+- Provider errors fail conservatively and never trigger scraping, cookie automation, browser automation, internal GraphQL, or another unofficial fallback.
+- Collection pagination is caller-controlled and bounded to one provider page per invocation. No command silently retrieves all pages.
+- OAuth acquisition is bounded to one listener, one browser launch, one terminal callback, and at most one token exchange per invocation; it has no automatic retry loop.
 
-## Baseline freshness
+## Development and validation
 
-Baseline version: **0.5**  
-Reviewed: **2026-09-02**  
-Evidence window: **recent active projects only**
+Run the current project test suite from the repository root:
 
-The baseline itself is subject to comprehension debt and policy drift. Re-review it after real adoption feedback, not merely on a calendar because a date elapsed.
+```console
+python -m unittest discover -s tests -v
+```
+
+The suite currently contains 142 tests covering URL parsing, official provider boundaries, canonical output, CLI behavior, authenticated-subject binding, credential and diagnostic redaction, OAuth acquisition, and validation-workspace policy.
+
+The project CI workflow in `.github/workflows/project-ci.yml` and its fork-safety readiness are implemented locally. Local validation passes the full 142-test suite, `scripts/verify_repo.py`, and `git diff --check`. Hosted CI and external-fork execution have not been qualified because GitHub Actions execution is currently unavailable while the repository remains private. Public visibility and final publication controls remain separate human-final decisions.
+
+## Status and limitations
+
+`x-context` remains experimental. Its current canonical Post representation is intentionally small, and provider availability, entitlements, limits, and OAuth behavior are external facts that may change and must be re-verified when relevant.
+
+The OAuth module has no stable CLI wrapper or persistent credential-provider integration. Packaging, release status, public CI readiness, and final repository publication controls are not established by this README.
+
+Licensed under the MIT License. See LICENSE.
