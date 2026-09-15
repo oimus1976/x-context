@@ -6,7 +6,7 @@
 - **Completed foundation:** OAuth 2.0 Authorization Code + PKCE acquisition was merged by PR #24. Its merge commit and former `main` baseline is `dec7b8c537dd8d5079db3402fe4af691bdf95107`.
 - **OAuth closeout evidence:** 140/140 tests passed; canonical `main` was clean and its `HEAD` matched `origin/main` at closeout.
 - **Audit workstream:** Issue #25 is open as the public-readiness audit/control plane.
-- **Current remediation:** Issue #28 is open on `issue-28-public-readiness-remediation`. R3/R4 are complete at the exact starting head `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`; this status refresh is R2.
+- **Current remediation:** Issue #28 is open on `issue-28-public-readiness-remediation`. R1-R6 are completed and committed; PR review and merge closeout remain outstanding.
 - **Repository state:** The repository is still private. Audit evidence does not currently require a history rewrite.
 - **Human decisions:** The human owner selected the MIT License. Private-to-public visibility, destructive branch cleanup, final branch-protection/ruleset/fork policy, Ready, and merge remain human-final.
 
@@ -29,13 +29,13 @@ Issue #25 owns the audit/control-plane workstream. Issue #28 owns current-tree r
 
 Issue #28 state:
 
+- **R1 completed:** the starter README is replaced with public-facing `x-context` documentation.
+- **R2 completed:** this operational status reflects the completed current-tree remediation state.
 - **R3/R4 completed:** publication-safe validation workspace policy and neutral deterministic validation fixtures are committed at `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`.
-- **R3/R4 validation:** focused 18/18 passed, full suite 142/142 passed, `git diff --check` passed, and final independent/adversarial review reported `MUST_FIX=0`.
-- **R2 current change:** refresh this operational status from the obsolete pre-merge OAuth topic state.
 - **R5 completed:** The human owner selected the MIT License; root `LICENSE` and README license wording are committed at `42d247d7f3a9dbfd0adb2311b806234b3cbbda92`.
-- **Remaining remediation:** R1 public-facing README; R6 public CI and fork-safety readiness.
+- **R6 completed locally:** the project CI and fork-safety workflow is committed. Hosted CI has not been qualified because GitHub Actions execution is currently unavailable while the repository remains private.
 
-Issue #28 remains open and is not complete. No current evidence establishes successful public CI, public repository visibility, or enforced branch protection. After remediation is merged, Issue #25 must refresh the public-readiness audit against then-current `main` before any visibility decision.
+Issue #28 remains open until PR review and merge closeout. The hosted failures on PR #29 are classified as execution-blocked, not as test or workflow failure evidence. No current evidence establishes successful hosted CI, public repository visibility, or enforced branch protection or rulesets. After remediation is merged, Issue #25 must refresh the public-readiness audit against then-current `main` before a later human-final visibility decision.
 
 ## Authority and safety boundaries
 
@@ -49,14 +49,15 @@ Issue #28 remains open and is not complete. No current evidence establishes succ
 
 ## Validation state
 
-The latest completed remediation evidence applies to the R3/R4 commit `cd883093f25ad1de5d072fe667e3d5b1a39b4a13`:
+Completed local remediation evidence reports:
 
-- focused validation workspace tests: 18/18 passed;
-- full suite: 142/142 passed;
+- full project suite: 142/142 passed;
+- `python scripts/verify_repo.py --repository "oimus1976/x-context"`: passed;
 - `git diff --check`: passed;
-- independent/adversarial review: final `MUST_FIX=0`.
+- R3/R4 independent review: final `MUST_FIX=0`;
+- R6 fork-safety review: `MUST_FIX=0`.
 
-R2 is documentation-only and requires its own scope/diff checks on the resulting commit. Do not infer hosted CI success from local test results. R1 and R6 are not completed by this change. R5 was completed separately at `42d247d7f3a9dbfd0adb2311b806234b3cbbda92` with the human-selected MIT License.
+These local results do not establish hosted CI success. GitHub Actions execution is currently unavailable while the repository remains private, and the hosted failures on PR #29 are execution-blocked rather than evidence that the tests or workflow failed. Ready and merge remain human-final. Publication remains under Issue #25 and requires a later, separate human-final visibility decision.
 
 ## Recovery / first diagnostic entry points
 
