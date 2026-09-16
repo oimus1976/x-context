@@ -1,7 +1,7 @@
 # Test Matrix
 
-Related specification: `docs/specs/0001-mvp.md`, `docs/specs/0001-fr006-read-clarification.md`, `docs/specs/0001-authenticated-subject-clarification.md`, and `docs/specs/0002-oauth-acquisition-clarification.md`
-Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI), Issue #11 (authenticated-subject resolution/binding), Issue #23 (OAuth user-token acquisition)
+Related specification: `docs/specs/0001-mvp.md`, `docs/specs/0001-fr006-read-clarification.md`, `docs/specs/0001-authenticated-subject-clarification.md`, `docs/specs/0002-oauth-acquisition-clarification.md`, and `docs/specs/0003-credential-lifecycle.md`
+Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI), Issue #11 (authenticated-subject resolution/binding), Issue #23 (OAuth user-token acquisition), Issue #32 (credential lifecycle)
 
 This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins; implemented slices should name their concrete automated evidence.
 
@@ -16,12 +16,13 @@ This matrix is the traceability bridge from requirement IDs to acceptance tests.
 | FR-006 `read` slice | AC-FR006-R01..R13 | Implemented: `test_FR_006_read_success_writes_canonical_json_only_to_stdout`, `test_FR_006_read_success_writes_usage_diagnostics_to_stderr`, `test_FR_006_read_rejects_direct_post_id`, `test_FR_006_read_invalid_url_is_local_exit_2_without_network`, `test_FR_006_read_provider_incompatible_id_is_local_exit_2_without_transport`, `test_FR_006_read_missing_credential_is_configuration_exit_2_without_transport`, `test_FR_006_read_unsafe_credential_is_configuration_exit_2_without_transport`, `test_FR_006_read_provider_categories_exit_3`, `test_FR_006_read_success_exposes_only_safe_rate_metadata`, `test_FR_006_read_missing_rate_metadata_is_not_fabricated`, `test_FR_006_read_has_no_token_cli_argument`, `test_FR_006_read_does_not_leak_token_raw_body_or_arbitrary_headers`, `test_FR_006_read_transport_exception_is_redacted_and_counted` | Optional intentional CLI smoke against official single-Post API; canonical payload may be inspected locally but evidence retains only non-secret/non-raw diagnostic facts |
 | FR-006 collections | AC-FR006-01..08 collection portions | FR-003/FR-004 tests above cover page-token single-page behavior, max-results 1..100/no-network rejection, canonical stdout, safe stderr, and no target-user argument | Live qualification unverified; no live credentials or reads in this task |
 | OAuth acquisition | Issue #23 AC-OAUTH-01..15; normative `0002-oauth-acquisition-clarification.md` | `test_OAUTH_uses_official_authorize_endpoint_and_read_scopes`, `test_OAUTH_public_client_uses_client_id_without_secret`, `test_OAUTH_generates_fresh_state_and_verifier_per_attempt`, `test_OAUTH_derives_s256_challenge_without_plain_fallback`, `test_OAUTH_loopback_configuration_requires_127_0_0_1_fixed_registered_redirect`, `test_OAUTH_bind_failure_prevents_browser_launch`, `test_OAUTH_browser_launch_failure_closes_listener_without_wait_or_exchange`, `test_OAUTH_external_browser_boundary_is_single_launch`, `test_OAUTH_missing_wrong_or_duplicate_state_blocks_exchange`, `test_OAUTH_wrong_path_malformed_or_provider_error_callback_blocks_exchange`, `test_OAUTH_unrelated_request_does_not_terminate_loopback_wait`, `test_OAUTH_timeout_closes_listener_without_exchange`, `test_OAUTH_exact_token_endpoint_form_contract`, `test_OAUTH_correct_state_callback_exchanges_once`, `test_OAUTH_duplicate_late_callback_cannot_reexchange`, `test_OAUTH_access_token_only_result_is_in_memory_and_redacted`, `test_OAUTH_refresh_token_result_requires_provider_value`, `test_OAUTH_malformed_success_fails_closed`, `test_OAUTH_offline_access_is_explicit_only`, `test_OAUTH_secret_sentinels_absent_from_stdout_stderr_repr_traceback`, `test_OAUTH_transport_and_provider_failures_are_conservative_and_redacted`, `test_OAUTH_no_persistence_or_environment_side_effect`, `test_OAUTH_unrequested_refresh_token_fails_closed`, `test_OAUTH_unsafe_client_id_is_configuration_error`; existing FR-003/FR-004 credential-source regressions plus full `python -m unittest discover -s tests -v` | Real browser/PKCE qualification remains human-gated; retain only non-secret protocol facts and token-presence booleans |
-| NFR-001 | official API only | provider boundary tests; authenticated-subject endpoint contract; OAuth tests pin the official authorize/token endpoints and prohibit unofficial/browser-cookie/OAuth1 fallback | Verify real smoke destination is official API |
-| NFR-002 | read-only/same-subject boundary | authenticated-subject resolution and local binding tests; collection target must equal authenticated subject; OAuth scope tests allow only the four MVP read scopes plus explicit optional `offline.access`, with no write scope | Verify granted/requested scopes and subject binding without token material |
-| NFR-003 | credential protection | secret-pattern regression tests; fixtures use fake credentials; OAuth tests cover access/refresh token, authorization code, state, PKCE verifier, request/response, authorization-URL repr, and traceback redaction | Review smoke logs/artifacts for credential and OAuth ceremony-secret absence |
-| NFR-004 | fail closed | all provider failure paths assert no fallback provider invocation; subject mismatch fails before collection transport; OAuth rejects unsafe config, invalid/wrong/duplicate callback state, unexpected refresh authority, malformed token success, unrelated callback paths, transport/provider failures, and duplicate exchange | Induce/observe a safe official-API failure where practical |
-| NFR-005 | usage observability | FR-006 `read`: operation, provider-request count, returned-item count, continuation=false, safe rate/usage metadata when present, zero-request diagnostics for local rejection; authenticated-subject resolution exposes its own provider-request count and safe rate metadata for later collection aggregation; collection slices later add requested page size and continuation-token state; assert no payload-body logging and no hard-coded monetary-cost promise | Verify useful non-secret usage metadata and inspect logs for private-data/credential absence |
-| NFR-006 | private activity handling | tests assert no persistence side effect by default; continuation tokens excluded from diagnostics; subject provenance minimized | Inspect local filesystem/logs before/after bookmark/like smoke |
+| Credential lifecycle | Issue #32 AC-CRED-01..18; normative `0003-credential-lifecycle.md`; storage decision ADR-0005 | `test_CRED_explicit_persistence_round_trip_and_redaction`, `test_CRED_oauth_acquisition_remains_nonpersistent`, `test_CRED_env_override_wins_and_invalid_override_fails_closed`, `test_CRED_no_app_bearer_fallback_or_env_auto_import`, `test_CRED_expiry_and_refresh_window`, `test_CRED_refresh_request_public_client_contract_and_single_attempt`, `test_CRED_malformed_or_scope_expanding_refresh_preserves_state`, `test_CRED_successful_refresh_commits_before_use`, `test_CRED_refresh_token_replacement_and_omission_rule`, `test_CRED_failed_refresh_preserves_state_and_blocks_collection`, `test_CRED_collection_subject_binding_still_runs`, `test_CRED_local_delete_is_idempotent_and_local_only`, `test_CRED_provider_revoke_contract_and_delete_order`, `test_CRED_corrupt_or_unsupported_state_fails_closed`, `test_CRED_secret_sentinels_absent_from_repr_errors_and_diagnostics`, `test_CRED_scope_authority_remains_read_only`, `test_CRED_storage_replace_failure_keeps_prior_commit`, `test_CRED_concurrency_claim_is_single_writer`; full `python -m unittest discover -s tests -v` | Any live refresh/revoke qualification is separately human-gated; retain endpoint/success/token-presence/scope facts only, never token values or raw provider payloads |
+| NFR-001 | official API only | provider boundary tests; authenticated-subject endpoint contract; OAuth and lifecycle tests pin the official authorize/token/revoke endpoints and prohibit unofficial/browser-cookie/OAuth1 fallback | Verify real smoke destination is official API |
+| NFR-002 | read-only/same-subject boundary | authenticated-subject resolution and local binding tests; collection target must equal authenticated subject; OAuth/lifecycle scope tests allow only the four MVP read scopes plus explicit optional `offline.access`, with no write scope | Verify granted/requested scopes and subject binding without token material |
+| NFR-003 | credential protection | secret-pattern regression tests; fixtures use fake credentials; OAuth tests cover access/refresh token, authorization code, state, PKCE verifier, request/response, authorization-URL repr, and traceback redaction; lifecycle tests add protected persistence, refresh/revoke, DPAPI envelope, and storage-error redaction | Review smoke logs/artifacts for credential and OAuth ceremony-secret absence |
+| NFR-004 | fail closed | all provider failure paths assert no fallback provider invocation; subject mismatch fails before collection transport; OAuth rejects unsafe config, invalid/wrong/duplicate callback state, unexpected refresh authority, malformed token success, unrelated callback paths, transport/provider failures, and duplicate exchange; lifecycle rejects corrupt state, unsafe env override, refresh failure, scope drift, and partial replacement | Induce/observe a safe official-API failure where practical |
+| NFR-005 | usage observability | FR-006 `read`: operation, provider-request count, returned-item count, continuation=false, safe rate/usage metadata when present, zero-request diagnostics for local rejection; authenticated-subject resolution exposes its own provider-request count and safe rate metadata for later collection aggregation; collection slices later add requested page size and continuation-token state; lifecycle diagnostics expose only safe source/refresh/revoke facts; assert no payload-body logging and no hard-coded monetary-cost promise | Verify useful non-secret usage metadata and inspect logs for private-data/credential absence |
+| NFR-006 | private activity handling | tests assert no collection persistence side effect by default; continuation tokens excluded from diagnostics; subject provenance minimized; lifecycle persistence stores only the explicitly committed protected credential envelope | Inspect local filesystem/logs before/after bookmark/like smoke |
 
 ## FR-002 provider-boundary staging note
 
@@ -83,6 +84,39 @@ The default requested scope set is exactly `tweet.read users.read bookmark.read 
 
 Real browser/PKCE qualification is separate human-gated evidence. The acquisition result is deliberately in-memory only; secure Windows persistence, refresh lifecycle, revoke/logout, and integration with collection credential lookup belong to a later lifecycle workstream.
 
+## Credential lifecycle AC-to-test mapping
+
+| Acceptance criterion | Automated evidence |
+|---|---|
+| AC-CRED-01 | `test_CRED_explicit_persistence_round_trip_and_redaction` |
+| AC-CRED-02 | `test_CRED_oauth_acquisition_remains_nonpersistent` |
+| AC-CRED-03 | `test_CRED_env_override_wins_and_invalid_override_fails_closed` |
+| AC-CRED-04 | `test_CRED_no_app_bearer_fallback_or_env_auto_import` |
+| AC-CRED-05 | `test_CRED_expiry_and_refresh_window` |
+| AC-CRED-06 | `test_CRED_refresh_request_public_client_contract_and_single_attempt` |
+| AC-CRED-07 | `test_CRED_malformed_or_scope_expanding_refresh_preserves_state` |
+| AC-CRED-08 | `test_CRED_successful_refresh_commits_before_use` |
+| AC-CRED-09 | `test_CRED_refresh_token_replacement_and_omission_rule` |
+| AC-CRED-10 | `test_CRED_failed_refresh_preserves_state_and_blocks_collection` |
+| AC-CRED-11 | `test_CRED_collection_subject_binding_still_runs` plus existing FR-003/FR-004 binding regressions |
+| AC-CRED-12 | `test_CRED_local_delete_is_idempotent_and_local_only` |
+| AC-CRED-13 | `test_CRED_provider_revoke_contract_and_delete_order` |
+| AC-CRED-14 | `test_CRED_corrupt_or_unsupported_state_fails_closed` |
+| AC-CRED-15 | `test_CRED_secret_sentinels_absent_from_repr_errors_and_diagnostics` |
+| AC-CRED-16 | `test_CRED_scope_authority_remains_read_only` |
+| AC-CRED-17 | `test_CRED_storage_replace_failure_keeps_prior_commit`, `test_CRED_concurrency_claim_is_single_writer` |
+| AC-CRED-18 | full `python -m unittest discover -s tests -v` regression |
+
+## Credential lifecycle staging note
+
+Issue #32 replaces mandatory environment-only user credential sourcing with a lifecycle-managed provider while retaining `X_CONTEXT_USER_ACCESS_TOKEN` as an explicit per-operation compatibility/recovery override. The env override wins when present and is never automatically persisted or refreshed. `X_CONTEXT_BEARER_TOKEN` remains app-only and cannot become user authority.
+
+ADR-0005 selects DPAPI CurrentUser protected local-file storage. The entire versioned credential envelope is the atomic storage unit. Known expiry uses a 300-second refresh-before-use window; unknown expiry is not fabricated. A resolution performs at most one refresh, and a failed attempted refresh blocks the current collection operation even if the old access token has not yet reached its exact expiry.
+
+Successful refresh replacement is provider-neutral about undocumented rotation semantics: a returned refresh token replaces the prior token; omission retains the prior refresh token as an x-context storage rule. Provider revoke is distinct from local delete, uses the official revoke endpoint, prefers the refresh token when present, and deletes local state only after provider success.
+
+Automated evidence uses fake credentials/storage/transport. Any real refresh or revoke affecting an account remains human-gated.
+
 ## Error-model cross-cutting tests
 
 The stable categories in SPEC-0001 must be exercised without requiring callers to parse provider prose:
@@ -97,6 +131,8 @@ The stable categories in SPEC-0001 must be exercised without requiring callers t
 - `provider_error`
 - `configuration_error`
 
+Lifecycle-local categories such as `credential_missing`, `credential_expired`, and `credential_storage_error` may be introduced by SPEC-0003, but CLI exit-code grouping must remain stable and callers must not parse OS/provider prose.
+
 Where provider responses cannot reliably distinguish a cause, tests must prefer a conservative stable category rather than fabricate certainty. For FR-002, an ambiguous `429` that cannot safely be identified as short-window rate limiting or a usage/credit gate must therefore fall back to `provider_error` rather than guessing.
 
 ## Evidence rules
@@ -107,8 +143,9 @@ Where provider responses cannot reliably distinguish a cause, tests must prefer 
 - Credentials and authorization headers must never appear in test output.
 - OAuth authorization codes, state values, PKCE verifiers, access/refresh tokens, raw token responses, authorization URLs carrying ceremony state, and full callback query strings must not appear in retained diagnostics/evidence.
 - Opaque continuation/page tokens must not appear in diagnostic logs or committed evidence.
+- DPAPI plaintext envelopes, generated protected credential blobs, refresh/revoke request bodies, and raw lifecycle provider responses must not be committed as evidence.
 - A remediation that changes behavior invalidates affected evidence and requires the mapped tests to be rerun.
-- GitHub Actions is currently unavailable due to exhausted monthly Actions minutes; local/static evidence is required and queued/unstarted Actions runs are not CI success/failure evidence.
+- Public hosted CI is available for this repository; exact-head local/static validation remains required, and hosted `project-ci` / `policy-check` success must be confirmed for the PR head before the Ready human gate.
 
 ## Implementation ordering
 
