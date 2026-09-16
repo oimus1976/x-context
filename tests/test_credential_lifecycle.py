@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import tempfile
@@ -6,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs
 
+from x_context.cli import main
 from x_context.credential_lifecycle import (
     REFRESH_ENDPOINT,
     REVOKE_ENDPOINT,
@@ -18,6 +20,7 @@ from x_context.credential_lifecycle import (
     revoke_persisted_credential,
 )
 from x_context.oauth import OAuthHttpRequest, OAuthHttpResponse, OAuthTokenResult, acquire_user_token, OAuthConfig
+from x_context.x_api import HttpRequest, HttpResponse
 
 
 READ_SCOPES = ("tweet.read", "users.read", "bookmark.read", "like.read", "offline.access")
@@ -59,8 +62,24 @@ class FakeTransport:
         return self.responses.pop(0)
 
 
+@dataclass
+class FakeXTransport:
+    responses: list[HttpResponse]
+    requests: list[HttpRequest] = field(default_factory=list)
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        self.requests.append(request)
+        if not self.responses:
+            raise AssertionError("no fake X response")
+        return self.responses.pop(0)
+
+
 def response(status: int, payload: object) -> OAuthHttpResponse:
     return OAuthHttpResponse(status=status, headers={"content-type": "application/json"}, body=json.dumps(payload).encode())
+
+
+def x_response(payload: object, status: int = 200) -> HttpResponse:
+    return HttpResponse(status=status, headers={}, body=json.dumps(payload).encode())
 
 
 def record(*, access="fake-access", refresh="fake-refresh", expires_at=10_000, scopes=READ_SCOPES):
@@ -274,6 +293,32 @@ class CredentialLifecycleTests(unittest.TestCase):
         self.assertIs(store.record, original)
         self.assertEqual(len(transport.requests), 1)
 
+    def test_CRED_collection_subject_binding_still_runs(self):
+        store = FakeStore(record=record(access="persisted-user-token", expires_at=5000))
+        transport = FakeXTransport([
+            x_response({"data": {"id": "42", "username": "example"}}),
+            x_response({"data": [{"id": "123", "text": "fake-private-post"}], "meta": {"result_count": 1}}),
+        ])
+        out, err = io.StringIO(), io.StringIO()
+        code = main(
+            ["bookmarks"],
+            environ={},
+            credential_store=store,
+            clock=lambda: 1000,
+            transport=transport,
+            stdout=out,
+            stderr=err,
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(len(transport.requests), 2)
+        self.assertEqual(transport.requests[0].url, "https://api.x.com/2/users/me")
+        self.assertIn("/2/users/42/bookmarks?", transport.requests[1].url)
+        self.assertTrue(all(r.headers["Authorization"] == "Bearer persisted-user-token" for r in transport.requests))
+        diagnostic = json.loads(err.getvalue())
+        self.assertEqual(diagnostic["credential_source"], "persisted")
+        self.assertFalse(diagnostic["credential_refresh_attempted"])
+        self.assertEqual(diagnostic["provider_requests_attempted"], 2)
+
     def test_CRED_local_delete_is_idempotent_and_local_only(self):
         store = FakeStore(record=record())
         env = {"X_CONTEXT_USER_ACCESS_TOKEN": "env-secret"}
@@ -309,16 +354,30 @@ class CredentialLifecycleTests(unittest.TestCase):
     def test_CRED_corrupt_or_unsupported_state_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "credential.bin"
-            path.write_bytes(b"protected:not-json")
-            store = DPAPIFileCredentialStore(
-                path=path,
-                protect=lambda value: value,
-                unprotect=lambda value: b"not-json",
+            cases = (
+                b"not-json",
+                json.dumps({
+                    "schema_version": 99,
+                    "provider": "x",
+                    "access_token": "fake-access",
+                    "refresh_token": None,
+                    "token_type": "bearer",
+                    "expires_at": None,
+                    "scopes": None,
+                }).encode(),
             )
-            with self.assertRaises(CredentialError) as raised:
-                store.load()
-            self.assertEqual(raised.exception.category, "credential_storage_error")
-            self.assertTrue(path.exists())
+            for plaintext in cases:
+                with self.subTest(plaintext=plaintext[:20]):
+                    path.write_bytes(b"protected")
+                    store = DPAPIFileCredentialStore(
+                        path=path,
+                        protect=lambda value: value,
+                        unprotect=lambda value, plain=plaintext: plain,
+                    )
+                    with self.assertRaises(CredentialError) as raised:
+                        store.load()
+                    self.assertEqual(raised.exception.category, "credential_storage_error")
+                    self.assertTrue(path.exists())
 
     def test_CRED_secret_sentinels_absent_from_repr_errors_and_diagnostics(self):
         secret_access = "ACCESS-SENTINEL-SECRET"
