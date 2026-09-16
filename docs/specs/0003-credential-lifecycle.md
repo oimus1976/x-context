@@ -83,6 +83,8 @@ If the environment override is present but malformed/unsafe, fail closed. Do not
 
 Environment credentials are unmanaged for lifecycle purposes: x-context must not refresh, persist, replace, or revoke them automatically.
 
+For CLI collection execution, the public OAuth Client ID needed only when a persisted credential must be refreshed is read from `X_CONTEXT_OAUTH_CLIENT_ID`. It is non-secret configuration. Its absence does not block use of a persisted access token that is not due for refresh, but a due/expired refresh-capable credential fails locally if the Client ID is unavailable or unsafe.
+
 ## Expiry and refresh-before-use policy
 
 Lifecycle code uses an injectable UTC clock.
