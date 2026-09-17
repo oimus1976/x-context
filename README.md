@@ -39,11 +39,11 @@ Local credential deletion and provider revoke remain library operations rather t
 
 The repository currently defines no package installer or installed `x-context` console script. From the repository root, use the module entrypoint with a compatible Python interpreter.
 
-For a lifecycle-managed personal-collection credential on Windows, configure the non-secret Native App values and run the bootstrap command:
+For a lifecycle-managed personal-collection credential on Windows PowerShell, configure the non-secret Native App values and run the bootstrap command:
 
-```console
-set X_CONTEXT_OAUTH_CLIENT_ID=<your-public-client-id>
-set X_CONTEXT_OAUTH_REDIRECT_URI=http://127.0.0.1:8765/callback
+```powershell
+$env:X_CONTEXT_OAUTH_CLIENT_ID = '<your-public-client-id>'
+$env:X_CONTEXT_OAUTH_REDIRECT_URI = 'http://127.0.0.1:8765/callback'
 python -m x_context auth login
 ```
 
