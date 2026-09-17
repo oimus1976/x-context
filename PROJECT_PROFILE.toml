@@ -42,13 +42,13 @@ release = "project_specific"
 
 [enforcement.main_direct_write]
 desired = "forbidden_normal_path"
-state = "VERIFIED" # DECLARED | ENFORCED | VERIFIED | UNKNOWN
-evidence = "Active GitHub ruleset 'Protect main' targets refs/heads/main, requires pull requests, blocks non-fast-forward/deletion, and reports current_user_can_bypass=never; verified 2026-09-17"
+state = "ENFORCED" # DECLARED | ENFORCED | VERIFIED | UNKNOWN
+evidence = "Active GitHub ruleset 'Protect main' targets refs/heads/main, requires pull requests, blocks non-fast-forward/deletion, and reports current_user_can_bypass=never; configuration re-read 2026-09-17; rejection behavior not separately tested"
 
 [enforcement.required_ci]
 desired = true
-state = "VERIFIED"
-evidence = "Active GitHub ruleset 'Protect main' requires status contexts project-tests and baseline-policy; current PR heads run hosted project-ci/policy-check successfully; verified 2026-09-17"
+state = "ENFORCED"
+evidence = "Active GitHub ruleset 'Protect main' requires status contexts project-tests and baseline-policy; hosted project-ci/policy-check are active; configuration re-read 2026-09-17; merge blocking behavior not separately tested"
 
 # Project-specific validation workspace authority. These values are consumed by
 # tracked validation tooling; ad-hoc chat snippets are not authoritative.
