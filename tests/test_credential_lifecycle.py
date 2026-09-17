@@ -271,15 +271,20 @@ class CredentialLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(replacing.record.refresh_token, "rotated-refresh")
 
-        omitted = FakeStore(record=record(expires_at=1200))
-        resolve_user_access_token(
-            environ={}, store=omitted, client_id="fake-client",
-            transport=FakeTransport([response(200, {
-                "access_token": "new-access", "expires_in": 7200,
-                "scope": " ".join(READ_SCOPES),
-            })]), now=lambda: 1000,
-        )
-        self.assertEqual(omitted.record.refresh_token, "fake-refresh")
+        original = record(expires_at=1200)
+        omitted = FakeStore(record=original)
+        with self.assertRaises(CredentialError) as raised:
+            resolve_user_access_token(
+                environ={}, store=omitted, client_id="fake-client",
+                transport=FakeTransport([response(200, {
+                    "access_token": "new-access-not-usable", "expires_in": 7200,
+                    "scope": " ".join(READ_SCOPES),
+                })]), now=lambda: 1000,
+            )
+        self.assertEqual(raised.exception.category, "provider_error")
+        self.assertTrue(raised.exception.refresh_attempted)
+        self.assertIs(omitted.record, original)
+        self.assertEqual(omitted.replacements, [])
 
     def test_CRED_failed_refresh_preserves_state_and_blocks_collection(self):
         original = record(expires_at=1200)
