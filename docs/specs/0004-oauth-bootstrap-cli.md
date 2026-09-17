@@ -25,7 +25,10 @@ Re-verified against X documentation on 2026-09-17:
 Authoritative provider references:
 
 - <https://docs.x.com/fundamentals/authentication/oauth-2-0/authorization-code>
+- <https://docs.x.com/fundamentals/authentication/oauth-2-0/user-access-token>
 - <https://docs.x.com/x-api/getting-started/about-x-api>
+
+The current X guide documents that `offline.access` causes a refresh token to be issued, but the guide page does not make `expires_in` a product invariant. This bootstrap therefore treats a missing positive expiry duration as a fail-closed compatibility result rather than guessing a lifetime. Real-provider qualification is the place to determine whether the current provider response satisfies this stricter managed-lifecycle requirement.
 
 ## Command contract
 
@@ -151,24 +154,25 @@ There is no automatic retry, browser relaunch, alternate redirect URI, plaintext
 
 ## Acceptance criteria
 
-1. `auth login` with missing/invalid Client ID or redirect URI exits locally before browser launch and before store mutation.
-2. Valid execution composes `OAuthConfig`, `acquire_user_token(..., refresh_capable=True)`, bootstrap pre-commit validation, and `persist_oauth_result(...)`.
-3. The requested scopes are exactly the four accepted P0 read scopes plus `offline.access`.
-4. A normalized result without a refresh token is not persisted.
-5. A normalized result without a positive expiry duration is not persisted.
-6. Acquisition or validation failure leaves any pre-existing credential unchanged.
-7. Successful persistence uses the existing DPAPI whole-record atomic replacement path.
-8. `X_CONTEXT_USER_ACCESS_TOKEN` is never imported into managed storage.
-9. Successful output and all handled-error diagnostics exclude secret-bearing values.
-10. Unsupported default-store environments fail closed with no plaintext fallback.
-11. After successful synthetic login, existing `bookmarks` / `likes` resolution can consume the persisted credential without `X_CONTEXT_USER_ACCESS_TOKEN`.
-12. No provider revoke, local credential delete/status command, packaging work, P1 endpoint, or broader scope is introduced.
+- **AC-BOOT-01:** `auth login` with missing/invalid Client ID or redirect URI exits locally before browser launch and before store mutation.
+- **AC-BOOT-02:** Valid execution composes `OAuthConfig`, `acquire_user_token(..., refresh_capable=True)`, bootstrap pre-commit validation, and `persist_oauth_result(...)`.
+- **AC-BOOT-03:** The requested scopes are exactly the four accepted P0 read scopes plus `offline.access`.
+- **AC-BOOT-04:** A normalized result without a refresh token is not persisted.
+- **AC-BOOT-05:** A normalized result without a positive expiry duration is not persisted.
+- **AC-BOOT-06:** Acquisition or validation failure leaves any pre-existing credential unchanged.
+- **AC-BOOT-07:** Successful persistence uses the existing DPAPI whole-record atomic replacement path.
+- **AC-BOOT-08:** `X_CONTEXT_USER_ACCESS_TOKEN` is never imported into managed storage.
+- **AC-BOOT-09:** Successful output and all handled-error diagnostics exclude secret-bearing values; secret-looking extra CLI arguments are rejected without echoing their values.
+- **AC-BOOT-10:** Unsupported default-store environments fail closed with no plaintext fallback.
+- **AC-BOOT-11:** After successful synthetic login, existing `bookmarks` / `likes` resolution can consume the persisted credential without `X_CONTEXT_USER_ACCESS_TOKEN`.
+- **AC-BOOT-12:** No provider revoke, local credential delete/status command, packaging work, P1 endpoint, or broader scope is introduced.
 
 ## Test plan before implementation
 
 Tests are written before product-code changes and cover at least:
 
 - parser/dispatch for `auth login`;
+- credential-shaped and extra secret CLI arguments are rejected without echo;
 - invalid/missing Client ID -> zero acquisition/store effects;
 - invalid/missing redirect URI -> zero acquisition/store effects;
 - successful fake acquisition -> exactly one persistence path;
@@ -204,4 +208,4 @@ This slice follows:
 
 **Requirement -> Acceptance Criteria -> Tests -> Implementation**
 
-This specification and Issue #36 establish the Requirement/AC boundary. Tests are the next repository change; implementation follows only after the test contract is present.
+Branch history preserves that sequence: SPEC-0004 established the Requirement/AC boundary first, the bootstrap contract tests were committed next, and the CLI composition followed only after that test contract existed. Documentation/traceability, adversarial review, and exact-head validation then close the Draft PR before the separate human Ready gate.
