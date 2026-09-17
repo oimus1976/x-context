@@ -4,16 +4,17 @@
 
 - **Goal:** Read X content through the official X API for local tooling and AI-assisted analysis while preserving a narrow read-only authority boundary.
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
-- **Completed foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, and public-repository closeout.
-- **Active workstream:** Issue #32 / Draft PR #33 — secure credential lifecycle.
-- **Current topic branch:** `issue-32-credential-lifecycle`; the exact current head is owned by PR #33 rather than duplicated here.
+- **Completed foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, public-repository closeout, and the credential lifecycle from Issue #32 / PR #33.
+- **Credential lifecycle merge:** PR #33 merged to `main` as `d98d04be9c4ea82ababe7cb6b16a85e3b1dc240f`; Issue #32 is closed as completed.
+- **Current closeout:** Issue #34 updates post-merge documentation only; it adds no product, credential, provider, or authority behavior.
+- **Next product workstream:** not yet selected. After Issue #34 closes, start a new Issue from current `main` before implementation.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider refresh/revoke qualification, and any authority expansion remain human-final.
 
-## Credential lifecycle design
+## Completed credential lifecycle
 
-Issue #32 introduces a lifecycle-managed user-context credential path while preserving the existing read-only/same-subject authority boundary.
+Issue #32 introduced a lifecycle-managed user-context credential path while preserving the existing read-only/same-subject authority boundary.
 
-The accepted design is:
+The merged design is:
 
 - Windows DPAPI `CurrentUser` protects one versioned credential envelope stored in a per-user local file;
 - the complete protected envelope is the atomic replacement unit;
@@ -31,36 +32,38 @@ The accepted design is:
 
 ADR-0005 records the DPAPI choice. Generic Windows Credential Manager was considered but rejected for this slice because its Generic Credential blob has a documented size ceiling and splitting one logical token envelope across multiple credential records would weaken the desired whole-record atomic replacement model.
 
-## Review/remediation state
+## Review and validation closeout
 
-PR #33 has undergone multiple adversarial passes. The following material findings were remediated:
+PR #33 underwent repeated adversarial/L2 review. Material findings were remediated before merge:
 
-1. **Refresh-token omission semantics:** carrying the old refresh token forward would operationally rely on undocumented provider reuse semantics. The implementation now fails closed when a refresh response omits the replacement refresh token.
-2. **Revoke/logout overclaim:** the contract now describes a bounded single-token revoke plus local delete rather than complete provider logout/token-family invalidation.
-3. **Invalid-input ordering regression:** bookmarks/likes local argument validation now runs before lifecycle credential resolution, preventing an invalid command from triggering a refresh request.
-4. **Real DPAPI evidence gap:** L2 review found that prior tests used injected fake protect/unprotect functions and therefore did not exercise the actual Windows `CryptProtectData` / `CryptUnprotectData` ctypes boundary. Commit `70c228de88357e53f173549a960247b559ed9f28` adds a Windows-only synthetic integration test for this boundary; non-Windows CI skips it by design.
+1. **Refresh-token omission semantics:** carrying the old refresh token forward would rely on undocumented provider reuse semantics. The merged implementation fails closed when a refresh response omits the replacement refresh token.
+2. **Revoke/logout overclaim:** the contract is a bounded single-token revoke plus local delete, not complete provider logout or token-family invalidation.
+3. **Invalid-input ordering regression:** bookmarks/likes validate local arguments before lifecycle credential resolution, so invalid input cannot trigger OAuth refresh or X collection traffic.
+4. **Real DPAPI evidence gap:** a Windows-only synthetic integration test now exercises the real `CryptProtectData` / `CryptUnprotectData` boundary, verifies round-trip behavior, confirms plaintext token sentinels are absent from the durable protected file, and deletes the temporary credential.
 
-Ready / merge remain blocked until the new Windows-only DPAPI test is executed successfully at the exact final PR head and the L2 review is closed with no remaining blocker.
+Final PR head before merge:
 
-## Validation state
+`54c4e762cc857c159ef6a3d30a11e339f91d8c28`
 
-Evidence already completed on pre-DPAPI-test head `19763b6e7f7d099f34ac4997ae424f6906808a7d`:
+Authoritative Windows exact-head evidence on that head:
 
-- Windows PowerShell exact-head validation PASS;
-- 162 tests passed;
+- 163 tests passed;
+- `test_CRED_real_windows_dpapi_round_trip_and_plaintext_absent` passed on Windows and was not skipped;
 - `git diff --check origin/main...HEAD` passed;
-- detached validation worktree stayed clean and was removed normally;
-- canonical `main` returned clean and synchronized to `origin/main`;
-- durable UTF-8 evidence log: `logs/verification/issue-32-final-exact-head-20260917-212445.log`;
-- hosted `project-ci` and `policy-check` passed.
+- verification worktree was clean and removed normally;
+- canonical checkout returned to `main`, clean, with the then-current `main == origin/main`;
+- durable UTF-8 evidence log: `logs/verification/issue-32-final-dpapi-exact-head-20260917-213451.log`;
+- `FINAL_RESULT=PASS`.
 
-Additional test commit `70c228de88357e53f173549a960247b559ed9f28`:
+Post-merge GitHub evidence on merge commit `d98d04be9c4ea82ababe7cb6b16a85e3b1dc240f`:
 
-- hosted `project-ci`: PASS;
-- hosted `policy-check`: PASS;
-- the real-DPAPI integration test is skipped on non-Windows by design and therefore still requires a Windows exact-head run before Ready consideration.
+- PR #33 is merged and closed;
+- Issue #32 is closed as completed;
+- `main` points to the merge commit;
+- hosted `project-ci` passed;
+- hosted `policy-check` passed.
 
-Later documentation commits update CHANGELOG, PROJECT_STATUS, and TEST_MATRIX traceability, so final Ready consideration requires a new validation log whose tested SHA equals the exact PR head shown by GitHub at that time.
+Real-provider refresh/revoke qualification was not performed as part of Issue #32 and remains a separate explicit human decision.
 
 ## Authority and safety boundaries
 
@@ -69,12 +72,14 @@ Later documentation commits update CHANGELOG, PROJECT_STATUS, and TEST_MATRIX tr
 - Actual credentials and private X payloads must not enter the repository, Issues/PRs, CI artifacts, normal logs, or retained validation evidence.
 - DPAPI protection is an at-rest/current-user boundary, not isolation from every process running as that same user.
 - Corrupt/unreadable/unsupported credential state fails closed and is not auto-deleted.
-- Real provider refresh/revoke qualification is separate from synthetic contract tests and remains human-gated.
+- Real provider refresh/revoke qualification remains human-gated.
 - Ready and merge are separate human-final gates.
+- Destructive local/remote branch cleanup remains a separate human decision and is not part of Issue #34.
 
 ## Recovery / first diagnostic entry points
 
-- Workstream: GitHub Issue #32 and Draft PR #33.
+- Completed lifecycle workstream: GitHub Issue #32 / PR #33.
+- Post-merge documentation closeout: Issue #34.
 - Requirement and acceptance contract: `docs/specs/0003-credential-lifecycle.md`.
 - Storage decision: `docs/adr/0005-dpapi-credential-storage.md`.
 - Traceability: `docs/TEST_MATRIX.md`.
