@@ -1,4 +1,4 @@
-"""FR-006 command-line interface for read and bounded personal collections."""
+"""CLI for read, bounded personal collections, and OAuth bootstrap."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Mapping, TextIO
+from typing import Callable, Mapping, TextIO
 
 from .credential_lifecycle import (
     Clock,
@@ -14,18 +14,22 @@ from .credential_lifecycle import (
     CredentialStore,
     OAuthTransport,
     default_credential_store,
+    persist_oauth_result,
     resolve_user_access_token,
 )
+from .oauth import OAuthConfig, OAuthError, OAuthTokenResult, acquire_user_token
 from .url_parser import InvalidStatusUrl, extract_post_id
 from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks, lookup_likes
 
 _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
 _OAUTH_CLIENT_ID_ENV = "X_CONTEXT_OAUTH_CLIENT_ID"
+_OAUTH_REDIRECT_URI_ENV = "X_CONTEXT_OAUTH_REDIRECT_URI"
 _LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error"})
 _CREDENTIAL_LOCAL_CATEGORIES = frozenset(
     {"credential_missing", "credential_expired", "credential_storage_error"}
 )
+OAuthAcquirer = Callable[..., OAuthTokenResult]
 
 
 class _CliUsageError(ValueError):
@@ -47,6 +51,9 @@ def _build_parser() -> argparse.ArgumentParser:
         collection_parser = subparsers.add_parser(operation, add_help=True, allow_abbrev=False)
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
+    auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
+    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", required=True)
+    auth_subparsers.add_parser("login", add_help=True, allow_abbrev=False)
     return parser
 
 
@@ -85,8 +92,26 @@ def _write_error(
     )
 
 
+def _auth_error(stream: TextIO, *, category: str) -> None:
+    _write_json_line(
+        stream,
+        {
+            "diagnostic": "error",
+            "operation": "auth_login",
+            "error_category": category,
+            "credential_persisted": False,
+        },
+    )
+
+
 def _exit_code_for_category(category: str) -> int:
     return 2 if category in _LOCAL_ERROR_CATEGORIES else 3
+
+
+def _auth_exit_code(category: str) -> int:
+    if category in {"invalid_input", "configuration_error", "credential_storage_error"}:
+        return 2
+    return 3
 
 
 def _credential_cli_category(category: str) -> str:
@@ -107,6 +132,85 @@ def _collection_input_is_valid(max_results: object, page_token: object) -> bool:
     return True
 
 
+def _run_auth_login(
+    *,
+    environ: Mapping[str, str],
+    credential_store: CredentialStore | None,
+    oauth_transport: OAuthTransport | None,
+    oauth_acquirer: OAuthAcquirer | None,
+    clock: Clock | None,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    try:
+        config = OAuthConfig(
+            client_id=environ.get(_OAUTH_CLIENT_ID_ENV),
+            redirect_uri=environ.get(_OAUTH_REDIRECT_URI_ENV),
+        )
+    except OAuthError as exc:
+        _auth_error(stderr, category=exc.category)
+        return _auth_exit_code(exc.category)
+
+    lifecycle_store = credential_store
+    if lifecycle_store is None:
+        try:
+            lifecycle_store = default_credential_store(environ)
+        except CredentialError as exc:
+            _auth_error(stderr, category=exc.category)
+            return _auth_exit_code(exc.category)
+        if lifecycle_store is None:
+            _auth_error(stderr, category="configuration_error")
+            return 2
+
+    acquire = acquire_user_token if oauth_acquirer is None else oauth_acquirer
+    try:
+        result = acquire(
+            config,
+            refresh_capable=True,
+            transport=oauth_transport,
+        )
+    except OAuthError as exc:
+        _auth_error(stderr, category=exc.category)
+        return _auth_exit_code(exc.category)
+    except Exception:
+        _auth_error(stderr, category="provider_error")
+        return 3
+
+    if not isinstance(result, OAuthTokenResult):
+        _auth_error(stderr, category="provider_error")
+        return 3
+    if result.refresh_token is None:
+        _auth_error(stderr, category="provider_error")
+        return 3
+    if (
+        isinstance(result.expires_in, bool)
+        or not isinstance(result.expires_in, int)
+        or result.expires_in <= 0
+    ):
+        _auth_error(stderr, category="provider_error")
+        return 3
+
+    try:
+        persist_oauth_result(result, store=lifecycle_store, now=clock)
+    except CredentialError as exc:
+        _auth_error(stderr, category=exc.category)
+        return _auth_exit_code(exc.category)
+    except Exception:
+        _auth_error(stderr, category="credential_storage_error")
+        return 2
+
+    _write_json_line(
+        stdout,
+        {
+            "operation": "auth_login",
+            "status": "success",
+            "credential_persisted": True,
+            "refresh_capable": True,
+        },
+    )
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -114,11 +218,12 @@ def main(
     transport: Transport | None = None,
     credential_store: CredentialStore | None = None,
     oauth_transport: OAuthTransport | None = None,
+    oauth_acquirer: OAuthAcquirer | None = None,
     clock: Clock | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> int:
-    """Run an FR-006 command and return its process exit code."""
+    """Run an x-context command and return its process exit code."""
 
     selected_argv = sys.argv[1:] if argv is None else argv
     selected_environ = os.environ if environ is None else environ
@@ -132,12 +237,29 @@ def main(
         if selected_argv and selected_argv[0] in ("bookmarks", "likes"):
             _collection_diagnostic(selected_stderr, operation=selected_argv[0], error=XApiError("invalid_input"))
             return 2
+        if selected_argv and selected_argv[0] == "auth":
+            _auth_error(selected_stderr, category="invalid_input")
+            return 2
         _write_error(
             selected_stderr,
             category="invalid_input",
             requests_attempted=0,
         )
         return 2
+
+    if args.command == "auth":
+        if args.auth_command != "login":
+            _auth_error(selected_stderr, category="invalid_input")
+            return 2
+        return _run_auth_login(
+            environ=selected_environ,
+            credential_store=credential_store,
+            oauth_transport=oauth_transport,
+            oauth_acquirer=oauth_acquirer,
+            clock=clock,
+            stdout=selected_stdout,
+            stderr=selected_stderr,
+        )
 
     if args.command in ("bookmarks", "likes"):
         if not _collection_input_is_valid(args.max_results, args.page_token):
