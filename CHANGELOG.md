@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### End-user OAuth bootstrap CLI
+
+- Issue #36 / Draft PR #37 adds `python -m x_context auth login` as the bounded end-user composition of the existing native/public-client Authorization Code + PKCE acquisition and DPAPI-backed lifecycle persistence boundaries. Configuration is non-secret `X_CONTEXT_OAUTH_CLIENT_ID` plus exact registered `X_CONTEXT_OAUTH_REDIRECT_URI`; the command accepts no token, code, state, verifier, client-secret, or scope argument and performs no X content read.
+- The command requests only the existing P0 read scopes plus `offline.access`, resolves a supported secure store before browser launch, and persists only after the normalized result contains both a refresh token and positive expiry duration. Missing lifecycle metadata fails closed rather than fabricating token lifetime or silently downgrading to an unmanaged/non-refreshable credential. `X_CONTEXT_USER_ACCESS_TOKEN` remains an explicit unmanaged compatibility/recovery override and is never imported into managed storage.
+- Requirement/AC were recorded in SPEC-0004, bootstrap contract tests were committed before product-code implementation, and additional parser-security tests reject credential-shaped/extra secret CLI arguments without echoing them. Initial hosted branch-head runs passed `project-ci` and `policy-check`; current exact-head Windows validation, adversarial review closeout, and any real browser/provider login qualification remain pending. Real-provider qualification is human-gated and retained evidence must remain non-secret.
+
 ### Credential lifecycle
 
 - Issue #32 / PR #33 added a lifecycle-managed user-context credential path for bookmarks/likes without expanding the existing read-only authority. ADR-0005 selects one versioned per-user credential envelope protected by Windows DPAPI `CurrentUser`; the complete protected envelope is atomically replaced as one unit. OAuth acquisition remains non-persistent by default, `X_CONTEXT_USER_ACCESS_TOKEN` remains an explicit unmanaged compatibility/recovery override, and `X_CONTEXT_BEARER_TOKEN` remains app-only rather than a user-context fallback.
