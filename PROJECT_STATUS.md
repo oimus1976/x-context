@@ -6,8 +6,7 @@
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
 - **Completed foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, and public-repository closeout.
 - **Active workstream:** Issue #32 / Draft PR #33 — secure credential lifecycle.
-- **Current topic branch:** `issue-32-credential-lifecycle`.
-- **Current review head:** `70c228de88357e53f173549a960247b559ed9f28` after adding a Windows-only real-DPAPI integration test discovered as an L2 evidence gap.
+- **Current topic branch:** `issue-32-credential-lifecycle`; the exact current head is owned by PR #33 rather than duplicated here.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider refresh/revoke qualification, and any authority expansion remain human-final.
 
 ## Credential lifecycle design
@@ -39,9 +38,9 @@ PR #33 has undergone multiple adversarial passes. The following material finding
 1. **Refresh-token omission semantics:** carrying the old refresh token forward would operationally rely on undocumented provider reuse semantics. The implementation now fails closed when a refresh response omits the replacement refresh token.
 2. **Revoke/logout overclaim:** the contract now describes a bounded single-token revoke plus local delete rather than complete provider logout/token-family invalidation.
 3. **Invalid-input ordering regression:** bookmarks/likes local argument validation now runs before lifecycle credential resolution, preventing an invalid command from triggering a refresh request.
-4. **Real DPAPI evidence gap:** L2 review found that prior tests used injected fake protect/unprotect functions and therefore did not exercise the actual Windows `CryptProtectData` / `CryptUnprotectData` ctypes boundary. Head `70c228de88357e53f173549a960247b559ed9f28` adds a Windows-only synthetic integration test for this boundary; non-Windows CI skips it by design.
+4. **Real DPAPI evidence gap:** L2 review found that prior tests used injected fake protect/unprotect functions and therefore did not exercise the actual Windows `CryptProtectData` / `CryptUnprotectData` ctypes boundary. Commit `70c228de88357e53f173549a960247b559ed9f28` adds a Windows-only synthetic integration test for this boundary; non-Windows CI skips it by design.
 
-Ready / merge remain blocked until the new Windows-only DPAPI test is executed successfully at the exact final head and the L2 review is closed with no remaining blocker.
+Ready / merge remain blocked until the new Windows-only DPAPI test is executed successfully at the exact final PR head and the L2 review is closed with no remaining blocker.
 
 ## Validation state
 
@@ -55,13 +54,13 @@ Evidence already completed on pre-DPAPI-test head `19763b6e7f7d099f34ac4997ae424
 - durable UTF-8 evidence log: `logs/verification/issue-32-final-exact-head-20260917-212445.log`;
 - hosted `project-ci` and `policy-check` passed.
 
-Additional test-only head `70c228de88357e53f173549a960247b559ed9f28`:
+Additional test commit `70c228de88357e53f173549a960247b559ed9f28`:
 
 - hosted `project-ci`: PASS;
 - hosted `policy-check`: PASS;
-- the real-DPAPI integration test is skipped on non-Windows by design and therefore still requires one Windows exact-head run before Ready consideration.
+- the real-DPAPI integration test is skipped on non-Windows by design and therefore still requires a Windows exact-head run before Ready consideration.
 
-Any tracked change after an exact-head validation invalidates that head-specific evidence. Final Ready consideration therefore requires a validation log whose tested SHA equals the final PR head.
+Later documentation commits update CHANGELOG, PROJECT_STATUS, and TEST_MATRIX traceability, so final Ready consideration requires a new validation log whose tested SHA equals the exact PR head shown by GitHub at that time.
 
 ## Authority and safety boundaries
 
