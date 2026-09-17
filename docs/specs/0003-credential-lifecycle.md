@@ -6,20 +6,20 @@
 
 ## Purpose
 
-Define the secure lifecycle for OAuth 2.0 user-context credentials after acquisition: explicit persistence, runtime resolution, refresh-before-use, atomic replacement, local deletion, provider-side revoke, recovery, and collection integration.
+Define the secure lifecycle for OAuth 2.0 user-context credentials after acquisition: explicit persistence, runtime resolution, refresh-before-use, atomic replacement, local deletion, single-token provider revoke, recovery, and collection integration.
 
 This specification does not expand x-context authority. The product remains read-only and official-X-only.
 
 ## Verified provider boundary
 
-Re-verified against current X documentation on 2026-09-16:
+Re-verified against current X documentation on 2026-09-17:
 
 - `offline.access` causes a refresh token to be issued; omitting it does not establish refresh capability.
 - Public-client refresh uses `POST https://api.x.com/2/oauth2/token` with `application/x-www-form-urlencoded`, `grant_type=refresh_token`, `refresh_token`, and `client_id`.
 - Provider-side revoke uses `POST https://api.x.com/2/oauth2/revoke` with `application/x-www-form-urlencoded`, `token`, and `client_id` for a public client.
-- X documents revoke as invalidating an access token or refresh token and as supporting a client logout feature.
+- X documents revoke as invalidating an access token or refresh token and describes the endpoint as usable to support a client logout feature.
 
-Current X documentation does not establish a sufficiently explicit contract for x-context to assume refresh-token rotation, reuse, one-time-use, immediate invalidation of the previous refresh token, or token-family-wide invalidation after revoking one token.
+Current X documentation does not establish a sufficiently explicit contract for x-context to assume refresh-token rotation, reuse, one-time-use, immediate invalidation of the previous refresh token, token-family-wide invalidation after revoking one token, or invalidation of an already-issued access token merely because its related refresh token was revoked.
 
 These provider behaviors remain external facts rather than immutable product constants.
 
@@ -122,27 +122,28 @@ Transport/provider exception text is not trusted and is never passed through ver
 
 ## Refresh success and replacement
 
-A successful refresh response must contain a safe non-empty access token. Optional token type, positive expiry metadata, granted scopes, and optional refresh token are normalized conservatively.
+A refresh response is accepted as lifecycle-usable only when it contains both a safe non-empty access token and a safe non-empty refresh token. Optional token type, positive expiry metadata, and granted scopes are normalized conservatively.
 
 The response is treated as new provider-controlled credential material.
 
-Because X does not document a stable rotation/reuse contract, x-context does not test or reuse the old refresh token after success.
+Because X does not document a stable rotation/reuse contract, x-context must not test, retain for future refresh, or reuse the old refresh token after a successful refresh exchange.
 
 Replacement rule:
 
-- if the successful response contains a refresh token, persist that returned refresh token;
-- if the successful response omits a refresh token, retain the previously persisted refresh token for the new envelope rather than guessing that refresh capability was revoked;
-- replace access token and any newly supplied lifecycle metadata with the successful response values;
+- a returned refresh token replaces the old refresh token;
+- if the provider returns an access token but omits `refresh_token`, treat the response as an unusable/malformed lifecycle refresh result and fail closed;
+- on such omission, do not return the new access token to collection code and do not replace or partially modify the committed credential state;
+- replace access token and any newly supplied lifecycle metadata only as part of a complete accepted credential result;
 - preserve only metadata whose carry-forward semantics are explicitly defined here;
 - commit the complete new envelope atomically.
 
-This omission rule is an x-context storage rule, not a claim about provider rotation/reuse behavior. A later provider clarification may revise it through a new specification change.
+This rule deliberately avoids inferring whether an omitted refresh token means reuse, rotation, revocation, or loss of refresh capability. A later provider clarification may revise it through a new specification change.
 
 The refreshed access token must not be returned to a collection caller until the replacement commit succeeds. This prevents runtime use of credential state that was not durably committed.
 
 ## Refresh failure
 
-A failed transport, non-success provider response, malformed success response, scope expansion, or persistence replacement failure does not intentionally destroy the last committed credential state.
+A failed transport, non-success provider response, malformed success response, refresh-token omission, scope expansion, or persistence replacement failure does not intentionally destroy the last committed credential state.
 
 When refresh was triggered only by the 300-second safety window and the old access token is still unexpired, x-context **still fails the current resolution** rather than proceeding after a failed refresh attempt. This keeps behavior deterministic and avoids silently consuming a token the policy already judged due for refresh.
 
@@ -188,7 +189,7 @@ Local deletion does not claim provider-side invalidation and must not be labeled
 
 Environment credentials are not modified by local deletion.
 
-## Provider revoke/logout
+## Provider single-token revoke
 
 Provider revoke is a distinct explicit operation and remains human-gated for real-account qualification.
 
@@ -196,19 +197,21 @@ It uses only:
 
 `POST https://api.x.com/2/oauth2/revoke`
 
-For a lifecycle-managed refresh-capable credential, x-context revokes the **refresh token** when one is present because that is the credential that enables future access-token renewal. If no refresh token exists, it revokes the access token.
+For a lifecycle-managed refresh-capable credential, x-context revokes the **refresh token** when one is present because that token enables future access-token renewal. If no refresh token exists, it revokes the access token.
 
-This choice does not assume that revoking one token invalidates every token in a provider token family.
+This operation is intentionally described as **single-token revoke**, not complete provider logout. Current X documentation establishes that the submitted access token or refresh token is invalidated, but does not establish that revoking one token invalidates every related token or an already-issued sibling access token.
 
 Provider revoke and local deletion are ordered as:
 
 1. load the lifecycle-managed credential;
-2. perform at most one provider revoke request;
+2. perform at most one provider revoke request for the selected token;
 3. only after provider revoke succeeds, delete the local lifecycle-managed credential.
 
 If provider revoke fails, local state is retained so the user can retry or explicitly choose local-only deletion.
 
-If provider revoke succeeds but local deletion fails, report a safe local storage error and retain no claim that local logout completed; a subsequent local-only delete may recover the machine state.
+If provider revoke succeeds but local deletion fails, report a safe local storage error and retain no claim that local cleanup completed; a subsequent local-only delete may recover the machine state.
+
+After provider revoke success and local deletion success, x-context may report only that the selected provider token was revoked and lifecycle-managed local state was deleted. It must not claim complete provider logout, full token-family invalidation, or invalidation of any other access token unless separately verified.
 
 Provider success must not cause raw token/provider response logging.
 
@@ -265,15 +268,15 @@ One credential resolution performs at most one official public-client refresh re
 
 ### AC-CRED-07 — conservative refresh normalization
 
-Malformed successful refresh responses, unsafe secret fields, invalid expiry metadata, or returned scope mismatch fail closed without replacing committed state.
+Malformed successful refresh responses, missing/unsafe refresh token material, unsafe secret fields, invalid expiry metadata, or returned scope mismatch fail closed without replacing committed state.
 
 ### AC-CRED-08 — atomic successful replacement
 
-A valid refresh result is converted into one complete new envelope and durably replaced atomically before its access token is returned for use.
+A valid refresh result containing both access and refresh tokens is converted into one complete new envelope and durably replaced atomically before its access token is returned for use.
 
 ### AC-CRED-09 — refresh-token omission/rotation neutrality
 
-A returned refresh token replaces the old one. If a successful refresh omits a refresh token, the old refresh token is retained by explicit product rule. No test or implementation claims that the old provider token is reusable after a response that replaced it.
+A returned refresh token replaces the old one. If a nominally successful refresh response omits `refresh_token`, the refresh operation fails closed, the previous committed credential remains unchanged, and neither old-token reuse nor provider rotation semantics are inferred.
 
 ### AC-CRED-10 — failed refresh preserves committed state
 
@@ -287,9 +290,9 @@ After env resolution or persisted load/refresh, bookmarks/likes still perform th
 
 Local lifecycle deletion is idempotent, affects only persisted lifecycle state, does not modify environment variables, and does not claim provider revocation.
 
-### AC-CRED-13 — official revoke semantics
+### AC-CRED-13 — official single-token revoke semantics
 
-Explicit provider revoke uses only `POST https://api.x.com/2/oauth2/revoke` with the public-client form contract. It chooses refresh token when present, otherwise access token, performs at most one revoke request, and deletes local state only after provider success.
+Explicit provider revoke uses only `POST https://api.x.com/2/oauth2/revoke` with the public-client form contract. It chooses refresh token when present, otherwise access token, performs at most one revoke request, and deletes local state only after provider success. Success establishes only revocation of the submitted token plus local deletion; it does not establish complete provider logout or related-token invalidation.
 
 ### AC-CRED-14 — recovery and corruption fail closed
 
@@ -317,4 +320,4 @@ Automated tests use fake token values, fake clocks, fake lifecycle storage, fake
 
 Concrete DPAPI integration tests may run only on Windows and must use synthetic credentials and temporary paths. They must delete their test state and never commit generated protected blobs.
 
-Any real provider refresh/revoke qualification remains an explicit human decision. Retained evidence records only non-secret facts such as endpoint class, success boolean, refresh-token-present boolean, and scope names.
+Any real provider refresh/revoke qualification remains an explicit human decision. Retained evidence records only non-secret facts such as endpoint class, success boolean, refresh-token-present boolean, selected token kind, and scope names. It must not claim complete logout or token-family invalidation without separate evidence.
