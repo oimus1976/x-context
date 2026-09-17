@@ -95,6 +95,18 @@ def _credential_cli_category(category: str) -> str:
     return "configuration_error" if category in _CREDENTIAL_LOCAL_CATEGORIES else category
 
 
+def _collection_input_is_valid(max_results: object, page_token: object) -> bool:
+    if type(max_results) is not int or not 1 <= max_results <= 100:
+        return False
+    if page_token is not None and (
+        not isinstance(page_token, str)
+        or not page_token
+        or any(ord(char) < 32 or ord(char) == 127 for char in page_token)
+    ):
+        return False
+    return True
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -128,6 +140,18 @@ def main(
         return 2
 
     if args.command in ("bookmarks", "likes"):
+        if not _collection_input_is_valid(args.max_results, args.page_token):
+            _collection_diagnostic(
+                selected_stderr,
+                operation=args.command,
+                error=XApiError("invalid_input"),
+                page_size=args.max_results if type(args.max_results) is int and 1 <= args.max_results <= 100 else None,
+                credential_source=None,
+                refresh_attempted=False,
+                credential_requests_attempted=0,
+            )
+            return 2
+
         lifecycle_store = credential_store
         try:
             if _USER_TOKEN_ENV not in selected_environ and lifecycle_store is None:
