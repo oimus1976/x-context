@@ -8,11 +8,24 @@ import os
 import sys
 from typing import Mapping, TextIO
 
+from .credential_lifecycle import (
+    Clock,
+    CredentialError,
+    CredentialStore,
+    OAuthTransport,
+    default_credential_store,
+    resolve_user_access_token,
+)
 from .url_parser import InvalidStatusUrl, extract_post_id
 from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks, lookup_likes
 
 _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
+_USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
+_OAUTH_CLIENT_ID_ENV = "X_CONTEXT_OAUTH_CLIENT_ID"
 _LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error"})
+_CREDENTIAL_LOCAL_CATEGORIES = frozenset(
+    {"credential_missing", "credential_expired", "credential_storage_error"}
+)
 
 
 class _CliUsageError(ValueError):
@@ -76,11 +89,32 @@ def _exit_code_for_category(category: str) -> int:
     return 2 if category in _LOCAL_ERROR_CATEGORIES else 3
 
 
+def _credential_cli_category(category: str) -> str:
+    # Preserve the pre-lifecycle collection CLI contract for local credential
+    # absence/corruption/expiry while the library retains finer categories.
+    return "configuration_error" if category in _CREDENTIAL_LOCAL_CATEGORIES else category
+
+
+def _collection_input_is_valid(max_results: object, page_token: object) -> bool:
+    if type(max_results) is not int or not 1 <= max_results <= 100:
+        return False
+    if page_token is not None and (
+        not isinstance(page_token, str)
+        or not page_token
+        or any(ord(char) < 32 or ord(char) == 127 for char in page_token)
+    ):
+        return False
+    return True
+
+
 def main(
     argv: list[str] | None = None,
     *,
     environ: Mapping[str, str] | None = None,
     transport: Transport | None = None,
+    credential_store: CredentialStore | None = None,
+    oauth_transport: OAuthTransport | None = None,
+    clock: Clock | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
 ) -> int:
@@ -106,16 +140,75 @@ def main(
         return 2
 
     if args.command in ("bookmarks", "likes"):
-        lookup = lookup_bookmarks if args.command == "bookmarks" else lookup_likes
+        if not _collection_input_is_valid(args.max_results, args.page_token):
+            _collection_diagnostic(
+                selected_stderr,
+                operation=args.command,
+                error=XApiError("invalid_input"),
+                page_size=args.max_results if type(args.max_results) is int and 1 <= args.max_results <= 100 else None,
+                credential_source=None,
+                refresh_attempted=False,
+                credential_requests_attempted=0,
+            )
+            return 2
+
+        lifecycle_store = credential_store
         try:
-            result = lookup(user_access_token=selected_environ.get("X_CONTEXT_USER_ACCESS_TOKEN"),
-                                      max_results=args.max_results, page_token=args.page_token, transport=transport)
+            if _USER_TOKEN_ENV not in selected_environ and lifecycle_store is None:
+                lifecycle_store = default_credential_store(selected_environ)
+                if lifecycle_store is None:
+                    raise CredentialError("credential_missing")
+            resolution = resolve_user_access_token(
+                environ=selected_environ,
+                store=lifecycle_store,  # env override path does not touch the store
+                client_id=selected_environ.get(_OAUTH_CLIENT_ID_ENV),
+                transport=oauth_transport,
+                now=clock,
+            )
+        except CredentialError as exc:
+            category = _credential_cli_category(exc.category)
+            credential_requests = 1 if exc.refresh_attempted or exc.revoke_attempted else 0
+            _collection_diagnostic(
+                selected_stderr,
+                operation=args.command,
+                error=XApiError(category, requests_attempted=credential_requests),
+                page_size=args.max_results if 1 <= args.max_results <= 100 else None,
+                credential_source=None,
+                refresh_attempted=exc.refresh_attempted,
+                credential_requests_attempted=credential_requests,
+            )
+            return _exit_code_for_category(category)
+
+        lookup = lookup_bookmarks if args.command == "bookmarks" else lookup_likes
+        credential_requests = 1 if resolution.refresh_attempted else 0
+        try:
+            result = lookup(
+                user_access_token=resolution.access_token,
+                max_results=args.max_results,
+                page_token=args.page_token,
+                transport=transport,
+            )
         except XApiError as exc:
-            _collection_diagnostic(selected_stderr, operation=args.command, error=exc,
-                                  page_size=args.max_results if 1 <= args.max_results <= 100 else None)
+            _collection_diagnostic(
+                selected_stderr,
+                operation=args.command,
+                error=exc,
+                page_size=args.max_results if 1 <= args.max_results <= 100 else None,
+                credential_source=resolution.source,
+                refresh_attempted=resolution.refresh_attempted,
+                credential_requests_attempted=credential_requests,
+            )
             return _exit_code_for_category(exc.category)
         selected_stdout.write(result.envelope.to_json() + "\n")
-        _collection_diagnostic(selected_stderr, operation=args.command, result=result, page_size=result.requested_page_size)
+        _collection_diagnostic(
+            selected_stderr,
+            operation=args.command,
+            result=result,
+            page_size=result.requested_page_size,
+            credential_source=resolution.source,
+            refresh_attempted=resolution.refresh_attempted,
+            credential_requests_attempted=credential_requests,
+        )
         return 0
 
     if args.command != "read":
@@ -168,7 +261,17 @@ def main(
     return 0
 
 
-def _collection_diagnostic(stream, *, operation, result=None, error=None, page_size=None):
+def _collection_diagnostic(
+    stream,
+    *,
+    operation,
+    result=None,
+    error=None,
+    page_size=None,
+    credential_source=None,
+    refresh_attempted=False,
+    credential_requests_attempted=0,
+):
     """Per-endpoint rates are distinct budgets, never added together."""
     subject_rate = RateLimitMetadata()
     collection_rate = RateLimitMetadata()
@@ -179,10 +282,14 @@ def _collection_diagnostic(stream, *, operation, result=None, error=None, page_s
             subject_rate, collection_rate = error.subject_rate_limit, error.rate_limit
         else:
             subject_rate = error.rate_limit
+    base_requests = error.requests_attempted if error is not None else result.requests_attempted
     value = {
         "diagnostic": "error" if error is not None else "usage",
         "operation": operation,
-        "provider_requests_attempted": error.requests_attempted if error is not None else result.requests_attempted,
+        "provider_requests_attempted": base_requests + credential_requests_attempted,
+        "credential_provider_requests_attempted": credential_requests_attempted,
+        "credential_source": credential_source,
+        "credential_refresh_attempted": bool(refresh_attempted),
         "returned_item_count": 0 if error is not None else len(result.envelope.items),
         "requested_page_size": page_size,
         "continuation_returned": False if error is not None else result.envelope.page.next_token is not None,
