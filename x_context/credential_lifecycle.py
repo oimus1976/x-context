@@ -244,7 +244,7 @@ def _refresh(
         raise CredentialError("provider_error", refresh_attempted=True)
 
     returned_refresh = payload.get("refresh_token")
-    if returned_refresh is not None and not _safe_secret(returned_refresh):
+    if not _safe_secret(returned_refresh):
         raise CredentialError("provider_error", refresh_attempted=True)
 
     token_type = payload.get("token_type")
@@ -269,7 +269,7 @@ def _refresh(
 
     return CredentialRecord(
         access_token=access_token,
-        refresh_token=current.refresh_token if returned_refresh is None else returned_refresh,
+        refresh_token=returned_refresh,
         token_type=current.token_type if token_type is None else token_type,
         expires_at=None if expires_in is None else now + expires_in,
         scopes=scopes,
@@ -293,7 +293,7 @@ def revoke_persisted_credential(
     client_id: str,
     transport: OAuthTransport | None = None,
 ) -> None:
-    """Revoke one persisted provider credential, then delete local state."""
+    """Revoke one persisted provider token, then delete local state."""
 
     current = _load(store)
     if current is None:
