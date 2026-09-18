@@ -32,6 +32,7 @@ jobs:
           scripts/verify_repo.py
           scripts/closeout_state.py
           scripts/verify_local_closeout.py
+          scripts/post_merge_closeout.py
           scripts/post_merge_cleanup.py
           scripts/branch_cleanup_audit.py
       - name: Run canonical starter regression tests

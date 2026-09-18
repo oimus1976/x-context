@@ -88,6 +88,18 @@ The suite covers URL parsing, official provider boundaries, canonical output, CL
 
 The repository is public. Hosted GitHub Actions run `.github/workflows/project-ci.yml` and `.github/workflows/policy-check.yml` on pull requests, with project CI validating the proposed PR head rather than GitHub's synthetic merge commit. Windows exact-head validation is used when evidence must exercise the real DPAPI boundary. Current workstream evidence is summarized in `PROJECT_STATUS.md`.
 
+## Post-merge maintenance
+
+After a pull request is merged and its `main` push workflows have completed, use the tracked closeout command instead of copying commit SHAs into an ad hoc script:
+
+```console
+python scripts/post_merge_closeout.py --pr <number> --repository oimus1976/x-context
+```
+
+The command requires authenticated GitHub CLI access. It verifies the configured GitHub remote identity, derives the PR head and merge commit from GitHub, checks closing Issues and the exact merge-commit `project-ci` / `policy-check` push runs, refreshes the canonical remote branch, and fast-forwards local `main` only when safe. Native command diagnostics are retained but the native exit code remains the success/failure authority.
+
+The command is intentionally non-destructive. It reuses `scripts/verify_local_closeout.py` and reports matching PR worktrees but does not delete worktrees, branches, refs, files, or Issues. Any cleanup remains a separate explicitly authorized `scripts/post_merge_cleanup.py` workflow.
+
 ## Status and limitations
 
 `x-context` remains experimental. Its current canonical Post representation is intentionally small, and provider availability, entitlements, limits, OAuth behavior, and pricing are external facts that may change and must be re-verified when relevant.
