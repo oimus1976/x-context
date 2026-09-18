@@ -8,7 +8,7 @@
 - **OAuth bootstrap closeout:** PR #37 merged as `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`; Issue #36 closed, merge-commit `project-ci` / `policy-check` passed, and canonical local `main` was fast-forwarded cleanly with local closeout PASS.
 - **Current maintenance workstream:** Issue #38 / Draft PR #39 replaces manually transcribed post-merge SHAs and chat-only closeout snippets with a tracked authoritative post-merge closeout command.
 - **Current branch:** `issue-38-post-merge-closeout`, based on `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`.
-- **Current validation:** Requirement/AC, tests, implementation, CI compile integration, traceability, and adversarial hardening are in progress; current exact-head hosted and Windows validation must be established before the human Ready gate.
+- **Current validation:** exact head `9d4d50cb9eaaa9d9ff16b9aec68971a2b15f92ca` passed hosted `project-ci` / `policy-check`; project CI passed 196 tests on Ubuntu with only the expected Windows-only real-DPAPI test skipped. A docs-only status update moves the head once more, so hosted CI must confirm the new head and Windows exact-head validation remains required before the human Ready gate.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider login/refresh/revoke qualification, and any authority expansion remain human-final.
 
 ## Current Issue #38 — authoritative post-merge closeout
