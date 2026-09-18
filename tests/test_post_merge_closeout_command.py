@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -410,6 +411,132 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
         )
         self.assertFalse(failure.ok)
         self.assertEqual(failure.exit_code, 128)
+
+    def test_github_pr_reader_requests_and_parses_authoritative_merge_fields(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def fake_gh(args):
+            calls.append(tuple(args))
+            return {
+                "number": 38,
+                "state": "MERGED",
+                "mergedAt": "2026-09-18T00:00:00Z",
+                "baseRefName": "main",
+                "headRefName": "issue-38-topic",
+                "headRefOid": self.pr_head,
+                "isCrossRepository": False,
+                "mergeCommit": {"oid": self.merge_sha},
+                "closingIssuesReferences": [{"number": 38, "state": "CLOSED"}],
+            }
+
+        with patch.object(closeout, "_gh_json", side_effect=fake_gh):
+            evidence = closeout.read_github_pr(38, self.repository)
+
+        self.assertEqual(evidence.head_sha, self.pr_head)
+        self.assertEqual(evidence.merge_sha, self.merge_sha)
+        self.assertEqual(evidence.closing_issues, (closeout.ClosingIssue(38, "CLOSED"),))
+        flattened = " ".join(calls[0])
+        self.assertIn("mergeCommit", flattened)
+        self.assertIn("closingIssuesReferences", flattened)
+
+    def test_workflow_reader_filters_exact_merge_commit_push_runs(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def fake_gh(args):
+            calls.append(tuple(args))
+            return [
+                {
+                    "name": "project-ci",
+                    "event": "push",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "headSha": self.merge_sha,
+                }
+            ]
+
+        with patch.object(closeout, "_gh_json", side_effect=fake_gh):
+            runs = closeout.read_merge_workflows(self.merge_sha, self.repository)
+
+        self.assertEqual(runs[0].head_sha, self.merge_sha)
+        args = calls[0]
+        self.assertIn("--commit", args)
+        self.assertEqual(args[args.index("--commit") + 1], self.merge_sha)
+        self.assertIn("--event", args)
+        self.assertEqual(args[args.index("--event") + 1], "push")
+
+    def test_native_diagnostics_redact_https_remote_userinfo(self) -> None:
+        emitted: list[str] = []
+
+        def runner(*args, **kwargs):
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout="From https://secret-token@github.com/example/repo\n",
+            )
+
+        result = closeout.invoke_native(
+            ("git", "fetch", "origin"),
+            cwd=self.repo,
+            emit=emitted.append,
+            runner=runner,
+        )
+
+        self.assertTrue(result.ok)
+        joined = "\n".join(emitted)
+        self.assertNotIn("secret-token", joined)
+        self.assertIn("https://***@github.com/example/repo", joined)
+
+    def test_success_revalidates_closing_issues_after_local_sync(self) -> None:
+        reopened = closeout.PREvidence(
+            **{
+                **self.pr.__dict__,
+                "closing_issues": (closeout.ClosingIssue(number=38, state="OPEN"),),
+            }
+        )
+        evidence = iter((self.pr, reopened))
+
+        result = closeout.run_closeout(
+            self.repo,
+            38,
+            self.repository,
+            pr_reader=lambda pr, repository: next(evidence),
+            workflow_reader=self.workflow_reader(),
+            verifier=self.verifier(),
+            identity_reader=self.identity_reader(),
+            emit=lambda line: None,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(self.head(self.repo), self.merge_sha)
+        self.assertIn("closing issue", " ".join(result.failures).lower())
+
+    def test_success_revalidates_merge_push_ci_after_local_sync(self) -> None:
+        failed = (
+            self.workflows[0],
+            closeout.WorkflowEvidence(
+                name="policy-check",
+                event="push",
+                status="completed",
+                conclusion="failure",
+                head_sha=self.merge_sha,
+            ),
+        )
+        workflow_sets = iter((self.workflows, failed))
+
+        result = closeout.run_closeout(
+            self.repo,
+            38,
+            self.repository,
+            pr_reader=self.pr_reader(),
+            workflow_reader=lambda merge_sha, repository: next(workflow_sets),
+            verifier=self.verifier(),
+            identity_reader=self.identity_reader(),
+            emit=lambda line: None,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(self.head(self.repo), self.merge_sha)
+        self.assertIn("workflow", " ".join(result.failures).lower())
 
     def test_source_does_not_import_or_invoke_destructive_cleanup(self) -> None:
         source = (ROOT / "scripts/post_merge_closeout.py").read_text(encoding="utf-8")
