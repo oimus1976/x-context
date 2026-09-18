@@ -12,6 +12,7 @@ sys.dont_write_bytecode = True
 import argparse
 from dataclasses import dataclass
 import json
+import re
 from pathlib import Path
 import subprocess
 from typing import Callable, Sequence
@@ -30,6 +31,7 @@ from closeout_state import (
 
 
 REQUIRED_PUSH_WORKFLOWS = ("project-ci", "policy-check")
+_HTTPS_GITHUB_USERINFO_RE = re.compile(r"https://[^/\\s@]+@github\\.com", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -125,11 +127,18 @@ def invoke_native(
         return NativeResult(False, -1, "")
 
     output = result.stdout or ""
-    for line in output.splitlines():
+    safe_lines = [
+        _HTTPS_GITHUB_USERINFO_RE.sub("https://***@github.com", line)
+        for line in output.splitlines()
+    ]
+    for line in safe_lines:
         emit(line)
     emit(f"native_exit={result.returncode}")
 
-    return NativeResult(result.returncode == 0, int(result.returncode), output)
+    safe_output = "\n".join(safe_lines)
+    if output.endswith("\n") and safe_output:
+        safe_output += "\n"
+    return NativeResult(result.returncode == 0, int(result.returncode), safe_output)
 
 
 def _gh_json(args: Sequence[str]) -> object:
@@ -533,6 +542,39 @@ def run_closeout(
     if not verified.ok:
         return _fail(emit, ["existing local closeout verifier failed"])
     emit("local_closeout_verifier=PASS")
+
+    try:
+        final_evidence = pr_reader(pr, repository)
+    except RuntimeError as exc:
+        return _fail(emit, [str(exc)])
+    final_evidence_failures = _validate_pr_evidence(
+        final_evidence,
+        requested_pr=pr,
+        branch=branch,
+    )
+    if (
+        final_evidence.head_sha.lower() != evidence.head_sha.lower()
+        or final_evidence.merge_sha.lower() != evidence.merge_sha.lower()
+        or final_evidence.head_ref != evidence.head_ref
+    ):
+        final_evidence_failures.append(
+            "GitHub PR evidence changed during closeout; rerun from a fresh state"
+        )
+    final_evidence_failures.extend(_validate_closing_issues(final_evidence))
+    if final_evidence_failures:
+        return _fail(emit, final_evidence_failures)
+
+    try:
+        final_workflows = workflow_reader(evidence.merge_sha, repository)
+    except RuntimeError as exc:
+        return _fail(emit, [str(exc)])
+    final_workflow_failures = _validate_workflows(
+        final_workflows,
+        merge_sha=evidence.merge_sha,
+    )
+    if final_workflow_failures:
+        return _fail(emit, final_workflow_failures)
+    emit("final_github_revalidation=PASS")
 
     target_failures = _target_worktree_failures(
         canonical,
