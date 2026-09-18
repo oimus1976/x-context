@@ -93,7 +93,7 @@ For each workflow, GitHub evidence must refer to:
 - completed status;
 - successful conclusion.
 
-A missing, pending, cancelled, failed, skipped, or wrong-SHA run blocks closeout. PR-head CI is not a substitute for merge-commit push CI.
+A missing, pending, cancelled, failed, skipped, wrong-SHA, or ambiguous duplicate run blocks closeout. Exactly one matching run per required workflow name is accepted. PR-head CI is not a substitute for merge-commit push CI.
 
 The command does not poll or rerun CI. The operator may rerun the command later.
 
