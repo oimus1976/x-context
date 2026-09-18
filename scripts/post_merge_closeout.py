@@ -319,6 +319,11 @@ def _validate_workflows(
                 f"required workflow {required!r} is missing for the merge commit push"
             )
             continue
+        if len(matching) != 1:
+            failures.append(
+                f"required workflow {required!r} has ambiguous duplicate merge-commit push evidence"
+            )
+            continue
         current = matching[0]
         if current.status.lower() != "completed":
             failures.append(f"required workflow {required!r} is not completed")
@@ -535,6 +540,7 @@ def run_closeout(
             ["canonical final HEAD does not contain the authoritative merge commit"],
         )
     emit(f"canonical_head_after={local_after}")
+    emit("canonical_sync=PASS")
 
     verified = verifier(canonical, branch, remote)
     for line in verified.output.splitlines():
