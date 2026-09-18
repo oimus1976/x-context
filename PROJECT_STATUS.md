@@ -4,32 +4,50 @@
 
 - **Goal:** Read X content through the official X API for local tooling and AI-assisted analysis while preserving a narrow read-only authority boundary.
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
-- **Completed foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, public-repository closeout, and the credential lifecycle from Issue #32 / PR #33.
-- **Credential lifecycle closeout:** PR #33 merged as `d98d04be9c4ea82ababe7cb6b16a85e3b1dc240f`; Issue #34 / PR #35 then aligned post-merge documentation and PR #35 merged as `4f0bd3151d737b5ea40cb1891ca0a97fa3fa1efc`.
-- **Current product workstream:** Issue #36 / Draft PR #37 adds a bounded end-user `auth login` composition for the existing OAuth acquisition + secure lifecycle persistence path before adding P1 data surfaces.
-- **Current branch:** `issue-36-oauth-bootstrap-cli`, based on `4f0bd3151d737b5ea40cb1891ca0a97fa3fa1efc`.
-- **Current validation:** initial Draft PR branch-head `project-ci` and `policy-check` passed on implementation head `8676b875304ee7e4bf3e5d114a91f4477680401e`; subsequent documentation commits move the head, so final-head validation remains pending.
+- **Completed product foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, credential lifecycle, and the end-user OAuth bootstrap CLI.
+- **OAuth bootstrap closeout:** PR #37 merged as `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`; Issue #36 closed, merge-commit `project-ci` / `policy-check` passed, and canonical local `main` was fast-forwarded cleanly with local closeout PASS.
+- **Current maintenance workstream:** Issue #38 / Draft PR #39 replaces manually transcribed post-merge SHAs and chat-only closeout snippets with a tracked authoritative post-merge closeout command.
+- **Current branch:** `issue-38-post-merge-closeout`, based on `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`.
+- **Current validation:** Requirement/AC, tests, implementation, CI compile integration, traceability, and adversarial hardening are in progress; current exact-head hosted and Windows validation must be established before the human Ready gate.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider login/refresh/revoke qualification, and any authority expansion remain human-final.
 
-## Current Issue #36 — end-user OAuth bootstrap
+## Current Issue #38 — authoritative post-merge closeout
 
-The remaining P0 usability gap is no longer token acquisition or lifecycle storage in isolation: both exist as tested library boundaries. The gap is a stable user-facing path that composes them without requiring manual access-token injection or direct Python-library use.
+PR #37 exposed a maintenance-process defect rather than a product defect: an ad hoc closeout command still contained the literal placeholder `<PR #37 merge commit SHA>`, which reached Git and correctly failed with a non-zero exit before canonical `main` was mutated. The corrected retry then completed safely, but the event showed that authoritative GitHub merge evidence should not be manually copied into executable snippets.
 
-Draft PR #37 therefore introduces:
+Draft PR #39 introduces:
 
-- `python -m x_context auth login` as the only new command surface;
-- `X_CONTEXT_OAUTH_CLIENT_ID` as the existing public Client ID source;
-- `X_CONTEXT_OAUTH_REDIRECT_URI` as the exact registered fixed loopback redirect configuration;
-- reuse of the existing `OAuthConfig` and `acquire_user_token(..., refresh_capable=True)` boundary;
-- reuse of the existing `persist_oauth_result(...)` and DPAPI default store;
-- bootstrap-specific fail-closed validation requiring both a returned refresh token and positive expiry duration before persistence;
-- no import of `X_CONTEXT_USER_ACCESS_TOKEN` into managed storage;
-- no X content read as part of login;
-- no write, DM, follows, list, block, mute, or other P1 scope expansion.
+- `python scripts/post_merge_closeout.py --pr <number> --repository owner/repo`;
+- PR number as the only operator-supplied PR identity;
+- repository identity binding against the configured GitHub remote before effects;
+- authenticated GitHub reads for merged PR state, exact PR head, exact merge commit, closing Issues, and merge-commit `push` CI;
+- required exact-SHA `project-ci` / `policy-check` success before canonical synchronization;
+- canonical remote refresh plus merge-commit containment proof;
+- canonical synchronization by `git merge --ff-only` only;
+- native diagnostic retention with process exit code as the authority;
+- HTTPS GitHub remote userinfo redaction in surfaced native diagnostics;
+- reuse of the existing `verify_local_closeout.py` boundary;
+- final GitHub evidence revalidation before PASS;
+- PR worktree inventory without deletion or switching;
+- no reset/rebase/stash/force fallback and no Issue/branch/ref/worktree/file mutation beyond the bounded canonical fast-forward.
 
-The normative proposed contract is `docs/specs/0004-oauth-bootstrap-cli.md`. Tests in `tests/test_oauth_bootstrap_cli.py` were committed before the product-code implementation. The first hosted branch-head run passed both required workflows; exact current-head validation and adversarial review remain required before human Ready consideration.
+The normative contract is `docs/specs/0005-post-merge-closeout-command.md`. The contract tests were committed before implementation. `scripts/post_merge_cleanup.py` remains a separate explicit destructive authority boundary.
 
-Current X provider facts were re-verified on 2026-09-17 against official documentation: Authorization Code + PKCE remains supported; Native Apps remain public clients; `offline.access` remains the documented refresh-token scope; public-client token requests use Client ID rather than relying on a client secret; redirect URI exact matching remains required. These remain external provider facts and are not treated as immutable product constants.
+## Completed OAuth bootstrap
+
+Issue #36 / PR #37 closed the P0 usability gap between OAuth acquisition and lifecycle persistence by adding `python -m x_context auth login`.
+
+The merged behavior:
+
+- reads non-secret `X_CONTEXT_OAUTH_CLIENT_ID` and exact registered `X_CONTEXT_OAUTH_REDIRECT_URI`;
+- composes the existing `OAuthConfig`, `acquire_user_token(..., refresh_capable=True)`, and lifecycle persistence boundaries;
+- requests only `tweet.read users.read bookmark.read like.read offline.access`;
+- requires a refresh token and positive expiry duration before persistence;
+- never imports `X_CONTEXT_USER_ACCESS_TOKEN` into managed storage;
+- performs no X content read during login;
+- uses the existing Windows DPAPI `CurrentUser` protected store and atomic whole-record replacement.
+
+Final PR #37 head `71248c4558e5bedd5e15e6549d5cfe55c3057995` passed 175 Windows tests including the real-DPAPI synthetic test, `git diff --check`, clean verification-worktree removal, and `FINAL_RESULT=PASS`. After merge, both required push workflows passed on `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`, Issue #36 closed, and canonical local `main` synchronized cleanly. Real-provider browser/login qualification remains a separate human-gated decision.
 
 ## Completed credential lifecycle
 
@@ -93,18 +111,16 @@ Real-provider login/refresh/revoke qualification was not performed as part of th
 
 ## Recovery / first diagnostic entry points
 
-- Current workstream: GitHub Issue #36 / Draft PR #37.
-- Current proposed requirement/AC contract: `docs/specs/0004-oauth-bootstrap-cli.md`.
-- Current test-first contract: `tests/test_oauth_bootstrap_cli.py`.
-- Completed lifecycle workstream: GitHub Issue #32 / PR #33.
-- Post-merge lifecycle documentation closeout: Issue #34 / PR #35.
+- Current workstream: GitHub Issue #38 / Draft PR #39.
+- Current requirement/AC contract: `docs/specs/0005-post-merge-closeout-command.md`.
+- Current test-first contract: `tests/test_post_merge_closeout_command.py`.
+- Current implementation: `scripts/post_merge_closeout.py`.
+- Existing non-destructive verifier: `scripts/verify_local_closeout.py`.
+- Separate destructive cleanup boundary: `scripts/post_merge_cleanup.py`.
+- Shared Git/worktree state helpers: `scripts/closeout_state.py`.
+- Completed OAuth bootstrap: Issue #36 / PR #37; normative contract `docs/specs/0004-oauth-bootstrap-cli.md`.
 - Lifecycle requirement and acceptance contract: `docs/specs/0003-credential-lifecycle.md`.
 - Storage decision: `docs/adr/0005-dpapi-credential-storage.md`.
 - Traceability: `docs/TEST_MATRIX.md`.
-- OAuth implementation boundary: `x_context/oauth.py`.
-- Lifecycle implementation: `x_context/credential_lifecycle.py`.
-- CLI composition: `x_context/cli.py`.
-- Synthetic lifecycle tests: `tests/test_credential_lifecycle.py` and `tests/test_credential_lifecycle_cli_ordering.py`.
-- Real Windows DPAPI boundary test: `tests/test_credential_lifecycle_windows_dpapi.py`.
-- Authoritative local validator: `scripts/Invoke-XContextValidation.ps1`.
-- Preserve unaccounted local work and fail closed on uncertain credential state, private-data exposure, destructive cleanup, or provider authority.
+- Authoritative exact-head validator: `scripts/Invoke-XContextValidation.ps1`.
+- Preserve unaccounted local work and fail closed on uncertain GitHub evidence, native-command failure, credential/private-data exposure, or destructive cleanup.
