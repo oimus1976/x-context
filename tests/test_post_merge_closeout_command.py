@@ -264,6 +264,23 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
                 self.assertEqual(self.head(self.repo), self.initial_head)
                 self.assertIn("workflow", " ".join(result.failures).lower())
 
+    def test_duplicate_exact_workflow_evidence_is_ambiguous_and_blocks(self) -> None:
+        duplicated = self.workflows + (
+            closeout.WorkflowEvidence(
+                name="project-ci",
+                event="push",
+                status="completed",
+                conclusion="success",
+                head_sha=self.merge_sha,
+            ),
+        )
+
+        result, _ = self.execute(workflows=duplicated)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(self.head(self.repo), self.initial_head)
+        self.assertIn("ambiguous duplicate", " ".join(result.failures).lower())
+
     def test_remote_without_authoritative_merge_commit_is_rejected(self) -> None:
         other = self.temp / "unrelated"
         run("git", "clone", str(self.remote), str(other), cwd=self.temp)
