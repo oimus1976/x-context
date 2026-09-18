@@ -31,7 +31,7 @@ from closeout_state import (
 
 
 REQUIRED_PUSH_WORKFLOWS = ("project-ci", "policy-check")
-_HTTPS_GITHUB_USERINFO_RE = re.compile(r"https://[^/\\s@]+@github\\.com", re.IGNORECASE)
+_HTTPS_GITHUB_USERINFO_RE = re.compile(r"https://[^/\s@]+@github\.com", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
