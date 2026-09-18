@@ -268,7 +268,7 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
         run("git", "clone", str(self.remote), str(other), cwd=self.temp)
         self.configure(other)
         run("git", "switch", "--orphan", "unrelated-root", cwd=other)
-        run("git", "rm", "-rf", ".", cwd=other)
+        run("git", "rm", "-rf", "--ignore-unmatch", ".", cwd=other)
         (other / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
         run("git", "add", "unrelated.txt", cwd=other)
         run("git", "commit", "-m", "unrelated", cwd=other)
