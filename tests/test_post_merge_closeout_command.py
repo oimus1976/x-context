@@ -429,32 +429,179 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
         self.assertFalse(failure.ok)
         self.assertEqual(failure.exit_code, 128)
 
-    def test_github_pr_reader_requests_and_parses_authoritative_merge_fields(self) -> None:
+    def _real_closing_issue_reference(
+        self,
+        *,
+        number: int = 38,
+        owner: str = "example",
+        name: str = "repo",
+    ) -> dict[str, object]:
+        return {
+            "id": f"I_{number}",
+            "number": number,
+            "url": f"https://github.com/{owner}/{name}/issues/{number}",
+            "repository": {
+                "id": "R_123",
+                "name": name,
+                "owner": {
+                    "id": "U_123",
+                    "login": owner,
+                },
+            },
+        }
+
+    def _real_pr_json(
+        self,
+        *,
+        closing_issues: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        return {
+            "number": 38,
+            "state": "MERGED",
+            "mergedAt": "2026-09-18T00:00:00Z",
+            "baseRefName": "main",
+            "headRefName": "issue-38-topic",
+            "headRefOid": self.pr_head,
+            "isCrossRepository": False,
+            "mergeCommit": {"oid": self.merge_sha},
+            "closingIssuesReferences": (
+                [self._real_closing_issue_reference()]
+                if closing_issues is None
+                else closing_issues
+            ),
+        }
+
+    def test_github_pr_reader_uses_real_closing_issue_reference_shape_and_separate_state_lookup(self) -> None:
         calls: list[tuple[str, ...]] = []
 
         def fake_gh(args):
             calls.append(tuple(args))
-            return {
-                "number": 38,
-                "state": "MERGED",
-                "mergedAt": "2026-09-18T00:00:00Z",
-                "baseRefName": "main",
-                "headRefName": "issue-38-topic",
-                "headRefOid": self.pr_head,
-                "isCrossRepository": False,
-                "mergeCommit": {"oid": self.merge_sha},
-                "closingIssuesReferences": [{"number": 38, "state": "CLOSED"}],
-            }
+            if args[0:2] == ("pr", "view"):
+                return self._real_pr_json()
+            if args[0:2] == ("issue", "view"):
+                return {"number": 38, "state": "CLOSED"}
+            raise AssertionError(args)
 
         with patch.object(closeout, "_gh_json", side_effect=fake_gh):
             evidence = closeout.read_github_pr(38, self.repository)
 
         self.assertEqual(evidence.head_sha, self.pr_head)
         self.assertEqual(evidence.merge_sha, self.merge_sha)
-        self.assertEqual(evidence.closing_issues, (closeout.ClosingIssue(38, "CLOSED"),))
-        flattened = " ".join(calls[0])
-        self.assertIn("mergeCommit", flattened)
-        self.assertIn("closingIssuesReferences", flattened)
+        self.assertEqual(
+            evidence.closing_issues,
+            (closeout.ClosingIssue(38, "CLOSED", "example/repo"),),
+        )
+
+        pr_args = calls[0]
+        issue_args = calls[1]
+        self.assertEqual(pr_args[0:2], ("pr", "view"))
+        self.assertIn("closingIssuesReferences", " ".join(pr_args))
+        self.assertEqual(issue_args[0:3], ("issue", "view", "38"))
+        self.assertIn("-R", issue_args)
+        self.assertEqual(issue_args[issue_args.index("-R") + 1], "example/repo")
+        self.assertEqual(issue_args[-2:], ("--json", "number,state"))
+
+    def test_github_pr_reader_checks_cross_repository_closing_issue_in_reported_repository(self) -> None:
+        calls: list[tuple[str, ...]] = []
+        ref = self._real_closing_issue_reference(
+            number=77,
+            owner="other-owner",
+            name="other-repo",
+        )
+
+        def fake_gh(args):
+            calls.append(tuple(args))
+            if args[0:2] == ("pr", "view"):
+                return self._real_pr_json(closing_issues=[ref])
+            if args[0:2] == ("issue", "view"):
+                return {"number": 77, "state": "CLOSED"}
+            raise AssertionError(args)
+
+        with patch.object(closeout, "_gh_json", side_effect=fake_gh):
+            evidence = closeout.read_github_pr(38, self.repository)
+
+        self.assertEqual(
+            evidence.closing_issues,
+            (closeout.ClosingIssue(77, "CLOSED", "other-owner/other-repo"),),
+        )
+        issue_args = calls[1]
+        self.assertEqual(issue_args[issue_args.index("-R") + 1], "other-owner/other-repo")
+
+    def test_github_pr_reader_rejects_malformed_closing_issue_repository_identity(self) -> None:
+        malformed_repositories = (
+            {"name": "repo", "owner": {"login": ""}},
+            {"name": "", "owner": {"login": "example"}},
+            {"name": "bad/repo", "owner": {"login": "example"}},
+            {"name": "repo", "owner": {"login": "bad/owner"}},
+        )
+
+        for repository in malformed_repositories:
+            with self.subTest(repository=repository):
+                malformed = self._real_closing_issue_reference()
+                malformed["repository"] = repository
+                with patch.object(
+                    closeout,
+                    "_gh_json",
+                    return_value=self._real_pr_json(closing_issues=[malformed]),
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "closing-Issue reference",
+                    ):
+                        closeout.read_github_pr(38, self.repository)
+
+    def test_github_pr_reader_rejects_issue_number_mismatch_or_missing_state(self) -> None:
+        for issue_json in (
+            {"number": 39, "state": "CLOSED"},
+            {"number": 38},
+            {"number": 38, "state": ""},
+            {"number": 38, "state": None},
+            {"number": 38, "state": "MERGED"},
+        ):
+            with self.subTest(issue_json=issue_json):
+                replies = iter((self._real_pr_json(), issue_json))
+                with patch.object(closeout, "_gh_json", side_effect=lambda args: next(replies)):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "closing-Issue state evidence",
+                    ):
+                        closeout.read_github_pr(38, self.repository)
+
+    def test_github_pr_reader_issue_lookup_unavailable_fails_closed(self) -> None:
+        calls = 0
+
+        def fake_gh(args):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return self._real_pr_json()
+            raise RuntimeError("authenticated GitHub evidence is unavailable")
+
+        with patch.object(closeout, "_gh_json", side_effect=fake_gh):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "authenticated GitHub evidence is unavailable",
+            ):
+                closeout.read_github_pr(38, self.repository)
+
+    def test_github_pr_reader_open_closing_issue_is_preserved_for_policy_validation(self) -> None:
+        replies = iter(
+            (
+                self._real_pr_json(),
+                {"number": 38, "state": "OPEN"},
+            )
+        )
+        with patch.object(closeout, "_gh_json", side_effect=lambda args: next(replies)):
+            evidence = closeout.read_github_pr(38, self.repository)
+
+        self.assertEqual(
+            evidence.closing_issues,
+            (closeout.ClosingIssue(38, "OPEN", "example/repo"),),
+        )
+        self.assertIn(
+            "closing issue",
+            " ".join(closeout._validate_closing_issues(evidence)).lower(),
+        )
 
     def test_workflow_reader_filters_exact_merge_commit_push_runs(self) -> None:
         calls: list[tuple[str, ...]] = []
@@ -507,7 +654,13 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
         reopened = closeout.PREvidence(
             **{
                 **self.pr.__dict__,
-                "closing_issues": (closeout.ClosingIssue(number=38, state="OPEN"),),
+                "closing_issues": (
+                    closeout.ClosingIssue(
+                        number=38,
+                        state="OPEN",
+                        repository="example/repo",
+                    ),
+                ),
             }
         )
         evidence = iter((self.pr, reopened))
