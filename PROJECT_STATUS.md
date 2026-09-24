@@ -6,32 +6,32 @@
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
 - **Completed product foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, credential lifecycle, and the end-user OAuth bootstrap CLI.
 - **OAuth bootstrap closeout:** PR #37 merged as `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`; Issue #36 closed, merge-commit `project-ci` / `policy-check` passed, and canonical local `main` was fast-forwarded cleanly with local closeout PASS.
-- **Current maintenance workstream:** Issue #38 / Draft PR #39 replaces manually transcribed post-merge SHAs and chat-only closeout snippets with a tracked authoritative post-merge closeout command.
-- **Current branch:** `issue-38-post-merge-closeout`, based on `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`.
-- **Current validation:** exact head `9d4d50cb9eaaa9d9ff16b9aec68971a2b15f92ca` passed hosted `project-ci` / `policy-check`; project CI passed 196 tests on Ubuntu with only the expected Windows-only real-DPAPI test skipped. A docs-only status update moves the head once more, so hosted CI must confirm the new head and Windows exact-head validation remains required before the human Ready gate.
+- **Completed maintenance slice:** PR #39 merged as `62b61978676d30158db740ff61aba917114bc738`; Issue #38 closed and merge-commit `project-ci` / `policy-check` passed. Its first real dogfood then exposed a GitHub CLI closing-Issue JSON compatibility defect before canonical synchronization.
+- **Current maintenance workstream:** Issue #40 / Draft PR #41 fixes closing-Issue state lookup by separating PR-reported Issue references from current Issue-state reads.
+- **Current branch:** `issue-40-closing-issue-state-lookup`, based on `62b61978676d30158db740ff61aba917114bc738`.
+- **Current validation:** hosted `project-ci` / `policy-check` pass on the hardened Issue #40 implementation; traceability/docs commits move the head, so exact-current-head hosted validation and Windows exact-head validation remain before the human Ready gate. Corrected PR #39 real dogfood is also required.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider login/refresh/revoke qualification, and any authority expansion remain human-final.
 
-## Current Issue #38 — authoritative post-merge closeout
+## Current Issue #40 — closing-Issue state compatibility
 
-PR #37 exposed a maintenance-process defect rather than a product defect: an ad hoc closeout command still contained the literal placeholder `<PR #37 merge commit SHA>`, which reached Git and correctly failed with a non-zero exit before canonical `main` was mutated. The corrected retry then completed safely, but the event showed that authoritative GitHub merge evidence should not be manually copied into executable snippets.
+PR #39 implemented the tracked post-merge closeout command and merged successfully. GitHub merge evidence and required push workflows were healthy, but the first intended real dogfood stopped before canonical synchronization with `authenticated GitHub PR evidence is incomplete`.
 
-Draft PR #39 introduces:
+Root cause: the synthetic test fixture assumed that `gh pr view --json closingIssuesReferences` nested an Issue `state`. Real GitHub CLI output provides closing-Issue identity (`number/url/repository`) but not state there.
 
-- `python scripts/post_merge_closeout.py --pr <number> --repository owner/repo`;
-- PR number as the only operator-supplied PR identity;
-- repository identity binding against the configured GitHub remote before effects;
-- authenticated GitHub reads for merged PR state, exact PR head, exact merge commit, closing Issues, and merge-commit `push` CI;
-- required exact-SHA `project-ci` / `policy-check` success before canonical synchronization;
-- canonical remote refresh plus merge-commit containment proof;
-- canonical synchronization by `git merge --ff-only` only;
-- native diagnostic retention with process exit code as the authority;
-- HTTPS GitHub remote userinfo redaction in surfaced native diagnostics;
-- reuse of the existing `verify_local_closeout.py` boundary;
-- final GitHub evidence revalidation before PASS;
-- PR worktree inventory without deletion or switching;
-- no reset/rebase/stash/force fallback and no Issue/branch/ref/worktree/file mutation beyond the bounded canonical fast-forward.
+Draft PR #41 therefore:
 
-The normative contract is `docs/specs/0005-post-merge-closeout-command.md`. The contract tests were committed before implementation. `scripts/post_merge_cleanup.py` remains a separate explicit destructive authority boundary.
+- keeps `gh pr view` authoritative for the set of closing-Issue references;
+- validates each reference's positive Issue number and repository owner/name;
+- performs `gh issue view <number> -R owner/repo --json number,state` for each reference;
+- requires the returned Issue number to match and state to be exactly `OPEN` or `CLOSED`;
+- lets `CLOSED` pass and preserves `OPEN` as evidence that blocks closeout through the existing policy validator;
+- supports GitHub-reported cross-repository closing Issues without expanding cross-repository PR support;
+- repeats those state reads during the existing final GitHub revalidation;
+- leaves SHA derivation, required CI checks, ff-only canonical synchronization, native exit semantics, worktree inventory, and destructive-cleanup boundaries unchanged.
+
+Normative clarification: `docs/specs/0005-closing-issue-state-clarification.md`.
+
+The failed PR #39 dogfood is retained as real-boundary evidence that the old implementation failed closed before mutation. The corrected command must be re-dogfooded against PR #39 before Ready.
 
 ## Completed OAuth bootstrap
 
@@ -111,8 +111,8 @@ Real-provider login/refresh/revoke qualification was not performed as part of th
 
 ## Recovery / first diagnostic entry points
 
-- Current workstream: GitHub Issue #38 / Draft PR #39.
-- Current requirement/AC contract: `docs/specs/0005-post-merge-closeout-command.md`.
+- Current workstream: GitHub Issue #40 / Draft PR #41.
+- Current requirement/AC contract: `docs/specs/0005-closing-issue-state-clarification.md` (on top of SPEC-0005).
 - Current test-first contract: `tests/test_post_merge_closeout_command.py`.
 - Current implementation: `scripts/post_merge_closeout.py`.
 - Existing non-destructive verifier: `scripts/verify_local_closeout.py`.
