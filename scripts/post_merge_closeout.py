@@ -31,6 +31,7 @@ from closeout_state import (
 
 
 REQUIRED_PUSH_WORKFLOWS = ("project-ci", "policy-check")
+_GITHUB_REPO_COMPONENT_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _HTTPS_GITHUB_USERINFO_RE = re.compile(r"https://[^/\s@]+@github\.com", re.IGNORECASE)
 
 
@@ -174,7 +175,13 @@ def _closing_issue_repository(item: object) -> tuple[int, str]:
             "authenticated GitHub closing-Issue reference is incomplete"
         ) from exc
 
-    if number <= 0 or not owner_login or not name:
+    if (
+        number <= 0
+        or not owner_login
+        or not name
+        or not _GITHUB_REPO_COMPONENT_RE.fullmatch(owner_login)
+        or not _GITHUB_REPO_COMPONENT_RE.fullmatch(name)
+    ):
         raise RuntimeError(
             "authenticated GitHub closing-Issue reference is incomplete"
         )
@@ -200,20 +207,31 @@ def _read_closing_issue_state(number: int, repository: str) -> ClosingIssue:
         )
 
     try:
-        observed_number = int(raw["number"])
-        state = str(raw["state"]).strip()
-    except (KeyError, TypeError, ValueError) as exc:
+        observed_number_raw = raw["number"]
+        state_raw = raw["state"]
+    except KeyError as exc:
         raise RuntimeError(
             "authenticated GitHub closing-Issue state evidence is incomplete"
         ) from exc
 
-    if observed_number != number or not state:
+    if (
+        isinstance(observed_number_raw, bool)
+        or not isinstance(observed_number_raw, int)
+        or observed_number_raw != number
+        or not isinstance(state_raw, str)
+    ):
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue state evidence is incomplete"
+        )
+
+    state = state_raw.strip().upper()
+    if state not in {"OPEN", "CLOSED"}:
         raise RuntimeError(
             "authenticated GitHub closing-Issue state evidence is incomplete"
         )
 
     return ClosingIssue(
-        number=observed_number,
+        number=observed_number_raw,
         state=state,
         repository=repository,
     )
