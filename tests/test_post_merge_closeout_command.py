@@ -528,25 +528,35 @@ class PostMergeCloseoutCommandTests(unittest.TestCase):
         self.assertEqual(issue_args[issue_args.index("-R") + 1], "other-owner/other-repo")
 
     def test_github_pr_reader_rejects_malformed_closing_issue_repository_identity(self) -> None:
-        malformed = self._real_closing_issue_reference()
-        malformed["repository"] = {"name": "repo", "owner": {"login": ""}}
+        malformed_repositories = (
+            {"name": "repo", "owner": {"login": ""}},
+            {"name": "", "owner": {"login": "example"}},
+            {"name": "bad/repo", "owner": {"login": "example"}},
+            {"name": "repo", "owner": {"login": "bad/owner"}},
+        )
 
-        with patch.object(
-            closeout,
-            "_gh_json",
-            return_value=self._real_pr_json(closing_issues=[malformed]),
-        ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "closing-Issue reference",
-            ):
-                closeout.read_github_pr(38, self.repository)
+        for repository in malformed_repositories:
+            with self.subTest(repository=repository):
+                malformed = self._real_closing_issue_reference()
+                malformed["repository"] = repository
+                with patch.object(
+                    closeout,
+                    "_gh_json",
+                    return_value=self._real_pr_json(closing_issues=[malformed]),
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "closing-Issue reference",
+                    ):
+                        closeout.read_github_pr(38, self.repository)
 
     def test_github_pr_reader_rejects_issue_number_mismatch_or_missing_state(self) -> None:
         for issue_json in (
             {"number": 39, "state": "CLOSED"},
             {"number": 38},
             {"number": 38, "state": ""},
+            {"number": 38, "state": None},
+            {"number": 38, "state": "MERGED"},
         ):
             with self.subTest(issue_json=issue_json):
                 replies = iter((self._real_pr_json(), issue_json))
