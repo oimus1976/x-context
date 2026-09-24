@@ -38,6 +38,7 @@ _HTTPS_GITHUB_USERINFO_RE = re.compile(r"https://[^/\s@]+@github\.com", re.IGNOR
 class ClosingIssue:
     number: int
     state: str
+    repository: str = ""
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,70 @@ def _gh_json(args: Sequence[str]) -> object:
         raise RuntimeError("authenticated GitHub evidence is invalid") from exc
 
 
+def _closing_issue_repository(item: object) -> tuple[int, str]:
+    if not isinstance(item, dict):
+        raise RuntimeError("authenticated GitHub closing-Issue reference is invalid")
+
+    try:
+        number = int(item["number"])
+        repository = item["repository"]
+        if not isinstance(repository, dict):
+            raise TypeError
+        name = str(repository["name"]).strip()
+        owner = repository["owner"]
+        if not isinstance(owner, dict):
+            raise TypeError
+        owner_login = str(owner["login"]).strip()
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue reference is incomplete"
+        ) from exc
+
+    if number <= 0 or not owner_login or not name:
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue reference is incomplete"
+        )
+
+    return number, f"{owner_login}/{name}"
+
+
+def _read_closing_issue_state(number: int, repository: str) -> ClosingIssue:
+    raw = _gh_json(
+        (
+            "issue",
+            "view",
+            str(number),
+            "-R",
+            repository,
+            "--json",
+            "number,state",
+        )
+    )
+    if not isinstance(raw, dict):
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue state evidence is invalid"
+        )
+
+    try:
+        observed_number = int(raw["number"])
+        state = str(raw["state"]).strip()
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue state evidence is incomplete"
+        ) from exc
+
+    if observed_number != number or not state:
+        raise RuntimeError(
+            "authenticated GitHub closing-Issue state evidence is incomplete"
+        )
+
+    return ClosingIssue(
+        number=observed_number,
+        state=state,
+        repository=repository,
+    )
+
+
 def read_github_pr(pr: int, repository: str) -> PREvidence:
     raw = _gh_json(
         (
@@ -175,13 +240,14 @@ def read_github_pr(pr: int, repository: str) -> PREvidence:
         raw_issues = raw.get("closingIssuesReferences") or []
         if not isinstance(raw_issues, list):
             raise TypeError
-        issues = tuple(
-            ClosingIssue(number=int(item["number"]), state=str(item["state"]))
+        issue_references = tuple(
+            _closing_issue_repository(item)
             for item in raw_issues
-            if isinstance(item, dict)
         )
-        if len(issues) != len(raw_issues):
-            raise TypeError
+        issues = tuple(
+            _read_closing_issue_state(number, issue_repository)
+            for number, issue_repository in issue_references
+        )
         return PREvidence(
             number=int(raw["number"]),
             state=str(raw["state"]),
