@@ -181,6 +181,20 @@ SPEC-0005 is a maintenance authority boundary rather than X provider behavior. T
 | AC-CLOSEOUT-F1-08 | existing SHA/native/worktree/destructive-authority regressions |
 | AC-CLOSEOUT-F1-09 | `test_github_pr_reader_uses_real_closing_issue_reference_shape_and_separate_state_lookup` |
 
+## Authenticated own-post read AC-to-test mapping
+
+SPEC-0006 / Issue #42 mapping below is planned coverage, not implemented test evidence. This specification-only revision adds no product code or test bodies. Contract tests must be established before MVP implementation.
+
+| Acceptance criteria | Test coverage |
+|---|---|
+| AC-OWNPOST-001 | Missing override and persisted credential under SPEC-0003 => zero provider requests, including `/2/users/me` and tweets; no app-only bearer fallback or acquisition |
+| AC-OWNPOST-002 | `/2/users/me` resolved ID is the only `/2/users/{id}/tweets` target after same-subject binding; malformed/failed subject resolution => no tweets request |
+| AC-OWNPOST-003 | Arbitrary user-ID option/positional input is unavailable and rejected locally; caller cannot select another target |
+| AC-OWNPOST-004 | Existing canonical envelope: `schema_version=1` (string), `source=x`, `operation=posts`, UTC `retrieved_at`, resolved subject ID/optional username, minimum `id`/`text` items, and page; no separate envelope or optional item fields. Planned negative tests: canonical validation rejects missing/malformed subject and unsupported/unknown operation; malformed item/metadata, contradictory provider errors, invalid continuation, and over-requested-size results => `provider_error` with no success output. Fake authentication/authorization failures => existing corresponding categories; safely identified rate/usage gates => `rate_limited`/`usage_blocked`; ambiguous provider and transport failures => `provider_error` |
+| AC-OWNPOST-005 | Default `max_results=25`; accepted bounds 5 and 100; outside 5..100 rejected before credential resolution/refresh/traffic; explicit `--page-token` forwarded unchanged as `pagination_token`; opaque token not decoded/interpreted/modified/normalized; at most one tweets page; `meta.next_token` => canonical `page.next_token` and `complete=false`, absent token => null and `complete=true`; item count does not imply completeness. Planned empty/non-string/control-character token tests => `invalid_input` before credential load/refresh and zero provider traffic, including a due-refresh fixture; valid opaque token preserved through query encoding; invalid provider continuation rejected as AC-004. Success/failure fixtures count attempted refresh, `/2/users/me`, and tweets requests in existing NFR-005 / collection diagnostics, with no new diagnostic schema |
+| AC-OWNPOST-006 | Exact `exclude=retweets`; no optional fields/expansions; normal posts, own replies and own quote posts remain eligible; replies not implicitly excluded; no retweets/reposts, quote-target expansion, reply-chain reconstruction, or media expansion |
+| AC-OWNPOST-007 | CLI exposes authenticated-subject-only `posts`, including page-size/continuation options; no arbitrary-user, fetch-all, date/since/until filters, or additional post scopes. Planned fake-sentinel tests reuse existing privacy/redaction and Evidence rules: access/refresh tokens and Authorization headers absent from stdout/stderr, diagnostics, controlled exceptions, and retained evidence; input/output page tokens absent from diagnostics/evidence; fake post payload absent from diagnostics and durable validation artifacts (CI artifacts/logs); raw provider responses and provider/transport exception prose absent even on transport failure. Fake payload/store fixtures prove no default own-post payload persistence while permitted SPEC-0003 secure credential resolution/refresh persistence remains separate |
+
 ## Error-model cross-cutting tests
 
 The stable categories in SPEC-0001 must be exercised without requiring callers to parse provider prose:
