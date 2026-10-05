@@ -381,14 +381,104 @@ def worktrees_for_branch(repo: Path, branch: str) -> list[WorktreeInfo]:
     return [entry for entry in entries if entry.branch_ref == ref]
 
 
+def read_closeout_registry(repo: Path) -> tuple[list[WorktreeInfo] | None, str | None]:
+    """Read registration identities only, for non-destructive closeout selection.
+
+    Unselected paths are never probed or certified safe. Cleanup must continue
+    using list_worktrees(), which proves primary/linked topology for every entry.
+    """
+    result = git("worktree", "list", "--porcelain", cwd=repo, check=False)
+    if result.returncode != 0:
+        return None, "could not read worktree registry"
+
+    records: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if not line:
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        key, separator, value = line.partition(" ")
+        if key in current:
+            return None, "worktree registry contained duplicate fields"
+        current[key] = value if separator else ""
+    if current:
+        records.append(current)
+
+    entries: list[WorktreeInfo] = []
+    paths: set[Path] = set()
+    for record in records:
+        raw_path = record.get("worktree", "")
+        path = Path(raw_path)
+        head = record.get("HEAD")
+        branch = record.get("branch")
+        bare = "bare" in record
+        detached = "detached" in record
+        if (
+            not raw_path or not path.is_absolute()
+            or (not bare and not FULL_SHA_RE.fullmatch(head or ""))
+            or (branch is not None and not branch.removeprefix("refs/heads/"))
+            or (branch is not None and not branch.startswith("refs/heads/"))
+            or (not bare and branch is None and not detached)
+            or (branch is not None and detached)
+            or (bare and (branch is not None or detached))
+        ):
+            return None, "worktree registry contained an invalid identity"
+        path = path.resolve()
+        if path in paths:
+            return None, "worktree registry contained duplicate paths"
+        paths.add(path)
+        entries.append(WorktreeInfo(path, branch, head, bare, detached, "prunable" in record))
+    return entries, None
+
+
+def worktree_identity_failures(repo: Path, item: WorktreeInfo, label: str) -> list[str]:
+    """Bind a selected registry entry to actual Git state in the same repository."""
+    if item.bare or item.prunable or not item.path.is_dir():
+        return [f"{label} worktree registration is unavailable or stale"]
+    top = git("rev-parse", "--show-toplevel", cwd=item.path, check=False)
+    if (
+        top.returncode != 0 or not top.stdout.strip()
+        or not Path(top.stdout.strip()).is_absolute()
+        or Path(top.stdout.strip()).resolve() != item.path
+    ):
+        return [f"{label} worktree path does not match its Git top-level"]
+
+    expected_common = git(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=repo, check=False
+    )
+    actual_common = git(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=item.path, check=False
+    )
+    if (
+        expected_common.returncode != 0 or actual_common.returncode != 0
+        or not expected_common.stdout.strip() or not actual_common.stdout.strip()
+        or not Path(expected_common.stdout.strip()).is_absolute()
+        or not Path(actual_common.stdout.strip()).is_absolute()
+        or Path(expected_common.stdout.strip()).resolve() != Path(actual_common.stdout.strip()).resolve()
+    ):
+        return [f"{label} worktree repository binding could not be established"]
+
+    branch = git("branch", "--show-current", cwd=item.path, check=False)
+    actual_ref = f"refs/heads/{branch.stdout.strip()}" if branch.stdout.strip() else None
+    failures: list[str] = []
+    if branch.returncode != 0 or actual_ref != item.branch_ref:
+        failures.append(f"{label} worktree branch does not match its registration")
+    # HEAD is verified by the caller against fresh remote/PR authority. The
+    # registry HEAD is a selection snapshot, not the canonical sync authority.
+    return failures
+
+
 def canonical_worktree(repo: Path, branch: str) -> Path | None:
-    matches = worktrees_for_branch(repo, branch)
-    if len(matches) != 1:
+    """Select and bind canonical for closeout; never authorize cleanup topology."""
+    entries, error = read_closeout_registry(repo)
+    if error or entries is None:
         return None
-    candidate = matches[0].path
-    if not candidate.is_dir():
+    matches = [item for item in entries if item.branch_ref == f"refs/heads/{branch}"]
+    if len(matches) != 1 or worktree_identity_failures(repo, matches[0], "canonical"):
         return None
-    return candidate
+    return matches[0].path
 
 
 def rev_parse(repo: Path, ref: str) -> str | None:
