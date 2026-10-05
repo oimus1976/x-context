@@ -183,7 +183,7 @@ SPEC-0005 is a maintenance authority boundary rather than X provider behavior. T
 
 ## Authenticated own-post read AC-to-test mapping
 
-SPEC-0006 / Issue #45 / Draft PR #46 contract tests are in `tests/test_own_posts.py`.
+SPEC-0006 / Issue #45 / merged PR #46 contract tests are in `tests/test_own_posts.py`.
 The same 23 test contracts are preserved, with 16 test assertion hardenings
 across two files to prevent raw payloads in failing unittest output.
 Codex-reported local GREEN validation on Windows Python 3.12.14 passed all
@@ -191,11 +191,13 @@ Codex-reported local GREEN validation on Windows Python 3.12.14 passed all
 own-post tests + 1 shared refresh-accounting regression), with zero
 failures/errors/skips, including the real-DPAPI synthetic test.
 The implementation is published at `6bd45ed26584994825228265317c1946e1d6cf11`
-and independently reviewed in Draft PR #46. GitHub-hosted `project-ci`
+and independently reviewed in PR #46. GitHub-hosted `project-ci`
 (run 37267450298) and `policy-check` (run 37267450322) succeeded at that exact
-implementation SHA. Local Windows and hosted CI evidence are distinct;
-documentation follow-ups require fresh exact-head checks. PR #46 remains
-Draft and unmerged, and no live X/provider qualification was performed.
+implementation SHA. The subsequent docs-only PR head passed hosted exact-head
+checks, and PR #46 merged as `9cda4bfae282dad52bc58c41773065c5e9f973b4`
+with Issue #45 closed and both merge-commit push checks successful.
+Local Windows and hosted CI evidence are distinct; no live X/provider
+qualification was performed.
 
 | Acceptance criteria | Actual test names (local GREEN) |
 |---|---|
