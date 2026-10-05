@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### Authenticated own-post read (Issue #45 / Draft PR #46)
+
+- Added `posts [--max-results n] [--page-token opaque]` through the existing authenticated collection pipeline. Only the subject resolved by `/2/users/me` can target `/2/users/{subject-id}/tweets`; `exclude=retweets` is mandatory, with replies and quote posts eligible and no fields/expansions. The canonical operation is `posts`, page size defaults to 25 with range 5..100, and each invocation fetches at most one tweets page.
+- Preserved credential lifecycle, local validation before credential load/refresh, redaction, and no default payload persistence. Bookmarks/likes retain 1..100. The shared collection parser rejects control-bearing provider continuations; failed credential refresh is now counted once in collection diagnostics, with a bookmarks/likes regression for HTTP and transport failures.
+- Independent RED source review preceded implementation. The 23 test contracts were preserved, with 16 assertion hardenings across two test files to prevent private payloads in failing unittest output. Codex-reported local Windows Python 3.12.14 evidence is 225/225 PASS with no skips, including real-DPAPI synthetic coverage; local baseline and policy compilation passed. Implementation commit `6bd45ed26584994825228265317c1946e1d6cf11` is published in Draft PR #46 and independently reviewed. GitHub-hosted `project-ci` (run 37267450298) and `policy-check` (run 37267450322) succeeded at that exact implementation SHA; documentation follow-ups require fresh exact-head checks. No live X/provider qualification was performed; Ready and merge remain human-final.
+
 ### Authenticated own-post read (specification only)
 
 - Issue #42 / PR #43 specified the authenticated subject's own read-only posts through official `GET /2/users/me` followed by `GET /2/users/{subject-id}/tweets` with `exclude=retweets`, including replies and quote posts but no reposts, expansions, arbitrary user selection, fetch-all, or other scopes. SPEC-0006 fixes Requirement and AC-OWNPOST-001..007; SPEC-0001 adds canonical `operation=posts`, and TEST_MATRIX records the acceptance-test plan.

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from x_context.cli import main
 from x_context.credential_lifecycle import CredentialRecord
+from x_context.oauth import OAuthHttpResponse
 
 
 READ_SCOPES = ("tweet.read", "users.read", "bookmark.read", "like.read", "offline.access")
@@ -73,6 +74,42 @@ class CredentialLifecycleCliOrderingTests(unittest.TestCase):
         self.assertEqual(diagnostic["provider_requests_attempted"], 0)
         self.assertEqual(diagnostic["credential_provider_requests_attempted"], 0)
         self.assertFalse(diagnostic["credential_refresh_attempted"])
+
+    def test_CRED_failed_refresh_counted_once_for_bookmarks_and_likes(self):
+        for operation in ('bookmarks', 'likes'):
+            for transport_error in (False, True):
+                original = due_record()
+                store = FakeStore(original)
+                oauth_requests = []
+                x_transport = FailIfCalledTransport()
+                out, err = io.StringIO(), io.StringIO()
+
+                def oauth_transport(request):
+                    oauth_requests.append(request)
+                    if transport_error:
+                        raise RuntimeError('synthetic-refresh-prose')
+                    return OAuthHttpResponse(503, {}, b'{"detail":"synthetic-refresh-prose"}')
+
+                code = main(
+                    [operation], environ={'X_CONTEXT_OAUTH_CLIENT_ID': 'fake-client'},
+                    credential_store=store, oauth_transport=oauth_transport,
+                    transport=x_transport, clock=lambda: 1000, stdout=out, stderr=err,
+                )
+                diagnostic = json.loads(err.getvalue())
+                self.assertEqual(code, 3)
+                self.assertEqual(len(out.getvalue()), 0, 'unexpected success output')
+                self.assertEqual(diagnostic['error_category'], 'provider_error')
+                self.assertEqual(diagnostic['provider_requests_attempted'], 1)
+                self.assertEqual(diagnostic['credential_provider_requests_attempted'], 1)
+                self.assertTrue(diagnostic['credential_refresh_attempted'])
+                self.assertEqual(diagnostic['operation'], operation)
+                self.assertEqual(len(oauth_requests), 1)
+                self.assertEqual(x_transport.requests, [])
+                self.assertIs(store.record, original)
+                self.assertEqual(store.replacements, [])
+                self.assertTrue(all(value not in err.getvalue() for value in
+                                    (original.access_token, original.refresh_token, 'synthetic-refresh-prose')),
+                                'refresh diagnostics redaction violated')
 
     def test_CRED_invalid_max_results_precedes_due_refresh(self):
         self._assert_local_rejection_without_network(["bookmarks", "--max-results", "0"])

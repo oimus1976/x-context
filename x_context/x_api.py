@@ -438,6 +438,11 @@ class LikesLookupResult(CollectionLookupResult):
     """Liked-post canonical output and safe per-endpoint diagnostics."""
 
 
+@dataclass(frozen=True, slots=True)
+class PostsLookupResult(CollectionLookupResult):
+    """Own-post canonical output and safe per-endpoint diagnostics."""
+
+
 def lookup_bookmarks(
     *, user_access_token: str | None, max_results: int = 25,
     page_token: str | None = None, transport: Transport | None = None,
@@ -456,18 +461,30 @@ def lookup_likes(
                               max_results=max_results, page_token=page_token, transport=transport)
 
 
+def lookup_posts(
+    *, user_access_token: str | None, max_results: int = 25,
+    page_token: str | None = None, transport: Transport | None = None,
+) -> PostsLookupResult:
+    """Resolve the user, bind the target, and fetch one own-post page."""
+    return _lookup_collection("posts", user_access_token=user_access_token,
+                              max_results=max_results, page_token=page_token, transport=transport)
+
+
 def _lookup_collection(
     operation: str, *, user_access_token: str | None, max_results: int,
     page_token: str | None, transport: Transport | None,
-) -> BookmarksLookupResult | LikesLookupResult:
+) -> BookmarksLookupResult | LikesLookupResult | PostsLookupResult:
     # Closed operation mapping: callers cannot supply an endpoint or target user.
     if operation == "bookmarks":
         collection_path, result_type = "bookmarks", BookmarksLookupResult
     elif operation == "likes":
         collection_path, result_type = "liked_tweets", LikesLookupResult
+    elif operation == "posts":
+        collection_path, result_type = "tweets", PostsLookupResult
     else:
         raise XApiError("invalid_input")
-    if type(max_results) is not int or not 1 <= max_results <= 100:
+    min_results = 5 if operation == "posts" else 1
+    if type(max_results) is not int or not min_results <= max_results <= 100:
         raise XApiError("invalid_input")
     if page_token is not None and (
         not isinstance(page_token, str) or not page_token or any(ord(c) < 32 or ord(c) == 127 for c in page_token)
@@ -499,6 +516,8 @@ def _lookup_collection(
         exc.subject_rate_limit = resolution.rate_limit
         raise
     query = {"max_results": max_results}
+    if operation == "posts":
+        query["exclude"] = "retweets"
     if page_token is not None:
         query["pagination_token"] = page_token
     attempted = resolution.requests_attempted + 1
@@ -527,7 +546,10 @@ def _lookup_collection(
         if "result_count" in meta and (type(meta["result_count"]) is not int or meta["result_count"] != len(data)):
             raise XApiError("provider_error")
         next_token = meta.get("next_token")
-        if next_token is not None and (not isinstance(next_token, str) or not next_token):
+        if next_token is not None and (
+            not isinstance(next_token, str) or not next_token
+            or any(ord(c) < 32 or ord(c) == 127 for c in next_token)
+        ):
             raise XApiError("provider_error")
         items = []
         for post in data:

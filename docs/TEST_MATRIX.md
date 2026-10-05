@@ -1,7 +1,7 @@
 # Test Matrix
 
-Related specification: `docs/specs/0001-mvp.md`, `docs/specs/0001-fr006-read-clarification.md`, `docs/specs/0001-authenticated-subject-clarification.md`, `docs/specs/0002-oauth-acquisition-clarification.md`, `docs/specs/0003-credential-lifecycle.md`, `docs/specs/0004-oauth-bootstrap-cli.md`, `docs/specs/0005-post-merge-closeout-command.md`, and `docs/specs/0005-closing-issue-state-clarification.md`
-Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI), Issue #11 (authenticated-subject resolution/binding), Issue #23 (OAuth user-token acquisition), Issue #32 (credential lifecycle), Issue #36 (end-user OAuth bootstrap), Issue #38 (authoritative post-merge closeout), Issue #40 (closing-Issue state compatibility)
+Related specification: `docs/specs/0001-mvp.md`, `docs/specs/0001-fr006-read-clarification.md`, `docs/specs/0001-authenticated-subject-clarification.md`, `docs/specs/0002-oauth-acquisition-clarification.md`, `docs/specs/0003-credential-lifecycle.md`, `docs/specs/0004-oauth-bootstrap-cli.md`, `docs/specs/0005-post-merge-closeout-command.md`, `docs/specs/0005-closing-issue-state-clarification.md`, and `docs/specs/0006-own-post-read.md`
+Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI), Issue #11 (authenticated-subject resolution/binding), Issue #23 (OAuth user-token acquisition), Issue #32 (credential lifecycle), Issue #36 (end-user OAuth bootstrap), Issue #38 (authoritative post-merge closeout), Issue #40 (closing-Issue state compatibility), Issue #42 (own-post specification), Issue #45 (own-post implementation)
 
 This matrix is the traceability bridge from requirement IDs to acceptance tests. Test names below are planned contracts until implementation begins; implemented slices should name their concrete automated evidence.
 
@@ -100,7 +100,7 @@ Real browser/PKCE qualification is separate human-gated evidence. The acquisitio
 | AC-CRED-07 | `test_CRED_malformed_or_scope_expanding_refresh_preserves_state` |
 | AC-CRED-08 | `test_CRED_successful_refresh_commits_before_use` |
 | AC-CRED-09 | `test_CRED_refresh_token_replacement_and_omission_rule` |
-| AC-CRED-10 | `test_CRED_failed_refresh_preserves_state_and_blocks_collection` |
+| AC-CRED-10 | `test_CRED_failed_refresh_preserves_state_and_blocks_collection`, `test_CRED_failed_refresh_counted_once_for_bookmarks_and_likes` |
 | AC-CRED-11 | `test_CRED_collection_subject_binding_still_runs` plus existing FR-003/FR-004 binding regressions |
 | AC-CRED-12 | `test_CRED_local_delete_is_idempotent_and_local_only` |
 | AC-CRED-13 | `test_CRED_provider_revoke_contract_and_delete_order` |
@@ -183,17 +183,41 @@ SPEC-0005 is a maintenance authority boundary rather than X provider behavior. T
 
 ## Authenticated own-post read AC-to-test mapping
 
-SPEC-0006 / Issue #42 mapping below is planned coverage, not implemented test evidence. This specification-only revision adds no product code or test bodies. Contract tests must be established before MVP implementation.
+SPEC-0006 / Issue #45 / Draft PR #46 contract tests are in `tests/test_own_posts.py`.
+The same 23 test contracts are preserved, with 16 test assertion hardenings
+across two files to prevent raw payloads in failing unittest output.
+Codex-reported local GREEN validation on Windows Python 3.12.14 passed all
+23 own-post tests and the full 225-test suite (201 pre-existing tests + 23
+own-post tests + 1 shared refresh-accounting regression), with zero
+failures/errors/skips, including the real-DPAPI synthetic test.
+The implementation is published at `6bd45ed26584994825228265317c1946e1d6cf11`
+and independently reviewed in Draft PR #46. GitHub-hosted `project-ci`
+(run 37267450298) and `policy-check` (run 37267450322) succeeded at that exact
+implementation SHA. Local Windows and hosted CI evidence are distinct;
+documentation follow-ups require fresh exact-head checks. PR #46 remains
+Draft and unmerged, and no live X/provider qualification was performed.
 
-| Acceptance criteria | Test coverage |
+| Acceptance criteria | Actual test names (local GREEN) |
 |---|---|
-| AC-OWNPOST-001 | Missing override and persisted credential under SPEC-0003 => zero provider requests, including `/2/users/me` and tweets; no app-only bearer fallback or acquisition |
-| AC-OWNPOST-002 | `/2/users/me` resolved ID is the only `/2/users/{id}/tweets` target after same-subject binding; malformed/failed subject resolution => no tweets request |
-| AC-OWNPOST-003 | Arbitrary user-ID option/positional input is unavailable and rejected locally; caller cannot select another target |
-| AC-OWNPOST-004 | Existing canonical envelope: `schema_version=1` (string), `source=x`, `operation=posts`, UTC `retrieved_at`, resolved subject ID/optional username, minimum `id`/`text` items, and page; no separate envelope or optional item fields. Planned negative tests: canonical validation rejects missing/malformed subject and unsupported/unknown operation; malformed item/metadata, contradictory provider errors, invalid continuation, and over-requested-size results => `provider_error` with no success output. Fake authentication/authorization failures => existing corresponding categories; safely identified rate/usage gates => `rate_limited`/`usage_blocked`; ambiguous provider and transport failures => `provider_error` |
-| AC-OWNPOST-005 | Default `max_results=25`; accepted bounds 5 and 100; outside 5..100 rejected before credential resolution/refresh/traffic; explicit `--page-token` forwarded unchanged as `pagination_token`; opaque token not decoded/interpreted/modified/normalized; at most one tweets page; `meta.next_token` => canonical `page.next_token` and `complete=false`, absent token => null and `complete=true`; item count does not imply completeness. Planned empty/non-string/control-character token tests => `invalid_input` before credential load/refresh and zero provider traffic, including a due-refresh fixture; valid opaque token preserved through query encoding; invalid provider continuation rejected as AC-004. Success/failure fixtures count attempted refresh, `/2/users/me`, and tweets requests in existing NFR-005 / collection diagnostics, with no new diagnostic schema |
-| AC-OWNPOST-006 | Exact `exclude=retweets`; no optional fields/expansions; normal posts, own replies and own quote posts remain eligible; replies not implicitly excluded; no retweets/reposts, quote-target expansion, reply-chain reconstruction, or media expansion |
-| AC-OWNPOST-007 | CLI exposes authenticated-subject-only `posts`, including page-size/continuation options; no arbitrary-user, fetch-all, date/since/until filters, or additional post scopes. Planned fake-sentinel tests reuse existing privacy/redaction and Evidence rules: access/refresh tokens and Authorization headers absent from stdout/stderr, diagnostics, controlled exceptions, and retained evidence; input/output page tokens absent from diagnostics/evidence; fake post payload absent from diagnostics and durable validation artifacts (CI artifacts/logs); raw provider responses and provider/transport exception prose absent even on transport failure. Fake payload/store fixtures prove no default own-post payload persistence while permitted SPEC-0003 secure credential resolution/refresh persistence remains separate |
+| AC-OWNPOST-001 | `test_OWNPOST_001_missing_credential_no_fallback_or_acquisition`, `test_OWNPOST_001_invalid_override_fails_closed`, `test_OWNPOST_001_override_wins_without_import` |
+| AC-OWNPOST-002 | `test_OWNPOST_002_resolved_subject_binding_and_endpoint`, `test_OWNPOST_002_malformed_subject_stops_before_tweets`, `test_OWNPOST_002_binding_failure_stops_before_tweets` |
+| AC-OWNPOST-003 | `test_OWNPOST_003_007_prohibited_cli_scope` |
+| AC-OWNPOST-004 | `test_OWNPOST_004_canonical_success_shape`, `test_OWNPOST_004_canonical_posts_requires_valid_subject_and_closed_operation`, `test_OWNPOST_004_malformed_provider_payload_fails_closed`, `test_OWNPOST_004_005_safe_errors_and_attempt_counts` |
+| AC-OWNPOST-005 | `test_OWNPOST_004_005_safe_errors_and_attempt_counts`, `test_OWNPOST_005_default_and_posts_bounds`, `test_OWNPOST_005_invalid_cli_input_precedes_store_load_and_due_refresh`, `test_OWNPOST_005_invalid_library_size_and_token_before_transport`, `test_OWNPOST_005_opaque_continuation_one_page_and_count_independent_completeness`, `test_OWNPOST_005_refresh_success_and_failure_accounting`, `test_OWNPOST_005_per_endpoint_rates_on_success_and_failure`, `test_OWNPOST_005_bookmarks_likes_retain_1_to_100` |
+| AC-OWNPOST-006 | `test_OWNPOST_006_retweets_only_exclusion_reply_quote_projection`, `test_OWNPOST_006_default_transport_disables_redirects_and_retries` |
+| AC-OWNPOST-007 | `test_OWNPOST_003_007_prohibited_cli_scope`, `test_OWNPOST_005_refresh_success_and_failure_accounting`, `test_OWNPOST_007_result_request_response_repr_and_diagnostics_redacted`, `test_OWNPOST_007_transport_errors_controlled_exception_and_cli_redacted`, `test_OWNPOST_007_managed_read_has_no_payload_persistence` |
+
+`test_OWNPOST_005_bookmarks_likes_retain_1_to_100` preserves the existing
+collection range. `test_CRED_failed_refresh_counted_once_for_bookmarks_and_likes`
+in `tests/test_credential_lifecycle_cli_ordering.py` covers the shared diagnostic
+fix: one failed refresh is counted once, before any subject/collection request,
+for both HTTP and transport failures. Provider continuations containing control
+characters now fail closed in the shared collection parser.
+Input/payload sentinels stay in memory. Retained validation evidence must report
+counts, test names, and sanitized failure categories only, without raw
+assertion tracebacks/provider responses or output/credential payloads.
+Default-transport coverage replaces the HTTP opener and verifies its redirect
+handler plus attempt count, so it performs no real network request.
 
 ## Error-model cross-cutting tests
 
