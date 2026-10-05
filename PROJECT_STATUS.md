@@ -6,32 +6,25 @@
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
 - **Completed product foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, credential lifecycle, and the end-user OAuth bootstrap CLI.
 - **OAuth bootstrap closeout:** PR #37 merged as `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`; Issue #36 closed, merge-commit `project-ci` / `policy-check` passed, and canonical local `main` was fast-forwarded cleanly with local closeout PASS.
-- **Completed maintenance slice:** PR #39 merged as `62b61978676d30158db740ff61aba917114bc738`; Issue #38 closed and merge-commit `project-ci` / `policy-check` passed. Its first real dogfood then exposed a GitHub CLI closing-Issue JSON compatibility defect before canonical synchronization.
-- **Current maintenance workstream:** Issue #40 / Draft PR #41 fixes closing-Issue state lookup by separating PR-reported Issue references from current Issue-state reads.
-- **Current branch:** `issue-40-closing-issue-state-lookup`, based on `62b61978676d30158db740ff61aba917114bc738`.
-- **Current validation:** hosted `project-ci` / `policy-check` pass on the hardened Issue #40 implementation; traceability/docs commits move the head, so exact-current-head hosted validation and Windows exact-head validation remain before the human Ready gate. Corrected PR #39 real dogfood is also required.
+- **Completed maintenance:** Issue #38 / PR #39 delivered authoritative post-merge closeout. Real PR #39 dogfood exposed a closing-Issue state lookup incompatibility; Issue #40 / PR #41 fixed it and merged as `f6d0335ffefea882e8f3cecf2b7911892ecb1a65`.
+- **Completed specification:** Issue #42 / PR #43 specified authenticated own-post read in SPEC-0006 and the test matrix. PR #43 merged as `7ca8549d1622c930986d23c12eca5eb2cd85f778`; this was documentation-only.
+- **Implementation status:** `x-context posts` is not implemented. After documentation closeout, a separate implementation workstream must follow SPEC-0006 AC-OWNPOST-001..007 with failing tests before code.
+- **Verified GitHub evidence:** `project-ci` / `policy-check` passed on exact PR #41 and #43 heads. GitHub merge evidence alone does not establish a clean/synchronized local canonical checkout or real-provider qualification.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider login/refresh/revoke qualification, and any authority expansion remain human-final.
 
-## Current Issue #40 — closing-Issue state compatibility
+## Completed Issue #40 — closing-Issue state compatibility
 
-PR #39 implemented the tracked post-merge closeout command and merged successfully. GitHub merge evidence and required push workflows were healthy, but the first intended real dogfood stopped before canonical synchronization with `authenticated GitHub PR evidence is incomplete`.
+PR #39's first real dogfood failed closed before canonical synchronization because real GitHub CLI `closingIssuesReferences` reports Issue identity but not nested Issue state. Issue #40 / PR #41 corrected the boundary by resolving each referenced Issue's state separately with authenticated `gh issue view <number> -R owner/repo --json number,state`, including final evidence revalidation.
 
-Root cause: the synthetic test fixture assumed that `gh pr view --json closingIssuesReferences` nested an Issue `state`. Real GitHub CLI output provides closing-Issue identity (`number/url/repository`) but not state there.
+PR #41 merged as `f6d0335ffefea882e8f3cecf2b7911892ecb1a65`. Exact PR head `52d815f8e1a72db3cf30c5e7406e401c6ec67527` had successful hosted `project-ci` and `policy-check`. The repair preserves fail-closed Issue-state validation, ff-only canonical synchronization, separate destructive cleanup, and the existing PR authority boundary. Normative clarification: `docs/specs/0005-closing-issue-state-clarification.md`.
 
-Draft PR #41 therefore:
+## Authenticated own-post read — specification complete, implementation pending
 
-- keeps `gh pr view` authoritative for the set of closing-Issue references;
-- validates each reference's positive Issue number and repository owner/name;
-- performs `gh issue view <number> -R owner/repo --json number,state` for each reference;
-- requires the returned Issue number to match and state to be exactly `OPEN` or `CLOSED`;
-- lets `CLOSED` pass and preserves `OPEN` as evidence that blocks closeout through the existing policy validator;
-- supports GitHub-reported cross-repository closing Issues without expanding cross-repository PR support;
-- repeats those state reads during the existing final GitHub revalidation;
-- leaves SHA derivation, required CI checks, ff-only canonical synchronization, native exit semantics, worktree inventory, and destructive-cleanup boundaries unchanged.
+Issue #42 / PR #43 added normative `docs/specs/0006-own-post-read.md`, updated the SPEC-0001 canonical operation contract, and mapped AC-OWNPOST-001..007 in `docs/TEST_MATRIX.md`. PR #43 merged as `7ca8549d1622c930986d23c12eca5eb2cd85f778` (head `dd28edb9dc32c90a8a51235f7e557648a76645cf`, hosted `project-ci` and `policy-check` passed). This specification PR changed no implementation code or test bodies; Issue #42 is closed as a specification workstream.
 
-Normative clarification: `docs/specs/0005-closing-issue-state-clarification.md`.
+SPEC-0006 binds the read to lifecycle-managed or explicitly overridden user-context credentials and the subject returned by official `GET /2/users/me`. Only `GET /2/users/{authenticated-subject-id}/tweets` with `exclude=retweets` is allowed; the subject's replies and quote posts remain eligible. It requires the existing `operation=posts` canonical envelope, page size default 25 / range 5..100, opaque explicit continuation, one tweets page per invocation, early local input rejection, existing errors/accounting, and credential/post-payload redaction and non-persistence boundaries.
 
-The failed PR #39 dogfood is retained as real-boundary evidence that the old implementation failed closed before mutation. The corrected command must be re-dogfooded against PR #39 before Ready.
+The `x-context posts` command and provider collection are **not yet implemented**. The next implementation workstream must start from freshly verified merged `main`, reuse authenticated-subject, credential, canonical, and collection helpers, and add failing AC-mapped contract tests before implementation. Arbitrary user selection, fetch-all, expansions, extra scopes, and unofficial access stay excluded. Live-provider qualification, Ready, merge, and destructive cleanup remain human-gated.
 
 ## Completed OAuth bootstrap
 
@@ -111,10 +104,11 @@ Real-provider login/refresh/revoke qualification was not performed as part of th
 
 ## Recovery / first diagnostic entry points
 
-- Current workstream: GitHub Issue #40 / Draft PR #41.
-- Current requirement/AC contract: `docs/specs/0005-closing-issue-state-clarification.md` (on top of SPEC-0005).
-- Current test-first contract: `tests/test_post_merge_closeout_command.py`.
-- Current implementation: `scripts/post_merge_closeout.py`.
+- Next product workstream: authenticated own-post read **implementation** (a separate Issue following the Issue #42 specification closeout).
+- Normative own-post requirement/AC: `docs/specs/0006-own-post-read.md` and `docs/TEST_MATRIX.md`.
+- Implementation entry points to inspect: `x_context/canonical.py`, `x_context/x_api.py`, `x_context/cli.py`, authenticated-subject binding, and existing bookmarks/likes collection tests.
+- Completed closing-Issue compatibility: Issue #40 / PR #41; `docs/specs/0005-closing-issue-state-clarification.md` and `tests/test_post_merge_closeout_command.py`.
+- Existing non-destructive merge closeout command: `scripts/post_merge_closeout.py`.
 - Existing non-destructive verifier: `scripts/verify_local_closeout.py`.
 - Separate destructive cleanup boundary: `scripts/post_merge_cleanup.py`.
 - Shared Git/worktree state helpers: `scripts/closeout_state.py`.
