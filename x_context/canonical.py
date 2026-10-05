@@ -87,7 +87,7 @@ class CanonicalEnvelope:
                 raise ValueError("read envelopes must use subject = null")
             if self.page.next_token is not None or not self.page.complete:
                 raise ValueError("read envelopes must use a complete page with no next_token")
-        elif self.operation in ("bookmarks", "likes"):
+        elif self.operation in ("bookmarks", "likes", "posts"):
             if not isinstance(self.subject, AuthenticatedSubject):
                 raise ValueError(f"{self.operation} require an authenticated subject")
         else:

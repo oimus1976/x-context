@@ -19,7 +19,7 @@ from .credential_lifecycle import (
 )
 from .oauth import OAuthConfig, OAuthError, OAuthTokenResult, acquire_user_token
 from .url_parser import InvalidStatusUrl, extract_post_id
-from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks, lookup_likes
+from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks, lookup_likes, lookup_posts
 
 _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
@@ -47,7 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     read_parser = subparsers.add_parser("read", add_help=True)
     read_parser.add_argument("status_url")
-    for operation in ("bookmarks", "likes"):
+    for operation in ("bookmarks", "likes", "posts"):
         collection_parser = subparsers.add_parser(operation, add_help=True, allow_abbrev=False)
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
@@ -120,8 +120,8 @@ def _credential_cli_category(category: str) -> str:
     return "configuration_error" if category in _CREDENTIAL_LOCAL_CATEGORIES else category
 
 
-def _collection_input_is_valid(max_results: object, page_token: object) -> bool:
-    if type(max_results) is not int or not 1 <= max_results <= 100:
+def _collection_input_is_valid(max_results: object, page_token: object, *, min_results: int = 1) -> bool:
+    if type(max_results) is not int or not min_results <= max_results <= 100:
         return False
     if page_token is not None and (
         not isinstance(page_token, str)
@@ -234,7 +234,7 @@ def main(
     try:
         args = parser.parse_args(selected_argv)
     except _CliUsageError:
-        if selected_argv and selected_argv[0] in ("bookmarks", "likes"):
+        if selected_argv and selected_argv[0] in ("bookmarks", "likes", "posts"):
             _collection_diagnostic(selected_stderr, operation=selected_argv[0], error=XApiError("invalid_input"))
             return 2
         if selected_argv and selected_argv[0] == "auth":
@@ -261,13 +261,14 @@ def main(
             stderr=selected_stderr,
         )
 
-    if args.command in ("bookmarks", "likes"):
-        if not _collection_input_is_valid(args.max_results, args.page_token):
+    if args.command in ("bookmarks", "likes", "posts"):
+        min_results = 5 if args.command == "posts" else 1
+        if not _collection_input_is_valid(args.max_results, args.page_token, min_results=min_results):
             _collection_diagnostic(
                 selected_stderr,
                 operation=args.command,
                 error=XApiError("invalid_input"),
-                page_size=args.max_results if type(args.max_results) is int and 1 <= args.max_results <= 100 else None,
+                page_size=args.max_results if type(args.max_results) is int and min_results <= args.max_results <= 100 else None,
                 credential_source=None,
                 refresh_attempted=False,
                 credential_requests_attempted=0,
@@ -293,15 +294,17 @@ def main(
             _collection_diagnostic(
                 selected_stderr,
                 operation=args.command,
-                error=XApiError(category, requests_attempted=credential_requests),
-                page_size=args.max_results if 1 <= args.max_results <= 100 else None,
+                # No X content request has occurred; credential attempts are
+                # added once by the shared collection diagnostic below.
+                error=XApiError(category),
+                page_size=args.max_results if min_results <= args.max_results <= 100 else None,
                 credential_source=None,
                 refresh_attempted=exc.refresh_attempted,
                 credential_requests_attempted=credential_requests,
             )
             return _exit_code_for_category(category)
 
-        lookup = lookup_bookmarks if args.command == "bookmarks" else lookup_likes
+        lookup = {"bookmarks": lookup_bookmarks, "likes": lookup_likes, "posts": lookup_posts}[args.command]
         credential_requests = 1 if resolution.refresh_attempted else 0
         try:
             result = lookup(
@@ -315,7 +318,7 @@ def main(
                 selected_stderr,
                 operation=args.command,
                 error=exc,
-                page_size=args.max_results if 1 <= args.max_results <= 100 else None,
+                page_size=args.max_results if min_results <= args.max_results <= 100 else None,
                 credential_source=resolution.source,
                 refresh_attempted=resolution.refresh_attempted,
                 credential_requests_attempted=credential_requests,
