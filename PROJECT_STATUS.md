@@ -8,8 +8,8 @@
 - **OAuth bootstrap closeout:** PR #37 merged as `45d4347fd7caa1d1232cd7a7a306396eb4c5d301`; Issue #36 closed, merge-commit `project-ci` / `policy-check` passed, and canonical local `main` was fast-forwarded cleanly with local closeout PASS.
 - **Completed maintenance:** Issue #38 / PR #39 delivered authoritative post-merge closeout. Real PR #39 dogfood exposed a closing-Issue state lookup incompatibility; Issue #40 / PR #41 fixed it and merged as `f6d0335ffefea882e8f3cecf2b7911892ecb1a65`.
 - **Completed specification:** Issue #42 / PR #43 specified authenticated own-post read in SPEC-0006 and the test matrix. PR #43 merged as `7ca8549d1622c930986d23c12eca5eb2cd85f778`; this was documentation-only.
-- **Implementation status:** Issue #45 locally implements `x-context posts` under SPEC-0006 after independent RED source review. The uncommitted task-worktree GREEN result is 225 Windows tests PASS (23 own-post, 201 pre-existing, 1 shared refresh-accounting regression), with no skips. Product changes await independent GREEN review and Git publication; canonical `main` remains unchanged.
-- **Verified GitHub evidence:** `project-ci` / `policy-check` passed on exact PR #41 and #43 heads. GitHub merge evidence alone does not establish a clean/synchronized local canonical checkout or real-provider qualification.
+- **Implementation status:** Issue #45 / Draft PR #46 publishes `x-context posts` under SPEC-0006 at implementation commit `6bd45ed26584994825228265317c1946e1d6cf11`, independently reviewed after test assertion hardening. Codex-reported local Windows evidence is 225/225 PASS (23 own-post, 201 pre-existing, 1 shared refresh-accounting regression), with no skips. The PR remains Draft and unmerged; canonical `main` remains unchanged.
+- **Verified GitHub evidence:** `project-ci` / `policy-check` passed on exact PR #41 and #43 heads, and on PR #46 implementation SHA `6bd45ed26584994825228265317c1946e1d6cf11` (runs 37267450298 / 37267450322). These checks do not establish real-provider qualification; each follow-up commit requires its own exact-head CI evidence.
 - **Human decisions:** Ready, merge, destructive cleanup, real-provider login/refresh/revoke qualification, and any authority expansion remain human-final.
 
 ## Completed Issue #40 — closing-Issue state compatibility
@@ -18,15 +18,15 @@ PR #39's first real dogfood failed closed before canonical synchronization becau
 
 PR #41 merged as `f6d0335ffefea882e8f3cecf2b7911892ecb1a65`. Exact PR head `52d815f8e1a72db3cf30c5e7406e401c6ec67527` had successful hosted `project-ci` and `policy-check`. The repair preserves fail-closed Issue-state validation, ff-only canonical synchronization, separate destructive cleanup, and the existing PR authority boundary. Normative clarification: `docs/specs/0005-closing-issue-state-clarification.md`.
 
-## Authenticated own-post read — local GREEN, implementation review pending
+## Authenticated own-post read — Draft PR #46, reviewed implementation
 
 Issue #42 / PR #43 added normative `docs/specs/0006-own-post-read.md`, updated the SPEC-0001 canonical operation contract, and mapped AC-OWNPOST-001..007 in `docs/TEST_MATRIX.md`. PR #43 merged as `7ca8549d1622c930986d23c12eca5eb2cd85f778` (head `dd28edb9dc32c90a8a51235f7e557648a76645cf`, hosted `project-ci` and `policy-check` passed). This specification PR changed no implementation code or test bodies; Issue #42 is closed as a specification workstream.
 
 SPEC-0006 binds the read to lifecycle-managed or explicitly overridden user-context credentials and the subject returned by official `GET /2/users/me`. Only `GET /2/users/{authenticated-subject-id}/tweets` with `exclude=retweets` is allowed; the subject's replies and quote posts remain eligible. It requires the existing `operation=posts` canonical envelope, page size default 25 / range 5..100, opaque explicit continuation, one tweets page per invocation, early local input rejection, existing errors/accounting, and credential/post-payload redaction and non-persistence boundaries.
 
-Issue #45's uncommitted implementation adds `posts [--max-results n] [--page-token opaque]` through the existing collection, canonical, and credential lifecycle paths. It resolves and binds the authenticated subject, requests exactly one tweets page with `exclude=retweets`, and rejects invalid local input before credential load/refresh. Bookmarks/likes retain 1..100. The shared parser rejects control-bearing provider continuation tokens; shared diagnostics count a failed refresh once rather than twice.
+Issue #45 / Draft PR #46 adds `posts [--max-results n] [--page-token opaque]` through the existing collection, canonical, and credential lifecycle paths. It resolves and binds the authenticated subject, requests exactly one tweets page with `exclude=retweets`, and rejects invalid local input before credential load/refresh. Bookmarks/likes retain 1..100. The shared parser rejects control-bearing provider continuation tokens; shared diagnostics count a failed refresh once rather than twice.
 
-Local Windows Python 3.12.14 validation passed all 225 tests with zero failures/errors/skips, including the real-DPAPI synthetic test. The 23 reviewed RED tests were preserved. Local policy script compilation and `verify_repo.py --repository oimus1976/x-context` passed. This evidence applies to the task-worktree diff based on `7ff3321c52c39b156f5cbcbf19e79a7d1145dbfd`, not a published implementation head. Independent GREEN review, hosted CI and real-provider qualification remain pending. Arbitrary user selection, fetch-all, expansions, extra scopes, and unofficial access stay excluded. Ready, merge, and destructive cleanup remain human-final.
+Codex-reported local Windows Python 3.12.14 validation passed all 225 tests with zero failures/errors/skips, including the real-DPAPI synthetic test. The 23 test contracts were preserved with 16 assertion hardenings across two files, and local policy compilation / `verify_repo.py --repository oimus1976/x-context` passed. Published implementation commit `6bd45ed26584994825228265317c1946e1d6cf11` received independent production/test-source review and successful GitHub-hosted `project-ci` (run 37267450298) / `policy-check` (run 37267450322). This hosted evidence is specific to that implementation SHA, separate from the local Windows report; documentation follow-ups require fresh exact-head checks. PR #46 remains Draft and unmerged. Real-provider qualification remains unperformed. Arbitrary user selection, fetch-all, expansions, extra scopes, and unofficial access stay excluded. Ready, merge, and destructive cleanup remain human-final.
 
 ## Completed OAuth bootstrap
 
@@ -106,7 +106,7 @@ Real-provider login/refresh/revoke qualification was not performed as part of th
 
 ## Recovery / first diagnostic entry points
 
-- Current product workstream: Issue #45 authenticated own-post read; local GREEN implementation awaits independent diff review and publication.
+- Current product workstream: Issue #45 / Draft PR #46 authenticated own-post read; published implementation reviewed, documentation consistency follow-up in progress, with new exact-head checks and human-final Ready/merge still required.
 - Normative own-post requirement/AC: `docs/specs/0006-own-post-read.md` and `docs/TEST_MATRIX.md`.
 - Implementation entry points to inspect: `x_context/canonical.py`, `x_context/x_api.py`, `x_context/cli.py`, authenticated-subject binding, and existing bookmarks/likes collection tests.
 - Completed closing-Issue compatibility: Issue #40 / PR #41; `docs/specs/0005-closing-issue-state-clarification.md` and `tests/test_post_merge_closeout_command.py`.

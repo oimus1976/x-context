@@ -183,14 +183,19 @@ SPEC-0005 is a maintenance authority boundary rather than X provider behavior. T
 
 ## Authenticated own-post read AC-to-test mapping
 
-SPEC-0006 / Issue #45 contract tests are in `tests/test_own_posts.py`.
-The reviewed RED assertions are unchanged. Local GREEN validation on Windows
-with Python 3.12.14 passed all 23 own-post tests and the full 225-test suite
-(201 pre-existing tests + 23 own-post tests + 1 shared refresh-accounting
-regression), with zero failures/errors/skips. The real-DPAPI synthetic test
-was included. This evidence applies to the uncommitted task worktree based
-on `7ff3321c52c39b156f5cbcbf19e79a7d1145dbfd`; it is not hosted CI or live X
-qualification, and product changes still await independent GREEN review.
+SPEC-0006 / Issue #45 / Draft PR #46 contract tests are in `tests/test_own_posts.py`.
+The same 23 test contracts are preserved, with 16 test assertion hardenings
+across two files to prevent raw payloads in failing unittest output.
+Codex-reported local GREEN validation on Windows Python 3.12.14 passed all
+23 own-post tests and the full 225-test suite (201 pre-existing tests + 23
+own-post tests + 1 shared refresh-accounting regression), with zero
+failures/errors/skips, including the real-DPAPI synthetic test.
+The implementation is published at `6bd45ed26584994825228265317c1946e1d6cf11`
+and independently reviewed in Draft PR #46. GitHub-hosted `project-ci`
+(run 37267450298) and `policy-check` (run 37267450322) succeeded at that exact
+implementation SHA. Local Windows and hosted CI evidence are distinct;
+documentation follow-ups require fresh exact-head checks. PR #46 remains
+Draft and unmerged, and no live X/provider qualification was performed.
 
 | Acceptance criteria | Actual test names (local GREEN) |
 |---|---|
