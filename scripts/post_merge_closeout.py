@@ -22,7 +22,8 @@ from closeout_state import (
     canonical_worktree,
     current_branch,
     is_ancestor,
-    list_worktrees,
+    read_closeout_registry,
+    worktree_identity_failures,
     remote_repository_identity,
     resolve_worktree,
     rev_parse,
@@ -444,7 +445,7 @@ def _target_worktree_failures(
     evidence: PREvidence,
     emit: Emitter,
 ) -> list[str]:
-    worktrees, error = list_worktrees(repo)
+    worktrees, error = read_closeout_registry(repo)
     if error or worktrees is None:
         return [error or "worktree registry is unavailable"]
 
@@ -464,7 +465,11 @@ def _target_worktree_failures(
             failures.append("target worktree path is unavailable")
             continue
 
-        state_failures = worktree_failures(item.path, "target")
+        state_failures = worktree_identity_failures(repo, item, "target")
+        state_failures.extend(worktree_failures(item.path, "target"))
+        actual_head = rev_parse(item.path, "HEAD")
+        if actual_head is None or actual_head.lower() != evidence.head_sha.lower():
+            state_failures.append("target worktree HEAD does not match the merged PR head")
         if item.branch_ref == topic_ref and (item.head or "").lower() != evidence.head_sha.lower():
             state_failures.append("target topic worktree HEAD moved from the merged PR head")
 
@@ -599,6 +604,11 @@ def run_closeout(
             emit,
             ["canonical branch has diverged; safe fast-forward is unavailable"],
         )
+
+    # Every exact PR target must be safe before any canonical mutation.
+    target_failures = _target_worktree_failures(requested, evidence=evidence, emit=emit)
+    if target_failures:
+        return _fail(emit, target_failures)
 
     merged = invoke_native(
         ("git", "merge", "--ff-only", f"{remote}/{branch}"),

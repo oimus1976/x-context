@@ -11,6 +11,8 @@ from closeout_state import (
     FULL_SHA_RE,
     canonical_worktree,
     current_branch,
+    read_closeout_registry,
+    worktree_identity_failures,
     refresh_remote_branch,
     resolve_worktree,
     rev_parse,
@@ -45,12 +47,18 @@ def main() -> int:
     if freshness_error:
         failures.append(freshness_error)
 
+    entries, registry_error = read_closeout_registry(task_worktree)
+    task_entries = [item for item in entries or [] if item.path == task_worktree]
+    if registry_error or len(task_entries) != 1:
+        failures.append("task worktree registration could not be established")
+    else:
+        failures.extend(worktree_identity_failures(task_worktree, task_entries[0], "task"))
     failures.extend(worktree_failures(task_worktree, "task"))
     task_branch = current_branch(task_worktree)
     task_head = rev_parse(task_worktree, "HEAD") or ""
 
-    canonical = task_worktree if task_branch == args.branch else None
-    topic_mode = canonical is None
+    canonical = canonical_worktree(task_worktree, args.branch)
+    topic_mode = task_branch != args.branch
 
     if topic_mode:
         expected = (args.expected_pr_head or "").strip()
@@ -65,18 +73,19 @@ def main() -> int:
                 f"task HEAD {task_head[:12]} does not match expected PR head {expected[:12]}"
             )
 
-        canonical = canonical_worktree(task_worktree, args.branch)
-        if canonical is None:
+    if canonical is None:
+        failures.append(
+            f"canonical branch {args.branch!r} is not checked out in exactly one available worktree"
+        )
+    elif not topic_mode and canonical != task_worktree:
+        failures.append("task worktree does not match the canonical registration")
+    else:
+        failures.extend(worktree_failures(canonical, "canonical"))
+        canonical_branch = current_branch(canonical)
+        if canonical_branch != args.branch:
             failures.append(
-                f"canonical branch {args.branch!r} is not checked out in exactly one available worktree"
+                f"canonical worktree branch is {canonical_branch or '<detached HEAD>'!r}; expected {args.branch!r}"
             )
-        else:
-            failures.extend(worktree_failures(canonical, "canonical"))
-            canonical_branch = current_branch(canonical)
-            if canonical_branch != args.branch:
-                failures.append(
-                    f"canonical worktree branch is {canonical_branch or '<detached HEAD>'!r}; expected {args.branch!r}"
-                )
 
     canonical_head = ""
     if remote_sha and canonical is not None:
