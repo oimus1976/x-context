@@ -157,7 +157,8 @@ When a page is saved:
 4. verify the incoming/stored subject boundary;
 5. merge items by Post ID;
 6. build the complete next store image in memory;
-7. replace the durable file atomically as one unit.
+7. immediately before replacement, re-read the current store state and require it to match the preflight state byte-for-byte (including the same absent/present state);
+8. replace the durable file atomically as one unit.
 
 The pre-provider store read is validation only. Directory creation, temporary-file creation, and payload writes occur only after successful FR-003 acquisition. Therefore a missing/empty `LOCALAPPDATA` or an already malformed/unsupported existing store consumes zero provider requests.
 
@@ -225,13 +226,17 @@ If serialization, temporary-file creation/write, validation, flush/close, or fin
 - suppress raw OS exception prose from normal diagnostics;
 - preserve the previously committed store whenever failure occurs before a successful replacement.
 
-The MVP does not claim crash-consistent durability against every filesystem/hardware failure mode. Its invariant is whole-file replacement rather than in-place mutation.
+Immediately before replacement, the implementation MUST perform a freshness check against the pre-provider store snapshot. If the file appeared, disappeared, or its bytes changed since preflight, fail closed as `storage_error` and do not replace it. This prevents the save operation from knowingly overwriting a concurrent/manual update observed after the provider round trip.
+
+The freshness check is lost-update detection, not a general file-locking or hostile-process security guarantee.
+
+The MVP does not claim crash-consistent durability against every filesystem/hardware failure mode. Its invariant is fresh-state-checked whole-file replacement rather than in-place mutation.
 
 ## 11. Concurrency boundary
 
 The first persistence slice is single-process/single-writer.
 
-Concurrent saver processes are unsupported and the implementation MUST NOT claim merge safety under concurrent writes.
+Concurrent saver processes are unsupported and the implementation MUST NOT claim general merge safety under concurrent writes. The pre-effect freshness check in Section 10 MUST block replacement when another writer changes the store between preflight and replacement, but it is not presented as a full locking protocol.
 
 This MVP does not add file locking, a database, a daemon, or distributed synchronization solely to solve concurrency.
 
@@ -382,6 +387,8 @@ It does not truncate/update the committed store in place.
 
 A simulated serialization/write/replace failure produces `storage_error`, no success output, and preserves the prior committed store whenever the replacement did not succeed.
 
+If the store's present/absent state or bytes differ from the preflight snapshot immediately before replacement, the operation fails as `storage_error` without replacing the newer/current store.
+
 ### AC-BMSTORE-009 — Safe output and evidence
 
 Successful stdout remains the canonical bookmark envelope and is emitted only after persistence succeeds.
@@ -413,6 +420,7 @@ Before implementation, tests MUST be derived from the acceptance criteria and in
 - repeated-page cardinality idempotence;
 - no deletion from later absence;
 - atomic replacement and injected write/replace failure;
+- pre-effect freshness/readback: store appeared/disappeared/changed after preflight => no replacement and no lost update;
 - no successful canonical stdout before persistence commit;
 - one-page/no-extra-provider-request regression;
 - synthetic real-Windows filesystem smoke using a temporary LOCALAPPDATA root.
