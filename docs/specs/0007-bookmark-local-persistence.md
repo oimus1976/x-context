@@ -158,7 +158,8 @@ When a page is saved:
 5. merge items by Post ID;
 6. build the complete next store image in memory;
 7. immediately before replacement, re-read the current store state and require it to match the preflight state byte-for-byte (including the same absent/present state);
-8. replace the durable file atomically as one unit.
+8. replace the durable file atomically as one unit;
+9. re-read the committed file and require exact byte equality with the validated next-store image before reporting persistence success.
 
 The pre-provider store read is validation only. Directory creation, temporary-file creation, and payload writes occur only after successful FR-003 acquisition. Therefore a missing/empty `LOCALAPPDATA` or an already malformed/unsupported existing store consumes zero provider requests.
 
@@ -229,6 +230,8 @@ If serialization, temporary-file creation/write, validation, flush/close, or fin
 Immediately before replacement, the implementation MUST perform a freshness check against the pre-provider store snapshot. If the file appeared, disappeared, or its bytes changed since preflight, fail closed as `storage_error` and do not replace it. This prevents the save operation from knowingly overwriting a concurrent/manual update observed after the provider round trip.
 
 The freshness check is lost-update detection, not a general file-locking or hostile-process security guarantee.
+
+After a successful replacement call, the implementation MUST re-read the committed store and require exact byte equality with the validated next-store image before emitting successful canonical stdout. A failed/mismatched readback is `storage_error`; no automatic destructive rollback is attempted, and the result is reported as a post-effect storage failure rather than falsely claiming that no write occurred.
 
 The MVP does not claim crash-consistent durability against every filesystem/hardware failure mode. Its invariant is fresh-state-checked whole-file replacement rather than in-place mutation.
 
@@ -389,6 +392,8 @@ A simulated serialization/write/replace failure produces `storage_error`, no suc
 
 If the store's present/absent state or bytes differ from the preflight snapshot immediately before replacement, the operation fails as `storage_error` without replacing the newer/current store.
 
+After replacement, exact-byte readback must match the validated next-store image before success is reported. Readback failure/mismatch is `storage_error`; the implementation does not claim the old store is still present and does not attempt automatic rollback.
+
 ### AC-BMSTORE-009 — Safe output and evidence
 
 Successful stdout remains the canonical bookmark envelope and is emitted only after persistence succeeds.
@@ -420,8 +425,9 @@ Before implementation, tests MUST be derived from the acceptance criteria and in
 - repeated-page cardinality idempotence;
 - no deletion from later absence;
 - atomic replacement and injected write/replace failure;
-- pre-effect freshness/readback: store appeared/disappeared/changed after preflight => no replacement and no lost update;
-- no successful canonical stdout before persistence commit;
+- pre-effect freshness: store appeared/disappeared/changed after preflight => no replacement and no lost update;
+- post-replacement exact-byte readback before persistence success; mismatch/failure => post-effect `storage_error` with no automatic rollback;
+- no successful canonical stdout before persistence commit and postcondition verification;
 - one-page/no-extra-provider-request regression;
 - synthetic real-Windows filesystem smoke using a temporary LOCALAPPDATA root.
 
