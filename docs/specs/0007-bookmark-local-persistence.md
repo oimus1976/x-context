@@ -57,7 +57,7 @@ No CLI path override is introduced in this slice.
 
 The store MUST be outside the repository and MUST NOT be written beneath the repository/worktree as normal product behavior.
 
-If `LOCALAPPDATA` is missing, empty, or unusable, the save operation fails as `configuration_error` before attempting a local payload write.
+If `LOCALAPPDATA` is missing or empty, the save operation fails locally as `configuration_error` before credential resolution or provider traffic. A path that resolves syntactically but later proves unwritable may still fail during the persistence phase as `storage_error`.
 
 ### 4.2 At-rest protection boundary
 
@@ -151,12 +151,15 @@ Post ID is the stable deduplication key inside one subject-bound bookmark store.
 
 When a page is saved:
 
-1. validate the successful canonical bookmark envelope;
-2. load and validate the existing store if present;
-3. verify the subject boundary;
-4. merge items by Post ID;
-5. build the complete next store image in memory;
-6. replace the durable file atomically as one unit.
+1. resolve and validate the fixed local store configuration;
+2. if a store exists, read and validate it before credential resolution/provider traffic;
+3. obtain one successful canonical bookmark envelope through the existing FR-003 path;
+4. verify the incoming/stored subject boundary;
+5. merge items by Post ID;
+6. build the complete next store image in memory;
+7. replace the durable file atomically as one unit.
+
+The pre-provider store read is validation only. Directory creation, temporary-file creation, and payload writes occur only after successful FR-003 acquisition. Therefore a missing/empty `LOCALAPPDATA` or an already malformed/unsupported existing store consumes zero provider requests.
 
 For a Post ID not present in the store, append one new item.
 
@@ -335,7 +338,7 @@ Successful persistence targets exactly the MVP default under `%LOCALAPPDATA%\x-c
 
 No repository/worktree path or caller-supplied alternate path is accepted.
 
-Missing/unusable `LOCALAPPDATA` fails locally as `configuration_error` without a payload write.
+Missing/empty `LOCALAPPDATA` fails locally as `configuration_error` with zero credential/provider requests. An existing malformed/unsupported store is also rejected before credential/provider traffic. A later filesystem writeability/replacement failure is `storage_error`.
 
 The stored representation is UTF-8 plaintext JSON and does not claim cryptographic at-rest protection.
 
