@@ -221,6 +221,23 @@ assertion tracebacks/provider responses or output/credential payloads.
 Default-transport coverage replaces the HTTP opener and verifies its redirect
 handler plus attempt count, so it performs no real network request.
 
+## Bookmark local persistence AC-to-test mapping
+
+SPEC-0007 / Issue #51 mapping below is planned coverage, not implemented test evidence. This specification-only revision adds no product code or test bodies. Contract tests must be established before implementation.
+
+| Acceptance criteria | Planned test coverage |
+|---|---|
+| AC-BMSTORE-001 | Existing `bookmarks` command remains process-and-return: no bookmark-store directory/file creation or modification. Only explicit `bookmarks save` may write bookmark payloads. |
+| AC-BMSTORE-002 | Save composition reuses FR-003 subject-bound one-page acquisition, default/bounds/token behavior, existing error mapping/accounting, and performs no additional provider request/scope/retry/mutation. |
+| AC-BMSTORE-003 | Temporary `LOCALAPPDATA` resolves exactly to `x-context/data/bookmarks-v1.json`; no repo/worktree write; missing/empty local root => `configuration_error` before credential/provider traffic; later writeability/replacement failure => `storage_error`; stored bytes are UTF-8 JSON with no encryption claim. |
+| AC-BMSTORE-004 | Existing store is read/validated before credential/provider traffic. New/existing exact schema validation covers valid UTC observation timestamps and unique Post IDs; malformed/unsupported/duplicate-ID store => zero provider requests, `storage_error`, and unchanged prior bytes. Sentinels prove credentials, auth headers, raw provider payloads, and page tokens are absent from store. |
+| AC-BMSTORE-005 | First save establishes canonical subject; exact numeric subject-ID match required thereafter; mismatch => `subject_mismatch`, non-zero exit, no canonical success stdout, and byte-for-byte unchanged prior store. |
+| AC-BMSTORE-006 | New IDs append once in canonical order; repeated IDs create no duplicate, preserve `first_seen_at`, update `last_seen_at`, and replace text with latest canonical observation; repeated identical page does not increase cardinality. |
+| AC-BMSTORE-007 | Later page absence never deletes/expires/hides stored IDs; no automatic pruning, retention expiry, per-item deletion, X-side reconciliation, or provider mutation. |
+| AC-BMSTORE-008 | Whole next image is validated before same-directory temporary-file replacement; no in-place truncate/update. Immediately before replacement, present/absent state and bytes must match the preflight snapshot; appeared/disappeared/changed store => `storage_error` and no replacement. Injected serialization/write/replace failures => `storage_error`, no success stdout, and prior committed bytes remain when replacement did not succeed. After replacement, exact-byte readback must match the validated next image before success; readback mismatch/failure => post-effect `storage_error` with no automatic rollback or false claim that no write occurred. |
+| AC-BMSTORE-009 | Canonical bookmark stdout is emitted only after persistence succeeds. Storage diagnostics contain safe counts only and exclude Post text/IDs, subject identity, page tokens, credentials, raw provider/store bytes, raw OS exception prose, and actual private payload in retained evidence. |
+| AC-BMSTORE-010 | No Markdown/Obsidian/CSV export, search/index/database, AI enrichment, cursor persistence, scheduled/background ingestion, locking framework, path override, or multi-account management. Windows real-filesystem qualification uses synthetic payload and temporary `LOCALAPPDATA`; live private bookmark save remains separately human-gated. |
+
 ## Error-model cross-cutting tests
 
 The stable categories in SPEC-0001 must be exercised without requiring callers to parse provider prose:
