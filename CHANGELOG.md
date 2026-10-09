@@ -14,6 +14,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
+### Explicit bookmark local persistence (Issue #53 / Draft PR #54, local/uncommitted)
+
+- Added `bookmarks save` over the existing FR-003 one-page acquisition. Plain `bookmarks` remains non-persistent. The fixed `%LOCALAPPDATA%/x-context/data/bookmarks-v1.json` is UTF-8 plaintext, accepts one subject, merges by Post ID, preserves first observation/creation time and advances latest observation/text. A missing item in a later page never causes deletion.
+- Configuration and existing-store validation precede credential/provider work. The complete validated image is written to a same-directory temporary file, compared against the final observed store snapshot, replaced whole, and verified by exact-byte readback before canonical stdout. Pre-effect failure preserves the prior store; post-replacement failure reports that persistence may have occurred without rollback. This remains single-writer, with no after-read/ABA guarantee or encryption claim.
+- Synthetic RED/GREEN and Windows filesystem evidence: `docs/verification/issue-53-local-red-green.md`. Independent L2 review and published exact-head CI remain pending. No real X API/private-data qualification or protected Git/PR effects were performed.
+
 ### Authenticated own-post read (Issue #45 / PR #46, merged)
 
 - Added `posts [--max-results n] [--page-token opaque]` through the existing authenticated collection pipeline. Only the subject resolved by `/2/users/me` can target `/2/users/{subject-id}/tweets`; `exclude=retweets` is mandatory, with replies and quote posts eligible and no fields/expansions. The canonical operation is `posts`, page size defaults to 25 with range 5..100, and each invocation fetches at most one tweets page.

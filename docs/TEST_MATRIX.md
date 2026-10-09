@@ -223,7 +223,20 @@ handler plus attempt count, so it performs no real network request.
 
 ## Bookmark local persistence AC-to-test mapping
 
-SPEC-0007 / specification Issue #51 and implementation Issue #53 mapping below is planned coverage, not implemented test evidence. Tests must precede product implementation.
+SPEC-0007 / specification Issue #51 and implementation Issue #53: executable synthetic coverage is in `tests/test_bookmark_store.py`. The original requirements below remain the coverage contract. Local RED/GREEN evidence is in `docs/verification/issue-53-local-red-green.md`; this is uncommitted working-tree evidence, not published exact-head CI or independent review.
+
+| AC | Executable test suffixes (`test_` prefix, in `BookmarkStoreTests`) |
+|---|---|
+| 001 | `AC001_plain_bookmarks_never_persists` (also existing FR-003 no-default-persistence regression) |
+| 002 | `AC002_save_real_acquisition_composition_one_page`, `AC002_invalid_local_input_precedes_credentials_and_store`, `AC002_provider_failure_never_creates_directories`; existing FR-003 size/error/accounting regressions |
+| 003 | `AC003_missing_localappdata_precedes_credentials`, `AC003_reject_repository_local_root`, `AC003_AC004_fixed_utf8_schema_and_no_extra_files` |
+| 004 | `AC004_corrupt_schema_preflight_unchanged_zero_credentials`, `AC004_duplicate_invalid_items_preflight`, `AC004_unpaired_unicode_surrogate_rejected_before_provider`, `AC004_unreadable_store_stops_credentials`; 002/003 schema/value exclusion tests |
+| 005 | `AC005_subject_mismatch_preserves_bytes`, `AC005_same_id_username_change_and_optional_omission` |
+| 006 | `AC006_merge_observation_times_order_and_latest_text`, `AC006_repeated_ids_in_incoming_page_never_duplicate`; 007 empty-page timestamp test |
+| 007 | `AC007_empty_partial_page_keeps_all_items_updates_store_time`; 006 append/update tests |
+| 008 | `AC008_changed_appeared_disappeared_store_blocks_replace`, `AC008_serialization_failure_preserves_prior_bytes`, `AC008_temp_creation_write_flush_replace_failures`, `AC008_partial_write_flush_and_close_failure`, `AC008_temporary_image_corruption_blocks_replace`, `AC008_post_replace_mismatch_is_post_effect_no_rollback`, `AC008_post_replace_read_failure_is_post_effect` |
+| 009 | `AC009_stdout_waits_for_verified_commit_safe_diagnostics`; failure helper checks category, accounting, empty stdout and sentinel redaction |
+| 010 | `AC010_no_extra_cli_capabilities`; fixed-path/exact-file inventory and injected-transport Windows filesystem tests |
 
 | Acceptance criteria | Planned test coverage |
 |---|---|

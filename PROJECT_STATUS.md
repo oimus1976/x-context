@@ -2,6 +2,8 @@
 
 ## 30-second state
 
+- **Issue #53 / Draft PR #54 local implementation checkpoint (2026-10-10):** Uncommitted `issue-53-bookmark-local-persistence` work adds explicit `bookmarks save` under SPEC-0007. Plain bookmarks remains non-persistent; the JSON store is plaintext, one-subject, single-writer, and never prunes absent items. Synthetic RED preceded implementation; validation and AC mapping are recorded in `docs/verification/issue-53-local-red-green.md` and `docs/TEST_MATRIX.md`. Implementation has not been committed/pushed; published docs-only CI does not qualify these working-tree changes. L2 review, published exact-head CI, owner comprehension and human Ready/merge remain pending. No live X API, actual bookmarks, actual credentials, or worktree retirement were used.
+
 - **Goal:** Read X content through the official X API for local tooling and AI-assisted analysis while preserving a narrow read-only authority boundary.
 - **Repository:** `oimus1976/x-context` is public; GitHub remains the implementation/history/share-state authority.
 - **Completed product foundation:** FR-001 URL parsing, FR-002 official single-Post lookup, FR-005 canonical read JSON, FR-006 read CLI, authenticated-subject binding, FR-003 bookmarks, FR-004 likes, OAuth 2.0 Authorization Code + PKCE acquisition, credential lifecycle, the end-user OAuth bootstrap CLI, and SPEC-0006 authenticated own-post read (`x-context posts`).
