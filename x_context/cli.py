@@ -27,7 +27,7 @@ _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
 _OAUTH_CLIENT_ID_ENV = "X_CONTEXT_OAUTH_CLIENT_ID"
 _OAUTH_REDIRECT_URI_ENV = "X_CONTEXT_OAUTH_REDIRECT_URI"
-_LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error"})
+_LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error", "storage_error"})
 _CREDENTIAL_LOCAL_CATEGORIES = frozenset(
     {"credential_missing", "credential_expired", "credential_storage_error"}
 )

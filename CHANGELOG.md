@@ -14,11 +14,11 @@ Do not copy long implementation chronology that already exists in Git/PR history
 
 ## Unreleased
 
-### Explicit bookmark local persistence (Issue #53 / Draft PR #54, local/uncommitted)
+### Explicit bookmark local persistence (Issue #53 / Draft PR #54, published implementation)
 
 - Added `bookmarks save` over the existing FR-003 one-page acquisition. Plain `bookmarks` remains non-persistent. The fixed `%LOCALAPPDATA%/x-context/data/bookmarks-v1.json` is UTF-8 plaintext, accepts one subject, merges by Post ID, preserves first observation/creation time and advances latest observation/text. A missing item in a later page never causes deletion.
 - Configuration and existing-store validation precede credential/provider work. The complete validated image is written to a same-directory temporary file, compared against the final observed store snapshot, replaced whole, and verified by exact-byte readback before canonical stdout. Pre-effect failure preserves the prior store; post-replacement failure reports that persistence may have occurred without rollback. This remains single-writer, with no after-read/ABA guarantee or encryption claim.
-- Synthetic RED/GREEN and Windows filesystem evidence: `docs/verification/issue-53-local-red-green.md`. Independent L2 review and published exact-head CI remain pending. No real X API/private-data qualification or protected Git/PR effects were performed.
+- Historical pre-commit synthetic RED/GREEN and Codex-reported Windows filesystem evidence (291/291 PASS, zero skips): `docs/verification/issue-53-local-red-green.md`. Implementation commit `e704fd5b5d92782b3d728191ee8d29994be81e71` is pushed in Draft PR #54; exact-head `project-ci` (37989760595) / `policy-check` (37989760589) succeeded (hosted Linux: 291 tests, one platform skip). Review `5475286240` identified a local exit-classification defect: the uncommitted correction maps `storage_error` to exit 2 while retaining `subject_mismatch` and provider/read exit behavior. Independent L2 and published exact-head CI for the corrections remain pending. No real X API/private-data qualification, Ready, or merge was performed.
 
 ### Authenticated own-post read (Issue #45 / PR #46, merged)
 

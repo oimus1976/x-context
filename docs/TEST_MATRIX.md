@@ -223,7 +223,7 @@ handler plus attempt count, so it performs no real network request.
 
 ## Bookmark local persistence AC-to-test mapping
 
-SPEC-0007 / specification Issue #51 and implementation Issue #53: executable synthetic coverage is in `tests/test_bookmark_store.py`. The original requirements below remain the coverage contract. Local RED/GREEN evidence is in `docs/verification/issue-53-local-red-green.md`; this is uncommitted working-tree evidence, not published exact-head CI or independent review.
+SPEC-0007 / specification Issue #51 and implementation Issue #53: executable synthetic coverage is in `tests/test_bookmark_store.py`, published in Draft PR #54 at `e704fd5b5d92782b3d728191ee8d29994be81e71`. The original requirements below remain the coverage contract. `docs/verification/issue-53-local-red-green.md` preserves the historical pre-commit RED/GREEN checkpoint and Codex-reported Windows 291/291 PASS with zero skips. Published exact-head `project-ci` (37989760595) / `policy-check` (37989760589) succeeded (Linux: 291 tests, one platform skip). Review `5475286240` prompted a local/uncommitted correction: the failure helper now expects exit 2 for `storage_error` across preflight, pre-replacement and post-replacement failures, while retaining request accounting, post-effect flags, and existing `subject_mismatch`/provider exit 3 expectations. Published CI does not qualify these corrections; their exact-head CI and independent L2 remain pending.
 
 | AC | Executable test suffixes (`test_` prefix, in `BookmarkStoreTests`) |
 |---|---|

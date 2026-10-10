@@ -58,7 +58,7 @@ class BookmarkStoreTests(unittest.TestCase):
 
     def assert_failure(self, result, category, requests=0, post=False):
         code, out, diagnostics, _ = result
-        self.assertEqual(code, 2 if category in ('invalid_input', 'configuration_error') else 3)
+        self.assertEqual(code, 2 if category in ('invalid_input', 'configuration_error', 'storage_error') else 3)
         self.assertEqual(out, '')
         self.assertEqual(diagnostics[-1]['error_category'], category)
         self.assertEqual(diagnostics[-1]['provider_requests_attempted'], requests)
