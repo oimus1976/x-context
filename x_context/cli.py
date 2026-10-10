@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Callable, Mapping, TextIO
 
+from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
+
 from .credential_lifecycle import (
     Clock,
     CredentialError,
@@ -25,7 +27,7 @@ _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
 _OAUTH_CLIENT_ID_ENV = "X_CONTEXT_OAUTH_CLIENT_ID"
 _OAUTH_REDIRECT_URI_ENV = "X_CONTEXT_OAUTH_REDIRECT_URI"
-_LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error"})
+_LOCAL_ERROR_CATEGORIES = frozenset({"invalid_input", "configuration_error", "storage_error"})
 _CREDENTIAL_LOCAL_CATEGORIES = frozenset(
     {"credential_missing", "credential_expired", "credential_storage_error"}
 )
@@ -49,6 +51,8 @@ def _build_parser() -> argparse.ArgumentParser:
     read_parser.add_argument("status_url")
     for operation in ("bookmarks", "likes", "posts"):
         collection_parser = subparsers.add_parser(operation, add_help=True, allow_abbrev=False)
+        if operation == 'bookmarks':
+            collection_parser.add_argument('bookmark_action', nargs='?', choices=('save',))
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
@@ -275,6 +279,19 @@ def main(
             )
             return 2
 
+        bookmark_snapshot = None
+        if args.command == 'bookmarks' and args.bookmark_action == 'save':
+            try:
+                bookmark_snapshot = bookmark_preflight(selected_environ)
+            except BookmarkStoreError as exc:
+                _collection_diagnostic(
+                    selected_stderr, operation=args.command, error=XApiError(exc.category),
+                    page_size=args.max_results,
+                    storage={'persistence_attempted': False, 'persistence_succeeded': False,
+                             'persistence_may_have_occurred': False},
+                )
+                return _exit_code_for_category(exc.category)
+
         lifecycle_store = credential_store
         try:
             if _USER_TOKEN_ENV not in selected_environ and lifecycle_store is None:
@@ -324,6 +341,22 @@ def main(
                 credential_requests_attempted=credential_requests,
             )
             return _exit_code_for_category(exc.category)
+        storage = None
+        if bookmark_snapshot is not None:
+            try:
+                counts = save_bookmarks(bookmark_snapshot, result.envelope)
+                storage = {'persistence_attempted': True, 'persistence_succeeded': True, **counts}
+            except BookmarkStoreError as exc:
+                _collection_diagnostic(
+                    selected_stderr, operation=args.command, result=result,
+                    error=XApiError(exc.category, requests_attempted=result.requests_attempted),
+                    page_size=result.requested_page_size, credential_source=resolution.source,
+                    refresh_attempted=resolution.refresh_attempted,
+                    credential_requests_attempted=credential_requests,
+                    storage={'persistence_attempted': True, 'persistence_succeeded': False,
+                             'persistence_may_have_occurred': exc.may_have_occurred},
+                )
+                return _exit_code_for_category(exc.category)
         selected_stdout.write(result.envelope.to_json() + "\n")
         _collection_diagnostic(
             selected_stderr,
@@ -333,6 +366,7 @@ def main(
             credential_source=resolution.source,
             refresh_attempted=resolution.refresh_attempted,
             credential_requests_attempted=credential_requests,
+            storage=storage,
         )
         return 0
 
@@ -396,6 +430,7 @@ def _collection_diagnostic(
     credential_source=None,
     refresh_attempted=False,
     credential_requests_attempted=0,
+    storage=None,
 ):
     """Per-endpoint rates are distinct budgets, never added together."""
     subject_rate = RateLimitMetadata()
@@ -422,4 +457,6 @@ def _collection_diagnostic(
     }
     if error is not None:
         value["error_category"] = error.category
+    if storage is not None:
+        value.update(storage)
     _write_json_line(stream, value)

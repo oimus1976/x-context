@@ -121,6 +121,12 @@ For a newly created store:
 - each new item's `first_seen_at = retrieved_at`;
 - each new item's `last_seen_at = retrieved_at`.
 
+For a successful save into an existing store:
+
+- the store's `created_at` is preserved;
+- the store's `updated_at` becomes the current successful envelope's `retrieved_at`, even if the returned page is empty or contains only previously stored Posts;
+- each newly inserted item's `first_seen_at` and `last_seen_at` both equal that envelope's `retrieved_at`.
+
 For an existing item observed again:
 
 - `first_seen_at` is preserved;
@@ -227,9 +233,9 @@ If serialization, temporary-file creation/write, validation, flush/close, or fin
 - suppress raw OS exception prose from normal diagnostics;
 - preserve the previously committed store whenever failure occurs before a successful replacement.
 
-Immediately before replacement, the implementation MUST perform a freshness check against the pre-provider store snapshot. If the file appeared, disappeared, or its bytes changed since preflight, fail closed as `storage_error` and do not replace it. This prevents the save operation from knowingly overwriting a concurrent/manual update observed after the provider round trip.
+Immediately before replacement, the implementation MUST re-read the store and compare its observed present/absent state and exact bytes with the pre-provider snapshot. If that final read observes an appearance, disappearance, or byte difference, fail closed as `storage_error` and do not replace it. This prevents the operation from knowingly overwriting a change actually observed after the provider round trip.
 
-The freshness check is lost-update detection, not a general file-locking or hostile-process security guarantee.
+The check does not detect a change followed by restoration of the same bytes (ABA), or a change occurring after the final read but before replacement. It is not an atomic compare-and-swap, file-locking protocol, or hostile-process security guarantee.
 
 After a successful replacement call, the implementation MUST re-read the committed store and require exact byte equality with the validated next-store image before emitting successful canonical stdout. A failed/mismatched readback is `storage_error`; no automatic destructive rollback is attempted, and the result is reported as a post-effect storage failure rather than falsely claiming that no write occurred.
 
@@ -239,7 +245,7 @@ The MVP does not claim crash-consistent durability against every filesystem/hard
 
 The first persistence slice is single-process/single-writer.
 
-Concurrent saver processes are unsupported and the implementation MUST NOT claim general merge safety under concurrent writes. The pre-effect freshness check in Section 10 MUST block replacement when another writer changes the store between preflight and replacement, but it is not presented as a full locking protocol.
+Concurrent saver processes are unsupported and the implementation MUST NOT claim general merge safety under concurrent writes. The pre-effect freshness check in Section 10 MUST block replacement only for a store difference actually observed on its final re-read; changes after that read and ABA changes are not guaranteed to be detected.
 
 This MVP does not add file locking, a database, a daemon, or distributed synchronization solely to solve concurrency.
 
@@ -390,7 +396,7 @@ It does not truncate/update the committed store in place.
 
 A simulated serialization/write/replace failure produces `storage_error`, no success output, and preserves the prior committed store whenever the replacement did not succeed.
 
-If the store's present/absent state or bytes differ from the preflight snapshot immediately before replacement, the operation fails as `storage_error` without replacing the newer/current store.
+If the final pre-replacement read observes a different present/absent state or different bytes than the preflight snapshot, the operation fails as `storage_error` without replacing that observed store. No detection guarantee is made for after-read races or ABA changes.
 
 After replacement, exact-byte readback must match the validated next-store image before success is reported. Readback failure/mismatch is `storage_error`; the implementation does not claim the old store is still present and does not attempt automatic rollback.
 
