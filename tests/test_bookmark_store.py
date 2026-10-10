@@ -115,9 +115,42 @@ class BookmarkStoreTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
 
     def test_AC003_reject_repository_local_root(self):
-        result = self.run_cli(env={**self.env, 'LOCALAPPDATA': str(Path(__file__).resolve().parents[1])})
-        self.assert_failure(result, 'configuration_error')
-        result[3].assert_not_called()
+        for marker_type in ('directory', 'file'):
+            with self.subTest(marker_type=marker_type):
+                root = self.root / ('synthetic-repo-' + marker_type)
+                root.mkdir()
+                marker = root / '.git'
+                if marker_type == 'directory':
+                    marker.mkdir()
+                else:
+                    marker.write_text('gitdir: synthetic-worktree', encoding='utf-8')
+                with patch.object(cli, 'resolve_user_access_token') as resolve:
+                    result = self.run_cli(env={**self.env, 'LOCALAPPDATA': str(root)})
+                    self.assert_failure(result, 'configuration_error')
+                    resolve.assert_not_called()
+                    result[3].assert_not_called()
+                self.assertEqual(list(root.iterdir()), [marker])
+
+    def test_AC003_nonexistent_localappdata_precedes_credentials(self):
+        root = self.root / 'synthetic-missing-root'
+        with patch.object(cli, 'resolve_user_access_token', wraps=cli.resolve_user_access_token) as resolve:
+            result = self.run_cli(env={**self.env, 'LOCALAPPDATA': str(root)})
+            self.assert_failure(result, 'configuration_error')
+            resolve.assert_not_called()
+            result[3].assert_not_called()
+        self.assertFalse(root.exists())
+
+    def test_AC003_file_localappdata_precedes_credentials(self):
+        root = self.root / 'synthetic-root-file'
+        before = b'synthetic-root-sentinel'
+        root.write_bytes(before)
+        with patch.object(cli, 'resolve_user_access_token', wraps=cli.resolve_user_access_token) as resolve:
+            result = self.run_cli(env={**self.env, 'LOCALAPPDATA': str(root)})
+            self.assert_failure(result, 'configuration_error')
+            resolve.assert_not_called()
+            result[3].assert_not_called()
+        self.assertEqual(root.read_bytes(), before)
+        self.assertEqual(list(self.root.iterdir()), [root])
 
     def test_AC003_AC004_fixed_utf8_schema_and_no_extra_files(self):
         code, out, diag, _ = self.run_cli()

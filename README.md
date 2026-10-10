@@ -10,6 +10,7 @@ The current product boundary is read-only. It normalizes successful results into
 | --- | --- | --- |
 | `read` | Parses a supported `x.com` or `twitter.com` Post URL and reads that single Post through the official API. | App-only Bearer Token |
 | `bookmarks` | Resolves the authenticated user, binds the request to that subject, and reads at most one bookmark page. | Explicit env override or lifecycle-managed OAuth 2.0 user credential |
+| `bookmarks save` | Reads one authenticated bookmark page and explicitly merges it into the fixed local plaintext JSON store. | Same user credential as `bookmarks` |
 | `likes` | Resolves the authenticated user, binds the request to that subject, and reads at most one liked-Post page. | Explicit env override or lifecycle-managed OAuth 2.0 user credential |
 | `auth login` | Runs one native/public-client Authorization Code + PKCE ceremony and commits a refresh-capable credential to the lifecycle store after bounded validation. | Client ID + exact registered loopback redirect URI; no client secret |
 | OAuth acquisition library | Runs one native/public-client Authorization Code + PKCE ceremony and returns the resulting token data in memory. | Client ID; no client secret |
@@ -55,9 +56,12 @@ Then use the existing read commands:
 python -m x_context read "https://x.com/example/status/1234567890"
 python -m x_context bookmarks
 python -m x_context bookmarks --max-results 50
+python -m x_context bookmarks save --max-results 25
 python -m x_context likes --max-results 25
 python -m x_context likes --page-token "<token-from-a-previous-page>"
 ```
+
+`bookmarks save` explicitly persists one page to `%LOCALAPPDATA%\x-context\data\bookmarks-v1.json`; `LOCALAPPDATA` must be an existing directory outside a repository. The bookmark store is UTF-8 plaintext, without encryption at rest. Items absent from a later partial page are retained and are never deleted merely because they were not returned. Plain `bookmarks` remains non-persistent.
 
 On successful `read`, `bookmarks`, or `likes`, stdout contains one canonical JSON document and structured usage diagnostics are written separately to stderr. `auth login` instead emits a small non-secret status JSON object on success. Handled failures leave stdout empty and report a stable error category on stderr.
 
@@ -67,7 +71,7 @@ Canonical output identifies the schema version, source, operation, retrieval tim
 
 - Product authority is read-only; there are no commands for posting, deleting posts, liking, bookmarking, following, or other X mutations.
 - `auth login` adds no X data-reading authority beyond the already accepted P0 scopes: `tweet.read`, `users.read`, `bookmark.read`, `like.read`, plus `offline.access` so the managed credential can be refreshed.
-- Bookmarks and liked-Post history are treated as private activity data. Collection results are process-and-return by default and are not persisted by the collection implementation.
+- Bookmarks and liked-Post history are treated as private activity data. Collection results are process-and-return by default; only explicit `bookmarks save` persists bookmark payloads in the plaintext local store.
 - Lifecycle persistence stores only the explicitly committed protected credential envelope; it does not persist collection payloads.
 - Credentials, authorization headers, raw provider responses, callback secrets, PKCE verifier/state values, protected-blob bytes, and private collection contents are excluded from normal diagnostics and retained validation evidence.
 - Provider errors fail conservatively and never trigger scraping, cookie automation, browser automation, internal GraphQL, or another unofficial fallback.

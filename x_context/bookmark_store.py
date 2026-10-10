@@ -102,7 +102,7 @@ def preflight(environ: Mapping[str, str]) -> StoreSnapshot:
     root = environ.get('LOCALAPPDATA')
     category = 'configuration_error'
     try:
-        if not isinstance(root, str) or not root.strip() or not Path(root).is_absolute():
+        if not isinstance(root, str) or not root.strip() or not Path(root).is_absolute() or not Path(root).is_dir():
             raise ValueError('invalid local root')
         path = (Path(root) / 'x-context' / 'data' / 'bookmarks-v1.json').resolve()
         # Reject storage under any ancestor repository/worktree, including a
