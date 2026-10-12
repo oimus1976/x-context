@@ -99,6 +99,7 @@ class Backend:
         self.stages = []
         self.failed = False
         self.owner = None
+        self.receipts = {}
 
     def folder(self, folder_id):
         if self.failed or folder_id != SANDBOX:
@@ -122,7 +123,12 @@ class Backend:
 
     def read(self, document_id):
         self.folder(SANDBOX)
-        return self._read(document_id, SANDBOX)[0]
+        receipt = self._read(document_id, SANDBOX)
+        # Only this public read path, used by drive._inventory to compare its
+        # expected snapshot, captures the pre-effect receipt. Internal fresh
+        # listings and CURRENT validation must never adopt a concurrent edit.
+        self.receipts[document_id] = receipt
+        return receipt[0]
 
     def list(self, folder_id):
         self.folder(folder_id)
@@ -212,13 +218,14 @@ class Backend:
             raise core.ContextError('CONNECTOR_EFFECT_REQUIRES_INSPECTION') from None
 
     def update(self, document_id, body):
+        authorized = self.receipts.get(document_id)
         docs = self.list(SANDBOX)
         old = next((doc for doc in docs if doc.id == document_id), None)
         if old is None:
             raise core.ContextError('UNEXPECTED_CONNECTOR_CHILD')
         self._allowed(old.title, body)
         fresh, revision = self._read(document_id, SANDBOX)
-        if fresh != old:
+        if fresh != old or (fresh, revision) != authorized:
             raise core.ContextError('CONCURRENT_DRIVE_CHANGE')
         try:
             self._stage(document_id, 'UPDATE_ATTEMPT')

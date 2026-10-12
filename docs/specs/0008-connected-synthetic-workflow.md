@@ -35,6 +35,12 @@ boolean is a contract for a trusted transport, not proof from an untrusted file.
 Unknown metadata or unavailable revision checks block. Do not represent a fake
 transport or the mere presence of ChatGPT tools as Python authorization.
 
+The adapter's public `read` captures the document/revision receipt used by
+the outer `drive.preview/apply` snapshot comparisons. Internal fresh listings
+never replace that receipt. `update` must match it before using a conditional
+revision write. These receipts depend on the trusted outer publisher; calling
+`read` arbitrarily is not independent publication approval.
+
 Provider references checked 2026-10-13: [Drive files.list](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)
 exposes nextPageToken/incompleteSearch; [Docs batchUpdate](https://developers.google.com/workspace/docs/api/reference/rest/v1/documents/batchUpdate)
 provides requiredRevisionId write control. These APIs establish provider

@@ -58,3 +58,14 @@ guarantee; a journal failure/provider timeout can leave a root orphan. Stop
 and reconcile the durable journal/recent creations before constructing another
 adapter instance. Independent transport/native-body/cloud qualification remains
 necessary before claiming real publishing.
+
+## Independent L2 remediation
+
+At `bf38bcf1c5b5956e21800155a23061d66e8d7d9c`, independent separate Codex
+review found CRITICAL=0, MAJOR=1, MINOR=0: a concurrent edit before the inner
+update read could be adopted and overwritten, because revision checking used
+the newly observed revision. Regression RED reproduced COMPLETE instead of
+PARTIAL_UNPUBLISHED for both P001 and CURRENT, plus a revision-only race.
+The fix binds each update to the public-read document+revision receipt checked
+by the outer publisher; internal listing never refreshes it. New subset is
+15 tests. Final exact-head validation and independent delta-L2 follow separately.

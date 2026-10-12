@@ -237,6 +237,40 @@ class ConnectorTests(unittest.TestCase):
         self.assertEqual(self.transport.items[before.id], before)
         self.assertEqual(len(self.transport.calls), 1)
 
+    def test_CW5_edit_before_inner_update_read_is_preserved_not_adopted(self):
+        for target in (drive.PREFIX + 'SYN-XCTX-P001', drive.CURRENT):
+            with self.subTest(target=target):
+                transport = Transport()
+                backend = c.Backend(transport, lambda _: None)
+                baseline = drive.preview(backend, c.SANDBOX, self.records)
+                self.assertEqual(drive.apply(backend, c.SANDBOX, self.records, baseline).status, 'COMPLETE')
+                changed = core.load_fixture('edited')
+                plan = drive.preview(backend, c.SANDBOX, changed)
+                original = backend.update
+                raced = []
+                def update(identity, body):
+                    if transport.items[identity].title == target:
+                        transport.items[identity] = replace(transport.items[identity],
+                            body='SYNTHETIC TEST DATA: UNREVIEWED CONCURRENT OWNER EDIT', revision='FAKE-RACE')
+                        raced.append(transport.items[identity])
+                    return original(identity, body)
+                backend.update = update
+                result = drive.apply(backend, c.SANDBOX, changed, plan)
+                self.assertTrue(raced)
+                self.assertEqual(result.status, 'PARTIAL_UNPUBLISHED')
+                self.assertEqual(transport.items[raced[0].id], raced[0])
+
+    def test_CW5_revision_only_change_before_inner_read_blocks(self):
+        self.publish()
+        original = self.backend.update
+        def update(identity, body):
+            self.transport.items[identity] = replace(self.transport.items[identity], revision='FAKE-NEW')
+            return original(identity, body)
+        self.backend.update = update
+        self.transport.calls.clear()
+        self.assertEqual(self.publish(core.load_fixture('edited')).status, 'PARTIAL_UNPUBLISHED')
+        self.assertEqual(self.transport.calls, [])
+
 
 if __name__ == '__main__':
     unittest.main()
