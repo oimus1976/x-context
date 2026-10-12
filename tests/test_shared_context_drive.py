@@ -120,6 +120,24 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(self.publish(self.records[:-1]).status, 'BLOCKED')
         self.assertEqual(before, self.backend.docs)
 
+    def test_AC07_coherent_old_state_restored_before_final_validation(self):
+        self.publish()
+        baseline = dict(self.backend.docs)
+        real_read = self.backend.read
+        restored = False
+        def restore_on_index_readback(document_id):
+            nonlocal restored
+            doc = real_read(document_id)
+            if doc.title == drive.CURRENT and 'SYNTHETIC WITHDRAWN' in doc.body and not restored:
+                self.backend.docs = dict(baseline)
+                restored = True
+            return doc
+        self.backend.read = restore_on_index_readback
+        result = self.publish(core.normalize(core.load_fixture('withdrawn')))
+        self.assertTrue(restored)
+        self.assertEqual(result.status, 'PARTIAL_UNPUBLISHED')
+        self.assertEqual(self.backend.docs, baseline)
+
 
 if __name__ == '__main__':
     unittest.main()

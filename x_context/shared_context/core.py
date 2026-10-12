@@ -269,7 +269,9 @@ def generate(records, output):
             finally:
                 if pending is not None:
                     pending.unlink(missing_ok=True)
-        verify(path)
+        _, observed_files = _read_managed(output_path(path))
+        if observed_files != files:
+            raise ContextError('OUTPUT_FINAL_STATE_MISMATCH')
         return counts
     except (OSError, ContextError) as error:
         if attempted:

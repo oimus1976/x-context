@@ -237,6 +237,23 @@ class SharedContextTests(unittest.TestCase):
                 core.generate(self.records, self.output)
         self.assertEqual(list(self.output.iterdir()), [])
 
+    def test_AC05_coherent_old_output_restored_before_final_validation(self):
+        core.generate(self.records, self.output)
+        baseline = self.snapshot()
+        real_read = core._read_managed
+        calls = 0
+        def restore_before_final_read(path):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                for relative, body in baseline.items():
+                    (self.output / relative).write_bytes(body)
+            return real_read(path)
+        with patch.object(core, '_read_managed', side_effect=restore_before_final_read):
+            with self.assertRaises(core.ContextError):
+                core.generate(core.load_fixture('withdrawn'), self.output)
+        self.assertEqual(self.snapshot(), baseline)
+
 
 if __name__ == '__main__':
     unittest.main()

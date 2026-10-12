@@ -168,7 +168,9 @@ No blind retry/adoption, rollback, deletion or cross-file atomicity claim.
             upsert(PREFIX + record['record_id'], core.markdown(record).decode('utf-8'))
         upsert(CURRENT, _index(records, expected))
         # Revalidate the completed set as well as the final index.
-        preview(backend, folder, records)
+        final = preview(backend, folder, records)
+        if final.snapshot != tuple(sorted(expected.values(), key=lambda doc: doc.id)):
+            raise core.ContextError('DRIVE_FINAL_STATE_MISMATCH')
         return Result('COMPLETE', attempted)
     except Exception:
         return Result('PARTIAL_UNPUBLISHED' if attempted else 'BLOCKED', attempted)

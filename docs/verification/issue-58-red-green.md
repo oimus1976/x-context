@@ -42,6 +42,15 @@ MINOR limitations documented in README/adapter contract; one writer only.
 Independent review and exact-head results must be supplied separately and are
 not inferred from this self review.
 
+Independent L2 review of `11edf314e17607554ce8bdf6d30c3e0344ddcb24`
+found two MAJOR final-state comparison gaps (local and fake Drive), CRITICAL 0,
+MINOR 0. Both accepted a self-consistent older output restored before final
+validation. Added separate fault-injected regression tests, each observed RED
+(one failure) against the original code, then compared the full final observed
+artifact/document snapshot to the intended result. Related GREEN now has
+**34 tests PASS, failures/errors/skips 0**. New exact-head full regression and
+independent delta-review must establish the remediated commit's evidence.
+
 Offline engine and fake Drive adapter are implemented. Live Drive integration
 is **PARTIAL**: `NOT_RUN_AUTH_UNAVAILABLE`, no authenticated Python backend.
 AC-11 generated-view Meowth ChatGPT/Gemini and AC-12 origin-PC-offline UAT are
