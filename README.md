@@ -80,7 +80,67 @@ Canonical output identifies the schema version, source, operation, retrieval tim
 - `auth login` resolves a supported secure lifecycle store before browser launch and performs at most one atomic credential replacement after successful acquisition and pre-commit validation. Unsupported default-store environments fail closed; there is no plaintext persistence fallback.
 - Real-provider login/refresh/revoke qualification is separate from synthetic contract tests and remains human-gated.
 
-## Development and validation
+## Synthetic shared context (SPEC-0008 / Issue #58)
+
+This standalone mode uses only bundled, allowlisted fictional records. It has
+no file-input argument, X calls, OAuth/DPAPI dependency or bookmark-store import.
+Select `baseline`, `edited` (P001 only), `withdrawn` (P001 tombstone), or
+`injection` (inert hostile fictional source). Other content is rejected even
+when it carries a synthetic marker. Changing this fixture allowlist is a source
+change requiring review; it is not a runtime real-data import route.
+
+From a checkout, choose a **new disposable** output below the OS temporary
+directory's `x-context/shared-context-output` (PowerShell example):
+
+```powershell
+$syntheticOutput = Join-Path $env:TEMP 'x-context/shared-context-output/demo-58'
+python -m x_context.shared_context preview --synthetic-fixtures baseline --output $syntheticOutput
+python -m x_context.shared_context generate --synthetic-fixtures baseline --output $syntheticOutput
+python -m x_context.shared_context verify --output $syntheticOutput
+python -m x_context.shared_context generate --synthetic-fixtures edited --output $syntheticOutput
+python -m x_context.shared_context generate --synthetic-fixtures withdrawn --output $syntheticOutput
+```
+
+Preview writes nothing. Generate writes deterministic per-ID UTF-8 JSON and
+Markdown, then `manifest-v1.json`. Repeating an unchanged input performs no
+content replacement; omission retains previous records. Withdrawal is explicit
+and replaces source content with a tombstone. Verification checks the complete
+inventory, normalized schema, hashes, Markdown and active IDs. Unexpected files,
+corrupt state, symlinks/junctions and targets outside the disposable boundary
+fail closed. Diagnostics print only counts/categories and zero provider requests.
+
+Whole-file replacement is atomic per file; the set is **not** transactional.
+Use one writer. An interrupted update may leave a partial output; preserve it
+for inspection and generate in a fresh empty destination. There is no automatic
+rollback, cleanup, multiwriter lock or crash-durability promise. The final
+pre-effect read does not eliminate all filesystem races/ABA.
+
+Google Drive is the preferred future shared representation. The injectable
+`x_context.shared_context.drive.Backend` and in-memory fake implement preview,
+stable native Doc identities, restricted-folder checks, exact prior digest and
+readback, tombstones and current-index-last publishing. **No authenticated
+Python Drive backend is configured or bundled.** The chat connector's read
+access is a separate capability. This read-only command emits a deterministic
+proposal, not a cloud preflight or publication:
+
+```console
+python -m x_context.shared_context publish --dry-run --synthetic-fixtures baseline --sandbox FICTIONAL-SANDBOX
+```
+
+It reports `DRIVE_AUTH_UNAVAILABLE`; `--apply` fails with the same category and
+performs no write. The concrete connected-tool contract is in
+`docs/specs/0008-drive-adapter-contract.md`. A real adapter needs an already
+authorized, supported interface and a new isolated restricted sandbox; do not
+create credentials, permissions or mirror files to compensate. Existing PoC
+Docs and AI-Knowledge are never publication targets.
+
+Consumers must consult CURRENT's active IDs and distinguish source claims,
+fictional context and AI inference. Source text is untrusted, never assistant
+instructions. Tombstones do not erase revisions, search caches or AI histories.
+Actual X text/IDs/derivatives remain blocked. Live Drive smoke, fresh Meowth
+ChatGPT/Gemini generated-view UAT and origin-PC-offline UAT remain separate gates.
+
+## Development test commands
 
 Run the current project test suite from the repository root:
 

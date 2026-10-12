@@ -1,5 +1,15 @@
 # Changelog
 
+## SPEC-0008 synthetic shared context — Issue #58
+
+- Add a standalone offline mode for reviewed fictional fixtures: preview,
+  deterministic JSON/Markdown/manifest generation, no-op updates, verification
+  and explicit withdrawal tombstones; reject arbitrary files/content.
+- Add a tiny injectable native-Doc publisher and in-memory fake with stable
+  identities, restricted-sandbox validation, per-record readback and index-last
+  completion. Live Drive publishing remains unavailable; real-data sharing and
+  X/OAuth integration are outside this slice.
+
 Record meaningful semantic changes. This is not a duplicate commit log.
 
 For each entry, prefer:

@@ -1,5 +1,28 @@
 # Test Matrix
 
+## SPEC-0008 synthetic shared context (Issue #58)
+
+Requirement authority: Issue #57 v0.2 and review comment 6125401638;
+tracked contract: `docs/specs/0008-synthetic-shared-context.md`.
+Test-first scope is standalone, offline, approved fictional fixtures only.
+
+| AC | Required automated evidence | External evidence / limit |
+| --- | --- | --- |
+| AC-01 | `test_shared_context`: five-record JSON/Markdown/manifest schema, source references and hashes | Portable format only |
+| AC-02 | repeat byte equality and one-record update isolation | No clock fields |
+| AC-03 | malformed/duplicate JSON, wrong types/IDs/refs/time/Unicode/content/store/path; fail before writes | No arbitrary file importer |
+| AC-04 | injection fixture rendered as untrusted quoted source, no execution | No universal LLM enforcement claim |
+| AC-05 | preview/no-op/update/withdrawal/omission, managed output validation and readback | Single writer, per-file replacement; no cross-file transaction |
+| AC-06 | `test_shared_context_drive`: first/repeat publish, stable IDs/URLs, zero repeat writes | Fake backend only until authenticated runtime exists |
+| AC-07 | sharing/title/parent/marker/duplicate/concurrency/readback/failure rejection; index last, partial status | No rollback or deletion |
+| AC-08 | same-Doc tombstone, current-index exclusion | Revisions/caches not purged |
+| AC-09 | denied network/import dependencies, temporary Windows filesystem, whole-suite regression | No real X or credential-file access |
+| AC-10 | concrete injectable adapter and read-only publication plan | Live restricted Drive smoke pending; auth unavailable is not PASS |
+| AC-11 | reader guidance and current-index links | Fresh Meowth ChatGPT + Gemini generated-view UAT PENDING |
+| AC-12 | no local test substitutes for device-offline proof | Origin PC off UAT PENDING |
+| AC-13 | fixture names/content allowlist, no provider/credential imports or real-path input | Real-data gates remain blocked |
+| AC-14 | full suite, policy verifier, exact-head runner, categorized adversarial review | CI/review must be reported at observed SHA |
+
 Related specification: `docs/specs/0001-mvp.md`, `docs/specs/0001-fr006-read-clarification.md`, `docs/specs/0001-authenticated-subject-clarification.md`, `docs/specs/0002-oauth-acquisition-clarification.md`, `docs/specs/0003-credential-lifecycle.md`, `docs/specs/0004-oauth-bootstrap-cli.md`, `docs/specs/0005-post-merge-closeout-command.md`, `docs/specs/0005-closing-issue-state-clarification.md`, and `docs/specs/0006-own-post-read.md`
 Related work items: Issue #1 (spec baseline), Issue #5 (FR-005 minimal `read` schema), Issue #7 (FR-002 official single-post lookup), Issue #9 (FR-006 `read` CLI), Issue #11 (authenticated-subject resolution/binding), Issue #23 (OAuth user-token acquisition), Issue #32 (credential lifecycle), Issue #36 (end-user OAuth bootstrap), Issue #38 (authoritative post-merge closeout), Issue #40 (closing-Issue state compatibility), Issue #42 (own-post specification), Issue #45 (own-post implementation)
 
