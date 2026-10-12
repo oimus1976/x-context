@@ -1,6 +1,21 @@
 # Project Status
 
-## Issue #58 — synthetic shared context (Draft implementation)
+## Issue #60 — synthetic connected transport (Draft implementation)
+
+PR #59 merged as `327bee86e917be250f19cb5a77127d6c8f5eaa05`; normal
+non-admin Windows non-destructive closeout independently passed on 2026-10-13,
+canonical main synchronized and clean; existing branches/worktrees retained.
+Issue #60 adds an injected synthetic adapter with empty-root staging, verified
+move before content, complete-inventory/owner-only checks and stage journaling.
+Requirement/test mapping: `docs/specs/0008-connected-synthetic-workflow.md`.
+No authenticated Python bridge is installed. The connected tools expose no
+verified complete all-type inventory, so generated five-record cloud publication
+and live update/withdrawal are NOT_RUN_UNSUPPORTED_INVENTORY_AND_BRIDGE.
+Meowth generated-view/offline-origin UAT remains PENDING. Existing sentinel is
+read-only, X/OAuth/actual-data traffic stays zero. Issue #60 remains open;
+independent exact-head review and human Ready/merge are separate gates.
+
+## Completed Issue #58 — synthetic shared context (merged PR #59)
 
 SPEC-0008 v0.2 from Issue #57 now has a standalone offline generator, named
 allowlisted five-record fixtures, preview/verify, deterministic JSON/Markdown
@@ -9,7 +24,7 @@ No actual bookmark/credential read or live X request is part of this feature.
 Python Drive authentication is unavailable: live publication is partial
 integration, AC-10 NOT_RUN_AUTH_UNAVAILABLE; generated-view Meowth and origin-PC-
 offline UAT (AC-11/12) remain PENDING. Validation/review evidence is recorded in
-the Issue #58 Draft PR at its observed SHA. Ready/merge are human-final.
+the Issue #58 PR at its observed SHA. Ready/merge are human-final for follow-ups.
 
 
 ## 30-second state

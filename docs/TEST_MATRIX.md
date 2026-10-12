@@ -1,5 +1,23 @@
 # Test Matrix
 
+## Issue #60 connected synthetic transport
+
+Requirement: `docs/specs/0008-connected-synthetic-workflow.md` (CW-1..6).
+Tests: `tests/test_shared_context_connector.py`, fake transport only.
+
+| Issue #60 AC | Contract and evidence |
+| --- | --- |
+| AC-D1/D2 | Prior connected smoke comment 6133391331; fresh metadata/text reads confirm sandbox/parent/owner-only and unchanged sentinel. CW-1/3 fake create→move→write/order, permission-expansion and partial-root tests. No new live-create claim. |
+| AC-D3 | CW-6 generated directory verification/corruption refusal; CW-2 inventory completeness/unknown/duplicate rejection. Live NOT_RUN_UNSUPPORTED_INVENTORY_AND_BRIDGE. |
+| AC-D4 | CW-5 repeat zero writes, edit+withdrawal intended-only writes/stable IDs/CURRENT-last, revision conflict and old index preservation. Fake PASS, live NOT_RUN. |
+| AC-D5/D6 | Meowth ChatGPT/Gemini generated-view and deliberately offline-origin UAT PENDING; not substituted by fake tests. |
+| AC-D7 | Fixture-body/target allowlist and no-journal refusal, immutable sentinel; adapter has no X/OAuth/auth/network implementation. Live cloud writes zero this workstream. |
+
+CW-4 tests preserve Unicode/blank lines/trailing newline; normalize CRLF only,
+reject lone CR/surrogates/nontext/oversize. Fake success is not native Docs
+format or parsed-body transport qualification. Partial/ambiguous effects poison
+the adapter instance; stages preserve identity, no retry/adoption/delete.
+
 ## SPEC-0008 synthetic shared context (Issue #58)
 
 Requirement authority: Issue #57 v0.2 and review comment 6125401638;
