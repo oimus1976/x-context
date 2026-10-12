@@ -1,5 +1,17 @@
 # Project Status
 
+## Issue #58 — synthetic shared context (Draft implementation)
+
+SPEC-0008 v0.2 from Issue #57 now has a standalone offline generator, named
+allowlisted five-record fixtures, preview/verify, deterministic JSON/Markdown
+and manifest, explicit tombstones and a fake-backed injectable Drive publisher.
+No actual bookmark/credential read or live X request is part of this feature.
+Python Drive authentication is unavailable: live publication is partial
+integration, AC-10 NOT_RUN_AUTH_UNAVAILABLE; generated-view Meowth and origin-PC-
+offline UAT (AC-11/12) remain PENDING. Validation/review evidence is recorded in
+the Issue #58 Draft PR at its observed SHA. Ready/merge are human-final.
+
+
 ## 30-second state
 
 - **Issue #53 / Draft PR #54 (2026-10-10):** Published head `b1722b006747541b2dc03868d09e0de7560b5224` includes explicit SPEC-0007 `bookmarks save` and the review-5475286240 local `storage_error` exit-2 correction. Exact-head `project-ci` (38034013823) / `policy-check` (38034013793) succeeded; Linux ran 291 tests with one platform skip. The operator-provided independent L2 report for that head is recorded in PR comment `6095150524`: CRITICAL=0, MAJOR=0, MINOR=5; it is not a new local rerun or a GitHub review submitted by the independent reviewer. The current uncommitted batch addresses MINOR-1..4: synthetic repository markers, existing-directory LOCALAPPDATA preflight, current-status sync, and README save disclosures. Historical RED/GREEN Windows 291/291 evidence remains in `docs/verification/issue-53-local-red-green.md` as a reported pre-commit checkpoint. Local validation passed 27 bookmark-store tests and 293 total tests with zero skips; a markerless archive also passed all 293 tests and baseline, with all 100 source-file hashes/inventory unchanged. Publication, new exact-head CI and independent delta-L2 are still required; final PR-body sync (MINOR-5), owner C2 and human Ready/merge remain pending. Plain bookmarks stays non-persistent; the store stays plaintext, one-subject, single-writer, and never prunes absent items. No live X API, actual bookmarks, actual credentials, or destructive cleanup is part of this batch.
