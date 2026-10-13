@@ -340,3 +340,10 @@ The preferred first vertical slice after SPEC-0001 is accepted is:
 10. end-user OAuth bootstrap composition before adding P1 data surfaces.
 
 This ordering does not authorize scope expansion; it only sequences the accepted MVP requirements.
+
+## SPEC-0008 unattended app-scoped publisher (Issue #62)
+
+A01..A09 are mapped to RED/GREEN API, lifecycle, registry and CLI tests in
+`tests/test_shared_context_google.py`; normative contract and authorization gate:
+`docs/specs/0008-unattended-drive-publisher.md`. A08/live A02/A07 are
+LIVE_GOOGLE_AUTH_PENDING. PC-off/Meowth: OPTIONAL/DEFERRED, never PASS.

@@ -1,5 +1,19 @@
 # Project Status
 
+## Issue #62 — app-scoped unattended synthetic publisher (Draft implementation)
+
+Latest main / merged PR61: 440073d52584d7a9a6c1fd9960795d5999db8f69.
+Separate Google Desktop OAuth/DPAPI lifecycle and REST backend reuse publisher
+and connector checks: drive.file only, new private app folder, exact-ID registry,
+app-visible pagination, revision writes, CURRENT-last and pending-effect journal.
+Issue60's fixed target/global-inventory contract is preserved. No Google
+project/client/first consent/real credential saving/product API smoke performed:
+LIVE_GOOGLE_AUTH_PENDING. No real X/store/credential access or sharing.
+Meowth/PC-off OPTIONAL/DEFERRED, not acceptance blockers or PASS. Issue60's
+manual PoC remains separate. Ready/merge/cleanup remain human-final.
+See unattended addendum/ADR0006 for owner C2 and explicit authorization plan.
+
+
 ## Issue #60 — synthetic connected transport (Draft implementation)
 
 PR #59 merged as `327bee86e917be250f19cb5a77127d6c8f5eaa05`; normal

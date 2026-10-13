@@ -180,3 +180,51 @@ The command is intentionally non-destructive. It reuses `scripts/verify_local_cl
 The first OAuth bootstrap CLI is intentionally narrow: it supports managed login only. There is still no end-user CLI for local credential status/deletion or provider revoke, and packaging/release/distribution are not established. Real-provider login/refresh/revoke qualification remains a separate human decision.
 
 Licensed under the MIT License. See LICENSE.
+
+### Unattended synthetic Drive publisher (Issue #62)
+
+A separate Windows one-shot publisher uses a user-owned Desktop OAuth client
+with `drive.file` only, a fresh private app-created folder and exact managed IDs.
+It reuses no-op/edit/tombstone/CURRENT-last and revision receipt checks. Complete
+pagination is app-visible only; hidden owner-added files cannot be excluded.
+Keep the new folder dedicated. Original PoC/sentinel files are never adopted.
+
+**First authorization has NOT been performed.** Owner must choose account/project
+and separately approve project/client setup, consent, DPAPI persistence and new
+synthetic sandbox. Read [the authorization/recovery plan](docs/specs/0008-unattended-drive-publisher.md)
+and [ADR-0006](docs/adr/0006-app-scoped-synthetic-drive.md). Safe local plan:
+
+```powershell
+python -m x_context.shared_context.google_publish plan-auth
+```
+
+Only after that separate owner approval, download Desktop client config outside
+Git and run these explicit one-time commands:
+
+```powershell
+python -m x_context.shared_context.google_publish login --approve-new-auth --client-config C:\private-google-client\desktop-client.json
+python -m x_context.shared_context.google_publish init-sandbox --apply
+python -m x_context.shared_context.google_publish publish --synthetic-fixtures baseline --dry-run
+python -m x_context.shared_context.google_publish publish --synthetic-fixtures baseline --apply
+```
+
+Subsequent one-shot invocations refresh near-expired access without a browser.
+Use `edited` / `withdrawn` named fiction for changes. Dry-run reads remote state
+and may refresh protected credentials but writes no remote content. No-op writes
+no content/publication registry. No real file importer or X transfer. The original
+disconnected publish command remains; use the explicit google_publish module.
+
+Google secrets: `%LOCALAPPDATA%\x-context\google-drive\credential-v1.dpapi`;
+nonsecret IDs/pending journal: `publication-v1.json` alongside it. DPAPI protects
+at rest, not from same-user processes. Never paste tokens or check in config.
+External OAuth Testing refresh grants expire after **7 days** for this scope;
+production status is a separate owner choice. No permanent refresh or automatic
+Task Scheduler setup is claimed.
+
+`PARTIAL_UNPUBLISHED` / `GOOGLE_EFFECT_REQUIRES_INSPECTION` means stop and inspect
+journal IDs/phases and matching Drive objects. Do not erase registry/journal to
+force retry or adopt same-title files. No automatic cleanup/rollback/history
+purge. Explicit `login --approve-new-auth --reauthorize ...` renews credentials
+after new consent and retains registry/journal. Google third-party access removal
+revokes the grant; local credential deletion alone does not. Live qualification
+is LIVE_GOOGLE_AUTH_PENDING. Meowth/PC-off are OPTIONAL/DEFERRED, never PASS.

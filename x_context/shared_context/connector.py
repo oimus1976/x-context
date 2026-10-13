@@ -94,6 +94,7 @@ class Backend:
     def __init__(self, transport: Transport, journal):
         if not callable(journal):
             raise core.ContextError('STAGE_JOURNAL_REQUIRED')
+        self.target = SANDBOX
         self.transport = transport
         self.journal = journal
         self.stages = []
@@ -122,8 +123,8 @@ class Backend:
                               item.title, parent, True, canonical_text(item.body)), item.revision
 
     def read(self, document_id):
-        self.folder(SANDBOX)
-        receipt = self._read(document_id, SANDBOX)
+        self.folder(self.target)
+        receipt = self._read(document_id, self.target)
         # Only this public read path, used by drive._inventory to compare its
         # expected snapshot, captures the pre-effect receipt. Internal fresh
         # listings and CURRENT validation must never adopt a concurrent edit.
@@ -167,7 +168,7 @@ class Backend:
             # Only allow a CURRENT constructed from the verified record docs.
             index = drive.parse_index(body)
             records = core.normalize([e['record'] for e in index['records'].values()])
-            docs = {d.title: d for d in self.list(SANDBOX)}
+            docs = {d.title: d for d in self.list(self.target)}
             for record in records:
                 doc = docs.get(drive.PREFIX + record['record_id'])
                 if doc is None or doc.body != core.markdown(record).decode('utf-8'):
@@ -219,12 +220,12 @@ class Backend:
 
     def update(self, document_id, body):
         authorized = self.receipts.get(document_id)
-        docs = self.list(SANDBOX)
+        docs = self.list(self.target)
         old = next((doc for doc in docs if doc.id == document_id), None)
         if old is None:
             raise core.ContextError('UNEXPECTED_CONNECTOR_CHILD')
         self._allowed(old.title, body)
-        fresh, revision = self._read(document_id, SANDBOX)
+        fresh, revision = self._read(document_id, self.target)
         if fresh != old or (fresh, revision) != authorized:
             raise core.ContextError('CONCURRENT_DRIVE_CHANGE')
         try:
