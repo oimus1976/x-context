@@ -1,5 +1,15 @@
 # Changelog
 
+## Issue #60 — synthetic connected transport boundary
+
+- Added a small injected adapter for verified generated SPEC-0008 fixtures,
+  exact sandbox/owner-only metadata, complete all-type inventory, immutable
+  sentinel exclusion, faithful CRLF canonicalization and journaled empty-root
+  staging followed by verified move before text insertion.
+- Preserved existing CURRENT-last/stable-ID/no-op/withdrawal behavior and the
+  disconnected CLI. No Python authentication setup or live-publication claim;
+  current connected-tool inventory and bridge limitations remain blockers.
+
 ## SPEC-0008 synthetic shared context — Issue #58
 
 - Add a standalone offline mode for reviewed fictional fixtures: preview,

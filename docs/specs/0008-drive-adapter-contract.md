@@ -4,6 +4,11 @@ Requirement: [Issue #57 v0.2](https://github.com/oimus1976/x-context/issues/57).
 Implementation: [Issue #58](https://github.com/oimus1976/x-context/issues/58).
 Risk: HIGH_IMPACT (SECURITY_BOUNDARY, EXTERNAL_WRITE, PLATFORM_DEPENDENT).
 
+Issue #60 adds the narrowly allowlisted synthetic-only empty-root staging
+exception in [connected workflow](0008-connected-synthetic-workflow.md).
+All other adapters retain the exact-in-folder creation requirement below.
+Neither interface provides Python authentication or a live cloud PASS.
+
 ## Narrow input and local authority
 
 `--synthetic-fixtures` is an enum of bundled sets, not a filename or directory.

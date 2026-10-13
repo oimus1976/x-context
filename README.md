@@ -1,5 +1,14 @@
 # x-context
 
+Issue #60's [synthetic connected workflow](docs/specs/0008-connected-synthetic-workflow.md)
+adds an injected adapter for an already-authorized transport. It consumes
+verified SPEC-0008 output and permits only empty-root Doc creation followed by
+verified private-sandbox move before text insertion. It does not configure
+Python authentication. Complete all-type inventory and a callable supported
+bridge remain unavailable in the current connection; live generated publication
+is NOT_RUN, and `publish --apply` still fails with `DRIVE_AUTH_UNAVAILABLE`.
+No X API, actual bookmarks, OAuth setup or real-content transfer is involved.
+
 `x-context` is an experimental, narrow Python tool and library for reading X content for local tooling and AI-assisted analysis. It uses the official X API and deliberately excludes scraping, browser-cookie reuse, and internal or unofficial API fallbacks.
 
 The current product boundary is read-only. It normalizes successful results into a small canonical JSON envelope and emits separate structured diagnostics for operational visibility.
