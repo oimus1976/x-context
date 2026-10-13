@@ -28,3 +28,21 @@ live Python publish NOT_RUN. No actual X/bookmark/private source read or sharing
 original PoC/sentinel mutation, Ready/merge/cleanup/scheduler. Meowth/PC-off are
 OPTIONAL/DEFERRED, never PASS. Owner must approve concrete account/project/scope/
 storage/revoke plan before bootstrap; code/fake tests do not grant that authority.
+
+## Exact-head review and validation checkpoint
+
+At 960ad4c4623d0bf0557f57431efc55c455d726a3, parent independently ran all
+367 tests PASS (100.344s), no failures/errors/skips; baseline/diff PASS, clean
+topic and canonical main. Separate Codex implementation L2: CRITICAL0/MAJOR0/
+MINOR1; independent Google25 and shared-context52 tests PASS. MINOR1 identified
+missing approved-bootstrap fake integration coverage, with no observed bug.
+Four added fake server/browser/token/store tests now cover success, wrong-state
+then success, denied/wrong-state timeout, widened/missing initial scope, missing
+refresh, exchange and persistence failures. They perform no HTTP/browser/real
+auth. New29 PASS. No implementation change; final relevant exact-head suite and
+independent delta review are recorded in the Draft PR after the new commit.
+
+Fake API observed first publication uses231 Docs GETs and859 Drive calls.
+Quota/cost qualification is documented using current official limits: project
+quotas may vary; avoid rapid successive invocation; no blind mutation retry.
+Live latency, quota behavior, token exchange and native metadata remain NOT_RUN.

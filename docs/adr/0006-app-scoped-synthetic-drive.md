@@ -44,7 +44,7 @@ Pre-implementation independent design L2: separate Codex agent, CRITICAL0/MAJOR0
 Fake APIs do not qualify live scope/permission fields/native rendering/lifetime.
 Stop before project/client creation, first consent or real token saving. Owner
 must select account/project and approve the addendum plan. External Testing
-refresh grants for drive.file expire after7 days; production status/scheduling
+refresh grants for drive.file expire after 7 days; production status/scheduling
 are separate choices and no refresh token is permanent. Revoke through Google's
 third-party access settings; local deletion alone is not revocation. Inspect
 pending journal IDs and remote objects before explicit operator reconciliation;

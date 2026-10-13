@@ -87,3 +87,18 @@ Primary sources checked 2026-10-13:
 PC-off and Meowth UAT are OPTIONAL/DEFERRED, not PASS and not release blockers
 for Issue62. New folder ChatGPT/Gemini evidence still requires approved live setup.
 Ready and merge remain human-final; Draft code completion is not live qualification.
+
+## Quota and cost qualification before approved live setup
+
+Confirm actual project quotas/billing with the owner, not only public defaults.
+Current official Docs default is 300 reads/60 writes per user per project per
+minute. This five-record fake first publication observes 231 Docs GETs and 859
+Drive calls (checks are deliberately repeated). These are fake call counts,
+not measured live usage/latency. Back-to-back runs can exceed quotas; avoid rapid
+repeats and wait for a new quota window before the next operator invocation.
+Provider throttling/403/429 stops; no automatic mutation retry. A partial run
+retains the pending journal and needs inspection, not blind repeat. Drive limits
+changed for newly created projects in May2026 and quota-unit/daily billing rules
+must be checked on the chosen project. No quota increase/billing change occurs.
+- https://developers.google.com/workspace/docs/api/limits
+- https://developers.google.com/workspace/drive/api/guides/limits

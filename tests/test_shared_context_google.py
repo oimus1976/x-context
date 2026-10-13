@@ -438,4 +438,87 @@ print(json.dumps(dict(status=result.status,writes=result.writes_attempted,refres
             self.assertEqual(str(caught.exception),'GOOGLE_BOOTSTRAP_OWNER_APPROVAL_REQUIRED')
 
 
+
+
+class BootstrapTests(unittest.TestCase):
+    def run_bootstrap(self,callback='valid',payload=None,token_error=False,store_error=False):
+        from urllib.parse import parse_qs,urlparse,urlencode
+        accepted=[]; codes=[]; token_calls=[]
+        class Store:
+            def load(self):return None
+            def save(self,record):
+                if store_error:raise RuntimeError('FAKE-SECRET store failure')
+                accepted.append(record)
+        url=[]
+        class Server:
+            def __init__(self,address,handler):self.handler=handler;self.server_port=12345;self.count=0
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def handle_request(self):
+                self.count+=1
+                fields=parse_qs(urlparse(url[0]).query)
+                state=fields['state'][0]
+                if callback=='wrong-state' or callback=='wrong-then-valid' and self.count==1:state='WRONG'
+                query={'state':state,'code':'FAKE-CODE'}
+                if callback=='denied':query={'state':state,'error':'access_denied'}
+                handler=self.handler.__new__(self.handler)
+                handler.path='/?'+urlencode(query)
+                handler.send_response=lambda code:codes.append(code)
+                handler.end_headers=lambda:None
+                handler.wfile=io.BytesIO()
+                handler.do_GET()
+        def exchange(form):
+            token_calls.append(form)
+            if token_error:raise RuntimeError('FAKE-SECRET provider failure')
+            return payload if payload is not None else dict(access_token='FAKE-ACCESS',refresh_token='FAKE-REFRESH',expires_in=3600,token_type='Bearer',scope=auth.SCOPE)
+        # Every input/output is fiction; fake server and browser perform no HTTP/UI.
+        with tempfile.TemporaryDirectory() as root:
+            client=Path(root)/'desktop.json'
+            client.write_text(json.dumps({'installed':dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',auth_uri=auth.AUTHORIZE,token_uri=auth.TOKEN)}))
+            with patch.object(auth,'HTTPServer',Server),patch.object(auth.webbrowser,'open',side_effect=lambda value:url.append(value) or True),patch.object(auth,'token_request',side_effect=exchange),patch.object(auth.time,'monotonic',side_effect=[0,1,2,200]),patch.object(auth.time,'time',return_value=1000),patch.object(auth,'os',__import__('types').SimpleNamespace(name='nt')):
+                try:
+                    auth.bootstrap(Store(),str(client),approved=True)
+                    error=None
+                except core.ContextError as caught:
+                    error=str(caught)
+        return accepted,codes,token_calls,error
+
+    def test_A02_bootstrap_approved_success_and_wrong_state_then_valid(self):
+        for callback in ('valid','wrong-then-valid'):
+            accepted,codes,calls,error=self.run_bootstrap(callback)
+            self.assertIsNone(error)
+            self.assertEqual(len(accepted),1)
+            self.assertEqual(accepted[0].scopes,(auth.SCOPE,))
+            self.assertEqual(accepted[0].refresh_token,'FAKE-REFRESH')
+            self.assertEqual(codes,[200] if callback=='valid' else [400,200])
+            self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0]['code'],'FAKE-CODE')
+            self.assertEqual(calls[0]['grant_type'],'authorization_code')
+            self.assertGreaterEqual(len(calls[0]['code_verifier']),43)
+            self.assertEqual(calls[0]['redirect_uri'],'http://127.0.0.1:12345/')
+
+    def test_A02_bootstrap_wrong_state_and_denial_no_exchange_or_save(self):
+        for callback in ('wrong-state','denied'):
+            accepted,codes,calls,error=self.run_bootstrap(callback)
+            self.assertEqual(accepted,[]);self.assertEqual(calls,[])
+            self.assertTrue(all(code==400 for code in codes))
+            self.assertEqual(error,'GOOGLE_BOOTSTRAP_FAILED')
+
+    def test_A02_bootstrap_scope_widen_missing_refresh_exchange_fail_no_save(self):
+        good=dict(access_token='FAKE-ACCESS',refresh_token='FAKE-REFRESH',expires_in=3600,token_type='Bearer',scope=auth.SCOPE)
+        bad=[dict(good,scope='https://www.googleapis.com/auth/drive'),dict(good,scope=None),dict(good,refresh_token=None),dict(good,token_type='Other')]
+        for payload in bad:
+            accepted,codes,calls,error=self.run_bootstrap(payload=payload)
+            self.assertEqual(accepted,[]);self.assertEqual(len(calls),1)
+            self.assertEqual(error,'GOOGLE_AUTH_REAUTHORIZE_OR_RETRY_LATER')
+        accepted,codes,calls,error=self.run_bootstrap(token_error=True)
+        self.assertEqual(accepted,[]);self.assertEqual(error,'GOOGLE_BOOTSTRAP_FAILED')
+        self.assertNotIn('FAKE-SECRET',error)
+
+    def test_A02_bootstrap_persistence_fail_safe_category(self):
+        accepted,codes,calls,error=self.run_bootstrap(store_error=True)
+        self.assertEqual(accepted,[]);self.assertEqual(len(calls),1)
+        self.assertEqual(error,'GOOGLE_BOOTSTRAP_FAILED')
+
+
 if __name__ == '__main__': unittest.main()
