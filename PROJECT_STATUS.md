@@ -1,5 +1,22 @@
 # Project Status
 
+## PR #63 review #5518750357 — Google callback issuer correction
+
+Existing branch `codex/issue-62-drive-api`, starting head `2505229003cfeff382eb0388097e30dc4f278e0d`.
+The operator reported a real first-login loopback HTTP 400 with Google's RFC9207
+`iss` parameter; token exchange, credential persistence and CLI outcome remain
+unconfirmed. No callback URL/code or screenshot is retained here.
+The correction requires one exact `https://accounts.google.com` issuer, rejects
+missing/nonexact issuers and all duplicate/unknown keys (including blank keys),
+and preserves state, code, PKCE, endpoint, timeout and redaction boundaries.
+Google advertises issuer support, so issuer-less callbacks are unsupported.
+Fictional Google-shaped callback RED reproduced; bootstrap GREEN 12 PASS.
+Full regression, committed exact-head evidence, CI and independent delta L2 are
+recorded in Draft #63; pre-commit checkpoint: `docs/verification/issue-62-red-green.md`.
+This correction performs no real Google login, actual credential read/save,
+Drive write, Ready/merge or cleanup. Real provider qualification remains pending;
+earlier sections' NOT_RUN statements describe those implementation checkpoints.
+
 ## Issue #62 — app-scoped unattended synthetic publisher (Draft implementation)
 
 Latest main / merged PR61: 440073d52584d7a9a6c1fd9960795d5999db8f69.

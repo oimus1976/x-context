@@ -24,6 +24,7 @@ from .google_api import NoRedirect, LIMIT
 SCOPE = 'https://www.googleapis.com/auth/drive.file'
 TOKEN = 'https://oauth2.googleapis.com/token'
 AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth'
+ISSUER = 'https://accounts.google.com'
 # Downloaded Desktop metadata may use the older official URL. Requests stay v2.
 CLIENT_AUTH_URIS = ('https://accounts.google.com/o/oauth2/auth', AUTHORIZE)
 
@@ -204,8 +205,12 @@ def bootstrap(store, client_config, *, approved=False, reauthorize=False):
                 pass
             def do_GET(self):
                 parsed=urlparse(self.path)
-                args=parse_qs(parsed.query)
-                if (parsed.path != '/' or set(args) - {'state','code','scope','authuser','prompt'}
+                # Keep blanks so duplicate/unknown empty parameters cannot disappear.
+                args=parse_qs(parsed.query,keep_blank_values=True)
+                if (parsed.path != '/' or set(args) - {'state','code','scope','authuser','prompt','iss'}
+                        or any(len(values) != 1 for values in args.values())
+                        # Google declares RFC 9207 support: missing iss also fails closed.
+                        or args.get('iss') != [ISSUER]
                         or args.get('state') != [state] or len(args.get('code',[])) != 1 or not safe(args['code'][0])):
                     self.send_response(400); self.end_headers(); return
                 receipt['code']=args['code'][0]

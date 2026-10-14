@@ -68,6 +68,26 @@ Primary references checked 2026-10-14:
 - https://developers.google.com/api-client-library/dotnet/guide/aaa_client_secrets
 - https://developers.google.com/identity/protocols/oauth2/native-app
 
+### A02 callback issuer (PR #63 review #5518750357)
+
+Google callback responses must contain exactly one `iss`, whose form-decoded
+value is exactly `https://accounts.google.com` (simple case-sensitive string
+comparison, without URL normalization). Missing or empty issuer is rejected:
+Google's public metadata declares RFC 9207 support, so older issuer-less
+callbacks are deliberately unsupported. No runtime discovery or new endpoint
+selection is introduced. The only newly allowed key is `iss`; the complete
+allowlist remains `state`, `code`, `scope`, `authuser`, `prompt`, `iss`.
+Every supplied key must have exactly one value, including optional keys and
+blank values; unknown keys (even blank/bare) and duplicate decoded keys fail
+closed. Existing exact state, safe single code, fixed token endpoint, redirect,
+S256 PKCE and timeout checks remain. Rejection returns HTTP 400 and cannot
+record a code, exchange tokens or save credentials. Diagnostics never echo
+callback URLs/values. A later valid callback may still complete within timeout.
+
+Primary references checked 2026-10-14 (public, no authenticated API request):
+- https://www.rfc-editor.org/rfc/rfc9207.html#section-2.4
+- https://accounts.google.com/.well-known/openid-configuration
+
 ## Explicit owner authorization gate (not executed in this change)
 
 Before creating a project/client, opening first consent or saving credentials,

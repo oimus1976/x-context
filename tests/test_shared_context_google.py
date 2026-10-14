@@ -442,7 +442,7 @@ print(json.dumps(dict(status=result.status,writes=result.writes_attempted,refres
 
 class BootstrapTests(unittest.TestCase):
     def run_bootstrap(self,callback='valid',payload=None,token_error=False,store_error=False,
-                      client_values=None,metadata_rejected=False):
+                      client_values=None,metadata_rejected=False,callback_query=None,callback_suffix=''):
         from urllib.parse import parse_qs,urlparse,urlencode
         accepted=[]; codes=[]; token_calls=[]
         class Store:
@@ -460,10 +460,11 @@ class BootstrapTests(unittest.TestCase):
                 fields=parse_qs(urlparse(url[0]).query)
                 state=fields['state'][0]
                 if callback=='wrong-state' or callback=='wrong-then-valid' and self.count==1:state='WRONG'
-                query={'state':state,'code':'FAKE-CODE'}
+                query={'state':state,'code':'FAKE-CODE','iss':'https://accounts.google.com'}
                 if callback=='denied':query={'state':state,'error':'access_denied'}
+                if callback_query is not None:query=callback_query(query)
                 handler=self.handler.__new__(self.handler)
-                handler.path='/?'+urlencode(query)
+                handler.path='/?'+urlencode(query,doseq=True)+callback_suffix
                 handler.send_response=lambda code:codes.append(code)
                 handler.end_headers=lambda:None
                 handler.wfile=io.BytesIO()
@@ -497,6 +498,58 @@ class BootstrapTests(unittest.TestCase):
                     self.assertEqual(parse_qs(urlparse(url[0]).query)['scope'],
                                      ['https://www.googleapis.com/auth/drive.file'])
         return accepted,codes,token_calls,error
+
+    def test_A02_bootstrap_google_issuer_callback(self):
+        # Fictional Google-shaped response, independent of production constants.
+        accepted,codes,calls,error=self.run_bootstrap(callback_query=lambda query:dict(
+            query,iss='https://accounts.google.com',
+            scope='https://www.googleapis.com/auth/drive.file',authuser='0',prompt='consent'))
+        self.assertIsNone(error)
+        self.assertEqual(codes,[200]);self.assertEqual(len(calls),1)
+        self.assertEqual(len(accepted),1)
+        self.assertEqual(calls[0]['code'],'FAKE-CODE')
+        self.assertEqual(calls[0]['grant_type'],'authorization_code')
+        self.assertEqual(calls[0]['redirect_uri'],'http://127.0.0.1:12345/')
+        self.assertNotIn('iss',calls[0])
+        self.assertEqual(accepted[0].scopes,('https://www.googleapis.com/auth/drive.file',))
+
+    def assert_callback_rejected(self,**kwargs):
+        accepted,codes,calls,error=self.run_bootstrap(**kwargs)
+        self.assertEqual(codes,[400,400])
+        self.assertEqual(calls,[]);self.assertEqual(accepted,[])
+        self.assertEqual(error,'GOOGLE_BOOTSTRAP_FAILED')
+
+    def test_A02_bootstrap_missing_or_hostile_issuer_no_exchange_or_save(self):
+        self.assert_callback_rejected(callback_query=lambda query:{k:v for k,v in query.items() if k!='iss'})
+        for issuer in ('','https://evil.example','http://accounts.google.com',
+                       'HTTPS://accounts.google.com','https://ACCOUNTS.google.com',
+                       'accounts.google.com','https://accounts.google.com/',
+                       'https://accounts.google.com.evil.example','https://accounts.google.com.',
+                       'https://accounts.google.com:443','https://user@accounts.google.com',
+                       'https://accounts.google.com@evil.example','https://accounts.google.com/path',
+                       'https://accounts.google.com?','https://accounts.google.com#',
+                       ' https://accounts.google.com','https://accounts.google.com\n',
+                       'https://accounts.google.com\x00','https%3A%2F%2Faccounts.google.com'):
+            with self.subTest(issuer=issuer):
+                self.assert_callback_rejected(callback_query=lambda query:dict(query,iss=issuer))
+
+    def test_A02_bootstrap_duplicate_callback_parameters_no_exchange_or_save(self):
+        for key,value in (('state',None),('code','FAKE-CODE'),('iss','https://accounts.google.com'),
+                          ('scope','https://www.googleapis.com/auth/drive.file'),('authuser','0'),
+                          ('prompt','consent')):
+            for blank in (False,True):
+                with self.subTest(key=key,blank=blank):
+                    def duplicate(query):
+                        first=query['state'] if key=='state' else value
+                        return dict(query,**{key:[first,'' if blank else first]})
+                    self.assert_callback_rejected(callback_query=duplicate)
+        # Encoded names must collapse before duplicate-key validation.
+        self.assert_callback_rejected(callback_suffix='&%69ss=https%3A%2F%2Faccounts.google.com')
+
+    def test_A02_bootstrap_unknown_callback_parameters_no_exchange_or_save(self):
+        for suffix in ('&unknown=FAKE','&unknown=','&unknown','&ISS=https%3A%2F%2Faccounts.google.com'):
+            with self.subTest(suffix=suffix):
+                self.assert_callback_rejected(callback_suffix=suffix)
 
     def test_A02_bootstrap_official_auth_uri_metadata(self):
         for uri in ('https://accounts.google.com/o/oauth2/auth',

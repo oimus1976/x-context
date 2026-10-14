@@ -86,3 +86,49 @@ used. Actual Google authentication, actual credential read/save and Drive API
 traffic are NOT_RUN. Ready, merge and destructive cleanup are not performed.
 Final exact-head tests, hosted CI and independent delta L2 are recorded in the
 Draft PR against the published commit, separately from this pre-commit checkpoint.
+
+## PR #63 review #5518750357 — RFC 9207 callback issuer
+
+Date: 2026-10-14 JST. Starting exact head:
+`2505229003cfeff382eb0388097e30dc4f278e0d`, existing branch
+`codex/issue-62-drive-api`. HIGH_IMPACT: CREDENTIALS, SECURITY_BOUNDARY,
+PLATFORM_DEPENDENT; authorized GitHub publication is EXTERNAL_WRITE.
+
+Requirement: the A02 addendum/TEST_MATRIX require exactly one form-decoded
+`iss=https://accounts.google.com`, no normalization, and reject missing issuer
+because Google's public metadata declares support. RFC 9207 section 2.4 and the
+public Google discovery document were checked; no actual client JSON or prior
+callback URL/code/screenshot was read or copied. Every supplied key must be
+single-valued; unknown keys remain forbidden even when blank/bare.
+
+RED before production edits:
+`python -m unittest discover -s tests -p test_shared_context_google.py -k bootstrap_google_issuer_callback -v`
+ran 1 test in 0.020s, FAIL with
+`AssertionError: 'GOOGLE_BOOTSTRAP_FAILED' is not None`.
+The literal fictional callback includes issuer, scope, authuser and prompt, and
+uses only a fake server/browser/token exchange/in-memory store. This reproduces
+the old rejection without reusing any operator OAuth response.
+
+GREEN after the issuer check and blank-preserving parse:
+`python -m unittest discover -s tests -p test_shared_context_google.py -k bootstrap -v`
+passed 12 tests in 0.829s. Four new methods cover the Google-shaped success,
+missing/blank/hostile/nonexact issuer, duplicates of every allowlisted key
+(including blank duplicates and percent-encoded key names) and unknown nonempty,
+empty and bare keys. Every rejected callback asserts HTTP 400, zero exchange,
+zero save and only the safe failure category. Existing state/PKCE/token/scope
+and persistence assertions remain; valid fixtures now include literal issuer.
+
+Pre-commit full regression: `python -m unittest discover -s tests` passed all
+378 tests in 91.704s, zero failures/errors/skips. Baseline
+`python scripts/verify_repo.py --repository oimus1976/x-context` and
+`git diff --check` passed. No pre-existing test was removed or weakened.
+
+Environment: Windows 11 10.0.26300, Python 3.12.10, IsUserAnAdmin=False.
+Normal non-admin execution was used for RED/GREEN. No real Google login retry,
+actual credential read/save, Drive write, Ready, merge or cleanup is performed.
+The operator's earlier HTTP 400 report does not establish token/save/CLI outcome.
+Committed exact-head verification and independent delta L2 belong to the final
+Draft PR evidence, not this pre-commit RED/GREEN checkpoint. The validation
+runner that automatically removes its temporary worktree is deliberately not
+used: exact-head checks run on the clean committed topic worktree, preserving
+all existing worktrees/branches as requested.

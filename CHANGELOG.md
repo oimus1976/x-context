@@ -1,5 +1,15 @@
 # Changelog
 
+## Issue #62 / PR #63 — Google OAuth callback issuer
+
+- Accept the RFC 9207 `iss` callback key only with the exact Google issuer
+  `https://accounts.google.com`. Require issuer presence because Google declares
+  support; reject missing/empty/altered values before exchange or credential save.
+- Reject every duplicate decoded key and unknown key, including empty/bare
+  parameters. Preserve state/code, fixed endpoints, PKCE, timeout and safe errors.
+- Add fictional Google-shaped callback regressions. Real Google login retry and
+  authenticated Drive publishing remain unperformed by this correction.
+
 ## Issue #62 / PR #63 — Desktop OAuth metadata compatibility
 
 - Accept Google's exact legacy and v2 `installed.auth_uri` metadata URLs so

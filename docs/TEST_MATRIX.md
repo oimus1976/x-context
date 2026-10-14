@@ -355,3 +355,12 @@ A02 / PR #63 review #5505171117: `BootstrapTests` tests
 official legacy/v2 Desktop metadata, fixed actual v2 authorization, exact token
 URI and invalid metadata rejection before server/browser/exchange/save effects.
 All client JSON and credentials in these tests are fictional; no Google traffic.
+
+A02 / PR #63 review #5518750357: `test_A02_bootstrap_google_issuer_callback`
+uses a fictional Google-shaped callback with literal issuer/scope/authuser/prompt.
+`test_A02_bootstrap_missing_or_hostile_issuer_no_exchange_or_save`,
+`test_A02_bootstrap_duplicate_callback_parameters_no_exchange_or_save` and
+`test_A02_bootstrap_unknown_callback_parameters_no_exchange_or_save` cover
+missing/blank/nonexact issuer, duplicate keys including blank/encoded variants,
+and unknown nonempty/empty/bare keys: HTTP 400, no exchange and no save.
+The existing wrong-state-then-valid contract continues to apply with issuer.
