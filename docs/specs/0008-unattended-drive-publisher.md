@@ -50,6 +50,24 @@ local state; credential envelope is separate DPAPI CurrentUser protected storage
 | Multi-AI proof | A08 | LIVE_AUTH_PENDING; new app folder reader test after consent, optional Meowth/PC-off |
 | Evidence | A09 | regression, Windows synthetic DPAPI, exact-head baseline/CI, independent L2, Draft PR |
 
+### A02 Desktop client metadata compatibility (PR #63 review #5505171117)
+
+Accept `installed.auth_uri` only when it exactly equals either
+`https://accounts.google.com/o/oauth2/auth` (Google's installed-client JSON
+example) or `https://accounts.google.com/o/oauth2/v2/auth`. The actual browser
+authorization request must always use the compiled v2 endpoint, never the
+metadata as a request destination. Keep `installed.token_uri` exactly
+`https://oauth2.googleapis.com/token`; this change does not add token aliases.
+Reject missing/non-string metadata, other hosts, schemes, ports, userinfo,
+paths, query parameters, fragments and whitespace before browser/server/token
+effects or credential saving. Tests use only fictional downloaded-shaped JSON,
+fake callback/browser/exchange and an in-memory store. No real credentials,
+Google authentication or Drive API traffic are needed to establish this contract.
+
+Primary references checked 2026-10-14:
+- https://developers.google.com/api-client-library/dotnet/guide/aaa_client_secrets
+- https://developers.google.com/identity/protocols/oauth2/native-app
+
 ## Explicit owner authorization gate (not executed in this change)
 
 Before creating a project/client, opening first consent or saving credentials,

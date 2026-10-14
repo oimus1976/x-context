@@ -13,6 +13,13 @@ Meowth/PC-off OPTIONAL/DEFERRED, not acceptance blockers or PASS. Issue60's
 manual PoC remains separate. Ready/merge/cleanup remain human-final.
 See unattended addendum/ADR0006 for owner C2 and explicit authorization plan.
 
+PR #63 review #5505171117 remediation accepts only the exact official legacy/v2
+Desktop `auth_uri` metadata URLs. Actual authorization remains compiled v2 and
+token metadata remains exact. Literal provider-shaped fictional JSON reproduces
+the old rejection; malformed metadata tests require zero server/browser/token/
+save effects. Live Google bootstrap/credential access/Drive traffic remain
+NOT_RUN. Progress/evidence: `docs/verification/issue-62-red-green.md`.
+
 
 ## Issue #60 — synthetic connected transport (Draft implementation)
 

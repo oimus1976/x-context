@@ -24,6 +24,8 @@ from .google_api import NoRedirect, LIMIT
 SCOPE = 'https://www.googleapis.com/auth/drive.file'
 TOKEN = 'https://oauth2.googleapis.com/token'
 AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth'
+# Downloaded Desktop metadata may use the older official URL. Requests stay v2.
+CLIENT_AUTH_URIS = ('https://accounts.google.com/o/oauth2/auth', AUTHORIZE)
 
 
 def safe(value):
@@ -190,7 +192,7 @@ def bootstrap(store, client_config, *, approved=False, reauthorize=False):
         if not path.is_absolute() or any((p / '.git').exists() or p.is_symlink() or p.is_junction() for p in path.parents) or path.is_symlink():
             raise ValueError
         value = core.decode(path.read_bytes())['installed']
-        if value.get('auth_uri') != AUTHORIZE or value.get('token_uri') != TOKEN:
+        if value.get('auth_uri') not in CLIENT_AUTH_URIS or value.get('token_uri') != TOKEN:
             raise ValueError
         client_id, client_secret = value['client_id'],value['client_secret']
         if not safe(client_secret) or not safe(client_id) or not client_id.endswith('.apps.googleusercontent.com'):

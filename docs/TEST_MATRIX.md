@@ -347,3 +347,11 @@ A01..A09 are mapped to RED/GREEN API, lifecycle, registry and CLI tests in
 `tests/test_shared_context_google.py`; normative contract and authorization gate:
 `docs/specs/0008-unattended-drive-publisher.md`. A08/live A02/A07 are
 LIVE_GOOGLE_AUTH_PENDING. PC-off/Meowth: OPTIONAL/DEFERRED, never PASS.
+
+A02 / PR #63 review #5505171117: `BootstrapTests` tests
+`test_A02_bootstrap_official_auth_uri_metadata`,
+`test_A02_bootstrap_hostile_auth_uri_metadata_zero_effects` and
+`test_A02_bootstrap_nonexact_token_uri_metadata_zero_effects` cover literal
+official legacy/v2 Desktop metadata, fixed actual v2 authorization, exact token
+URI and invalid metadata rejection before server/browser/exchange/save effects.
+All client JSON and credentials in these tests are fictional; no Google traffic.

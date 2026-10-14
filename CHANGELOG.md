@@ -1,5 +1,14 @@
 # Changelog
 
+## Issue #62 / PR #63 — Desktop OAuth metadata compatibility
+
+- Accept Google's exact legacy and v2 `installed.auth_uri` metadata URLs so
+  downloaded Desktop client JSON can pass local validation. Actual browser
+  authorization stays fixed to v2; token URI validation stays exact.
+- Reject altered/non-Google URLs and malformed metadata before authorization
+  effects. Fictional JSON and fake bootstrap regressions cover the correction;
+  live Google authentication and publishing remain unqualified.
+
 ## Issue #60 — synthetic connected transport boundary
 
 - Added a small injected adapter for verified generated SPEC-0008 fixtures,

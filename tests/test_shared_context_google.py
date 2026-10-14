@@ -441,7 +441,8 @@ print(json.dumps(dict(status=result.status,writes=result.writes_attempted,refres
 
 
 class BootstrapTests(unittest.TestCase):
-    def run_bootstrap(self,callback='valid',payload=None,token_error=False,store_error=False):
+    def run_bootstrap(self,callback='valid',payload=None,token_error=False,store_error=False,
+                      client_values=None,metadata_rejected=False):
         from urllib.parse import parse_qs,urlparse,urlencode
         accepted=[]; codes=[]; token_calls=[]
         class Store:
@@ -474,14 +475,86 @@ class BootstrapTests(unittest.TestCase):
         # Every input/output is fiction; fake server and browser perform no HTTP/UI.
         with tempfile.TemporaryDirectory() as root:
             client=Path(root)/'desktop.json'
-            client.write_text(json.dumps({'installed':dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',auth_uri=auth.AUTHORIZE,token_uri=auth.TOKEN)}))
-            with patch.object(auth,'HTTPServer',Server),patch.object(auth.webbrowser,'open',side_effect=lambda value:url.append(value) or True),patch.object(auth,'token_request',side_effect=exchange),patch.object(auth.time,'monotonic',side_effect=[0,1,2,200]),patch.object(auth.time,'time',return_value=1000),patch.object(auth,'os',__import__('types').SimpleNamespace(name='nt')):
+            # Literal provider-shaped metadata deliberately does not use app constants.
+            values=dict(client_id='FAKE-ID.apps.googleusercontent.com',project_id='FAKE-PROJECT',
+                        client_secret='FAKE-CLIENT',auth_uri='https://accounts.google.com/o/oauth2/auth',
+                        token_uri='https://oauth2.googleapis.com/token',
+                        auth_provider_x509_cert_url='https://www.googleapis.com/oauth2/v1/certs',
+                        redirect_uris=['http://localhost']) if client_values is None else client_values
+            client.write_text(json.dumps({'installed':values}))
+            with patch.object(auth,'HTTPServer',side_effect=Server) as server,patch.object(auth.webbrowser,'open',side_effect=lambda value:url.append(value) or True) as browser,patch.object(auth,'token_request',side_effect=exchange) as token,patch.object(auth.time,'monotonic',side_effect=[0,1,2,200]),patch.object(auth.time,'time',return_value=1000),patch.object(auth,'os',__import__('types').SimpleNamespace(name='nt')):
                 try:
                     auth.bootstrap(Store(),str(client),approved=True)
                     error=None
                 except core.ContextError as caught:
                     error=str(caught)
+                if metadata_rejected:
+                    server.assert_not_called();browser.assert_not_called();token.assert_not_called()
+                    self.assertEqual(accepted,[])
+                if error is None:
+                    self.assertEqual(urlparse(url[0])._replace(query='').geturl(),
+                                     'https://accounts.google.com/o/oauth2/v2/auth')
+                    self.assertEqual(parse_qs(urlparse(url[0]).query)['scope'],
+                                     ['https://www.googleapis.com/auth/drive.file'])
         return accepted,codes,token_calls,error
+
+    def test_A02_bootstrap_official_auth_uri_metadata(self):
+        for uri in ('https://accounts.google.com/o/oauth2/auth',
+                    'https://accounts.google.com/o/oauth2/v2/auth'):
+            with self.subTest(auth_uri=uri):
+                values=dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',
+                            auth_uri=uri,token_uri='https://oauth2.googleapis.com/token',
+                            project_id='FAKE-PROJECT',redirect_uris=['http://localhost'])
+                accepted,codes,calls,error=self.run_bootstrap(client_values=values)
+                self.assertIsNone(error)
+                self.assertEqual(codes,[200]);self.assertEqual(len(calls),1)
+                self.assertEqual(len(accepted),1)
+                self.assertEqual(accepted[0].scopes,('https://www.googleapis.com/auth/drive.file',))
+
+    def test_A02_bootstrap_hostile_auth_uri_metadata_zero_effects(self):
+        for suffix in ('auth','v2/auth'):
+            good='https://accounts.google.com/o/oauth2/'+suffix
+            bad=[None,False,42,[],{},'',good.replace('https:','http:'),
+                 good.replace('accounts.google.com','accounts.google.com.evil.example'),
+                 good.replace('accounts.google.com','evil.example'),
+                 good.replace('accounts.google.com','accounts.google.com:443'),
+                 good.replace('accounts.google.com','user@accounts.google.com'),
+                 good.replace('accounts.google.com','accounts.google.com@evil.example'),
+                 good.replace('accounts.google.com','accounts.google.com.'),
+                 good.replace('/o/oauth2/','/unknown/'),good+'/',good+'?scope=evil',
+                 good+'?',good+'#fragment',good+'#',' '+good,good+'\n',
+                 good.replace('/auth','/%61uth')]
+            for uri in bad:
+                with self.subTest(auth_uri=uri):
+                    values=dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',
+                                auth_uri=uri,token_uri='https://oauth2.googleapis.com/token')
+                    accepted,codes,calls,error=self.run_bootstrap(client_values=values,metadata_rejected=True)
+                    self.assertEqual(error,'GOOGLE_BOOTSTRAP_FAILED')
+                    self.assertEqual(codes,[]);self.assertEqual(calls,[]);self.assertEqual(accepted,[])
+        values=dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',
+                    token_uri='https://oauth2.googleapis.com/token')
+        self.assertEqual(self.run_bootstrap(client_values=values,metadata_rejected=True)[3],
+                         'GOOGLE_BOOTSTRAP_FAILED')
+
+    def test_A02_bootstrap_nonexact_token_uri_metadata_zero_effects(self):
+        good='https://oauth2.googleapis.com/token'
+        bad=[None,False,42,[],{},'',good.replace('https:','http:'),
+             'https://accounts.google.com/o/oauth2/token',
+             good.replace('oauth2.googleapis.com','oauth2.googleapis.com.evil.example'),
+             good.replace('oauth2.googleapis.com','oauth2.googleapis.com:443'),
+             good.replace('oauth2.googleapis.com','user@oauth2.googleapis.com'),
+             good.replace('/token','/unknown'),good+'/',good+'?code=FAKE',good+'?',
+             good+'#fragment',good+'#',' '+good,good+'\n']
+        for uri in bad:
+            with self.subTest(token_uri=uri):
+                values=dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',
+                            auth_uri='https://accounts.google.com/o/oauth2/auth',token_uri=uri)
+                self.assertEqual(self.run_bootstrap(client_values=values,metadata_rejected=True)[3],
+                                 'GOOGLE_BOOTSTRAP_FAILED')
+        values=dict(client_id='FAKE-ID.apps.googleusercontent.com',client_secret='FAKE-CLIENT',
+                    auth_uri='https://accounts.google.com/o/oauth2/auth')
+        self.assertEqual(self.run_bootstrap(client_values=values,metadata_rejected=True)[3],
+                         'GOOGLE_BOOTSTRAP_FAILED')
 
     def test_A02_bootstrap_approved_success_and_wrong_state_then_valid(self):
         for callback in ('valid','wrong-then-valid'):
