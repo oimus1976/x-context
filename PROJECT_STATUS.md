@@ -1,5 +1,79 @@
 # Project Status
 
+## PR #63 review #5532355581 - narrow first-create executor
+
+Branch codex/issue-62-drive-api, starting 69395fa560a87c3f16b70c3df746fed94a53f581.
+The injected owner-gated baseline-only executor reuses the inspector, freshly
+checks state before each effect, writes the SAME empty C001 ID conditionally,
+creates only the remaining four records plus CURRENT last, and durably records
+intent/returned IDs/verified receipts/completion in an exclusive append-only
+sidecar. Original v1 state/pending stay unchanged, so normal publish stays blocked
+even after recovery; later reconciliation is outside this narrow slice.
+Requirements REC-01..07 precede RED; fault injection covers every fake HTTP
+request and every journal write before/after, with no automatic retry.
+No real Google, credentials or actual registry is accessed by this task. The
+prior owner-approved PARTIAL_UNPUBLISHED is review/operator evidence; auth and
+remote state have not been requalified. Windows/current-head CI/L2 evidence is
+reported in the updated Draft PR body; historical checkpoints below are separate.
+Ready, merge, cleanup and real-machine recovery remain unperformed/separately gated.
+
+## Historical checkpoint: review #5528374222 - native tab ID and design
+
+Existing branch codex/issue-62-drive-api; starting HEAD
+4209f4bb3a9fad8c4ae33aa0f0c2ed4fa218279a. The latest review reports an
+owner-approved live publish stopped PARTIAL_UNPUBLISHED after C001 create:
+Google tabId t.0 was rejected by a Drive-file ID validator. Dedicated tab
+validation and Google-shaped RED/GREEN regressions correct that mismatch;
+ordinary pending barriers and strict file/path IDs remain unchanged.
+Read-only real local diagnosis confirmed one registered C001, no CURRENT,
+and exactly CREATE_ATTEMPT then matching CREATED_EMPTY_UNVERIFIED. Remote
+blank/private/same-folder facts remain review observations, not live rechecks.
+The read-only inspector is fake-tested. Same-ID resume is DESIGN ONLY in
+`docs/specs/0008-first-create-recovery.md`: retain history, verify both local and
+remote identity/privacy/body/revision, conditional write, CURRENT last, separate
+owner approval. No recovery executor, credential access, live API retry, real
+registry mutation, Ready, merge or cleanup. Full Windows/exact-head/CI/L2
+results belong to the final PR evidence; earlier pending-auth sections below
+are historical checkpoints and do not establish present login/publication state.
+
+## PR #63 review #5518750357 — Google callback issuer correction
+
+Existing branch `codex/issue-62-drive-api`, starting head `2505229003cfeff382eb0388097e30dc4f278e0d`.
+The operator reported a real first-login loopback HTTP 400 with Google's RFC9207
+`iss` parameter; token exchange, credential persistence and CLI outcome remain
+unconfirmed. No callback URL/code or screenshot is retained here.
+The correction requires one exact `https://accounts.google.com` issuer, rejects
+missing/nonexact issuers and all duplicate/unknown keys (including blank keys),
+and preserves state, code, PKCE, endpoint, timeout and redaction boundaries.
+Google advertises issuer support, so issuer-less callbacks are unsupported.
+Fictional Google-shaped callback RED reproduced; bootstrap GREEN 12 PASS.
+Full regression, committed exact-head evidence, CI and independent delta L2 are
+recorded in Draft #63; pre-commit checkpoint: `docs/verification/issue-62-red-green.md`.
+This correction performs no real Google login, actual credential read/save,
+Drive write, Ready/merge or cleanup. Real provider qualification remains pending;
+earlier sections' NOT_RUN statements describe those implementation checkpoints.
+
+## Issue #62 — app-scoped unattended synthetic publisher (Draft implementation)
+
+Latest main / merged PR61: 440073d52584d7a9a6c1fd9960795d5999db8f69.
+Separate Google Desktop OAuth/DPAPI lifecycle and REST backend reuse publisher
+and connector checks: drive.file only, new private app folder, exact-ID registry,
+app-visible pagination, revision writes, CURRENT-last and pending-effect journal.
+Issue60's fixed target/global-inventory contract is preserved. No Google
+project/client/first consent/real credential saving/product API smoke performed:
+LIVE_GOOGLE_AUTH_PENDING. No real X/store/credential access or sharing.
+Meowth/PC-off OPTIONAL/DEFERRED, not acceptance blockers or PASS. Issue60's
+manual PoC remains separate. Ready/merge/cleanup remain human-final.
+See unattended addendum/ADR0006 for owner C2 and explicit authorization plan.
+
+PR #63 review #5505171117 remediation accepts only the exact official legacy/v2
+Desktop `auth_uri` metadata URLs. Actual authorization remains compiled v2 and
+token metadata remains exact. Literal provider-shaped fictional JSON reproduces
+the old rejection; malformed metadata tests require zero server/browser/token/
+save effects. Live Google bootstrap/credential access/Drive traffic remain
+NOT_RUN. Progress/evidence: `docs/verification/issue-62-red-green.md`.
+
+
 ## Issue #60 — synthetic connected transport (Draft implementation)
 
 PR #59 merged as `327bee86e917be250f19cb5a77127d6c8f5eaa05`; normal

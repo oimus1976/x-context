@@ -340,3 +340,55 @@ The preferred first vertical slice after SPEC-0001 is accepted is:
 10. end-user OAuth bootstrap composition before adding P1 data surfaces.
 
 This ordering does not authorize scope expansion; it only sequences the accepted MVP requirements.
+
+## SPEC-0008 unattended app-scoped publisher (Issue #62)
+
+A01..A09 are mapped to RED/GREEN API, lifecycle, registry and CLI tests in
+`tests/test_shared_context_google.py`; normative contract and authorization gate:
+`docs/specs/0008-unattended-drive-publisher.md`. A08/live A02/A07 are
+LIVE_GOOGLE_AUTH_PENDING. PC-off/Meowth: OPTIONAL/DEFERRED, never PASS.
+
+A02 / PR #63 review #5505171117: `BootstrapTests` tests
+`test_A02_bootstrap_official_auth_uri_metadata`,
+`test_A02_bootstrap_hostile_auth_uri_metadata_zero_effects` and
+`test_A02_bootstrap_nonexact_token_uri_metadata_zero_effects` cover literal
+official legacy/v2 Desktop metadata, fixed actual v2 authorization, exact token
+URI and invalid metadata rejection before server/browser/exchange/save effects.
+All client JSON and credentials in these tests are fictional; no Google traffic.
+
+A02 / PR #63 review #5518750357: `test_A02_bootstrap_google_issuer_callback`
+uses a fictional Google-shaped callback with literal issuer/scope/authuser/prompt.
+`test_A02_bootstrap_missing_or_hostile_issuer_no_exchange_or_save`,
+`test_A02_bootstrap_duplicate_callback_parameters_no_exchange_or_save` and
+`test_A02_bootstrap_unknown_callback_parameters_no_exchange_or_save` cover
+missing/blank/nonexact issuer, duplicate keys including blank/encoded variants,
+and unknown nonempty/empty/bare keys: HTTP 400, no exchange and no save.
+The existing wrong-state-then-valid contract continues to apply with issuer.
+
+A03/A05 / PR #63 review #5528374222: `test_shared_context_google_tab_ids.py`
+covers literal Google-shaped empty t.0 documents, Japanese/astral Unicode, LF
+paragraphs, exact insert/delete tabId and revision, hostile/missing/malformed
+tabs with zero writes, strict file/path IDs before auth, and interrupted first
+create retaining registered ID/pending/no CURRENT. FakeAPI now returns t.0
+throughout the original publish/update/no-op/withdraw/restore tests.
+`test_shared_context_google_recovery.py` tests the read-only same-ID inspector:
+exact journal, namespace/roles, private parent/owner, empty body/revision, full
+visible inventory and concurrent remote/local changes. These are prerequisite
+checks for the proposed recovery design, not an implemented resume executor.
+No live recovery, credentials or actual publication state are used in tests.
+
+
+REC-01..07 / PR #63 review #5532355581 are requirement-first in
+`docs/specs/0008-first-create-recovery.md`, implemented by
+`google_recovery.plan_first_create/resume_first_create/Journal` and covered by
+`tests/test_shared_context_google_resume.py`. Tests assert exact C001 ID retention,
+revision/tab targeting, five creates, CURRENT last, immutable original pending,
+intent-before-effect/returned-ID-before-read, durable final manifest, explicit
+approval, stale plan/intent/privacy/body refusal, every HTTP request and journal
+write failing before/after, no later effect/retry, and exclusive bounded sidecar
+persistence/unsafe-path/corruption/fsync errors. Only fake IDs/temp files are used.
+
+REC-07 L2 remediation: guard-only regression rejects Windows ADS, device names
+(including superscript aliases), controls, normalization aliases and unsupported
+UNC/extended/device namespaces without opening any such path; normal local
+Unicode/interior-space filenames remain supported.

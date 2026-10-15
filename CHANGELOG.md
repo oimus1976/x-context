@@ -1,5 +1,46 @@
 # Changelog
 
+## Issue #62 / PR #63 - first-create recovery executor
+
+- Add an injected, explicitly approved baseline-only continuation from the exact
+  registered-empty-C001/no-CURRENT state. Preserve C001 ID with revision-conditional
+  text, verify four remaining records and write CURRENT last.
+- Preserve the original registry/pending and use a bounded exclusive append-only
+  sidecar for original history, intent, returned IDs, verified receipts and final
+  manifest. Any ambiguity stops; existing sidecars block re-entry. Ordinary publish
+  remains blocked, including after recovery, until separate reconciliation.
+- Add fake request/save fault injection and local synthetic persistence tests.
+  No live use, credential access, automatic retry or generic recovery is included.
+
+## Issue #62 / PR #63 - native tab IDs and partial first-create design
+
+- Validate Google Docs tab IDs separately, including observed t.0, while retaining
+  strict Drive ID/HTTP path checks. Use provider-shaped native response regressions
+  and t.0 in the existing fake publication flows.
+- Add an injected read-only inspector for the exact registered-empty-C001 pending
+  state. Preserve the normal pending stop before auth/network. Document proposed
+  owner-gated same-ID recovery with retained history and CURRENT completion last;
+  no recovery write executor or live retry is included.
+
+## Issue #62 / PR #63 — Google OAuth callback issuer
+
+- Accept the RFC 9207 `iss` callback key only with the exact Google issuer
+  `https://accounts.google.com`. Require issuer presence because Google declares
+  support; reject missing/empty/altered values before exchange or credential save.
+- Reject every duplicate decoded key and unknown key, including empty/bare
+  parameters. Preserve state/code, fixed endpoints, PKCE, timeout and safe errors.
+- Add fictional Google-shaped callback regressions. Real Google login retry and
+  authenticated Drive publishing remain unperformed by this correction.
+
+## Issue #62 / PR #63 — Desktop OAuth metadata compatibility
+
+- Accept Google's exact legacy and v2 `installed.auth_uri` metadata URLs so
+  downloaded Desktop client JSON can pass local validation. Actual browser
+  authorization stays fixed to v2; token URI validation stays exact.
+- Reject altered/non-Google URLs and malformed metadata before authorization
+  effects. Fictional JSON and fake bootstrap regressions cover the correction;
+  live Google authentication and publishing remain unqualified.
+
 ## Issue #60 — synthetic connected transport boundary
 
 - Added a small injected adapter for verified generated SPEC-0008 fixtures,
@@ -137,3 +178,12 @@ Do not copy long implementation chronology that already exists in Git/PR history
 - Added fail-closed post-merge safe cleanup as a separate protected effect after verification. The cleanup planner performs its own authenticated GitHub PR read, defaults to dry-run, revalidates before `--execute`, uses normal worktree removal and exact-lease optional remote deletion, supports linked and single-checkout layouts, leaves remote deletion off by default, and distinguishes pre-effect `BLOCKED` from post-effect `INCOMPLETE`. L2 adversarial review successively exposed non-atomic local-ref deletion and remote-tracking cleanup races, so v1 was deliberately narrowed: local topic branches are never auto-deleted, stale remote-tracking refs are retained, and unreadable/malformed ref snapshots fail closed rather than becoming empty sets. The existing verifier remains non-destructive. See Issue #12 and ADR-0001.
 - Corrected the first real post-merge qualification defect where the documented cleanup command generated `scripts/__pycache__/` while importing its sibling helper and then blocked on its own ignored residue. The cleanup entry point now disables bytecode writes before local imports; pre-existing ignored files remain blocking and no cleanup authority is broadened. See Issue #14.
 - Added authoritative repository-wide branch **audit** after a real `life-dashboard` cleanup exposed partial prior deletion, misleading native stderr rendering, stale deletion assumptions, closed-unmerged branches requiring successor review, and a no-PR long-lived branch that had to be retained. Independent review of the first executor design exposed unresolved host-binding, branch-incarnation, push-destination, TOCTOU, and post-effect-state gaps; per the anti-loop rule the destructive path was removed rather than patched again. The helper now pins authenticated reads to `github.com`, emits inventory plus human-review evidence, and has no remote mutation capability. A separately authorized destructive executor, if still needed, is isolated to Issue #22. Existing one-PR local closeout/worktree cleanup authority remains unchanged. See Issue #20 and PR #21.
+
+## Unreleased — Issue #62
+
+- Add separate synthetic-only Google Desktop OAuth/drive.file REST backend,
+  DPAPI Google store, app-created private sandbox and exact-ID registry.
+- Reuse publisher/connector diff, receipts, tombstones and CURRENT-last with
+  app-visible pagination and persistent ambiguous-effect stop.
+- Document first-auth approval gate, Testing lifetime/recovery and optional
+  PC-off/Meowth testing. Live Google qualification remains pending.
