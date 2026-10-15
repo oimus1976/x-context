@@ -140,3 +140,14 @@ changed for newly created projects in May2026 and quota-unit/daily billing rules
 must be checked on the chosen project. No quota increase/billing change occurs.
 - https://developers.google.com/workspace/docs/api/limits
 - https://developers.google.com/workspace/drive/api/guides/limits
+
+## Native tab-ID correction and first-create recovery
+
+PR #63 review #5528374222 is addressed by dedicated Docs tab-ID validation,
+Google-shaped t.0 tests, and an injected read-only first-create inspector.
+The pending barrier remains in force. Proposed owner-gated same-ID continuation,
+CURRENT-last conditions and crash limitations are specified in
+[the recovery design](0008-first-create-recovery.md); no recovery executor or live
+retry is authorized/performed by this correction. Earlier LIVE_AUTH_PENDING
+statements describe their original checkpoints; the review reports a later
+separately approved partial live attempt, not a successful publication.

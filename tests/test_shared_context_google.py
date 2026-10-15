@@ -56,7 +56,7 @@ class FakeAPI:
             text = self.text[identity]
             end = len(text.encode('utf-16-le')) // 2 + 1
             return dict(documentId=identity, title=self.files[identity]['name'], revisionId=self.rev[identity],
-                        tabs=[dict(tabProperties=dict(tabId='TAB'), documentTab=dict(body=dict(content=[
+                        tabs=[dict(tabProperties=dict(tabId='t.0'), documentTab=dict(body=dict(content=[
                             dict(startIndex=0, endIndex=1, sectionBreak={}),
                             dict(startIndex=1, endIndex=end, paragraph=dict(elements=[
                                 dict(startIndex=1, endIndex=end, textRun=dict(content=text))]))])))] )

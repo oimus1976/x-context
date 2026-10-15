@@ -1,5 +1,24 @@
 # Project Status
 
+## PR #63 review #5528374222 - native tab ID and partial recovery
+
+Existing branch codex/issue-62-drive-api; starting HEAD
+4209f4bb3a9fad8c4ae33aa0f0c2ed4fa218279a. The latest review reports an
+owner-approved live publish stopped PARTIAL_UNPUBLISHED after C001 create:
+Google tabId t.0 was rejected by a Drive-file ID validator. Dedicated tab
+validation and Google-shaped RED/GREEN regressions correct that mismatch;
+ordinary pending barriers and strict file/path IDs remain unchanged.
+Read-only real local diagnosis confirmed one registered C001, no CURRENT,
+and exactly CREATE_ATTEMPT then matching CREATED_EMPTY_UNVERIFIED. Remote
+blank/private/same-folder facts remain review observations, not live rechecks.
+The read-only inspector is fake-tested. Same-ID resume is DESIGN ONLY in
+`docs/specs/0008-first-create-recovery.md`: retain history, verify both local and
+remote identity/privacy/body/revision, conditional write, CURRENT last, separate
+owner approval. No recovery executor, credential access, live API retry, real
+registry mutation, Ready, merge or cleanup. Full Windows/exact-head/CI/L2
+results belong to the final PR evidence; earlier pending-auth sections below
+are historical checkpoints and do not establish present login/publication state.
+
 ## PR #63 review #5518750357 — Google callback issuer correction
 
 Existing branch `codex/issue-62-drive-api`, starting head `2505229003cfeff382eb0388097e30dc4f278e0d`.

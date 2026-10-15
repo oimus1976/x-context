@@ -364,3 +364,15 @@ uses a fictional Google-shaped callback with literal issuer/scope/authuser/promp
 missing/blank/nonexact issuer, duplicate keys including blank/encoded variants,
 and unknown nonempty/empty/bare keys: HTTP 400, no exchange and no save.
 The existing wrong-state-then-valid contract continues to apply with issuer.
+
+A03/A05 / PR #63 review #5528374222: `test_shared_context_google_tab_ids.py`
+covers literal Google-shaped empty t.0 documents, Japanese/astral Unicode, LF
+paragraphs, exact insert/delete tabId and revision, hostile/missing/malformed
+tabs with zero writes, strict file/path IDs before auth, and interrupted first
+create retaining registered ID/pending/no CURRENT. FakeAPI now returns t.0
+throughout the original publish/update/no-op/withdraw/restore tests.
+`test_shared_context_google_recovery.py` tests the read-only same-ID inspector:
+exact journal, namespace/roles, private parent/owner, empty body/revision, full
+visible inventory and concurrent remote/local changes. These are prerequisite
+checks for the proposed recovery design, not an implemented resume executor.
+No live recovery, credentials or actual publication state are used in tests.

@@ -1,5 +1,15 @@
 # Changelog
 
+## Issue #62 / PR #63 - native tab IDs and partial first-create design
+
+- Validate Google Docs tab IDs separately, including observed t.0, while retaining
+  strict Drive ID/HTTP path checks. Use provider-shaped native response regressions
+  and t.0 in the existing fake publication flows.
+- Add an injected read-only inspector for the exact registered-empty-C001 pending
+  state. Preserve the normal pending stop before auth/network. Document proposed
+  owner-gated same-ID recovery with retained history and CURRENT completion last;
+  no recovery write executor or live retry is included.
+
 ## Issue #62 / PR #63 — Google OAuth callback issuer
 
 - Accept the RFC 9207 `iss` callback key only with the exact Google issuer

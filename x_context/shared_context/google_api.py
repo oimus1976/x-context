@@ -59,6 +59,20 @@ def _no_suggestions(value):
             _no_suggestions(v)
 
 
+def _tab_identity(identity):
+    """Supported Docs tab IDs, not Drive IDs; never used in URL/path segments.
+
+    Docs documents.TabProperties defines an opaque immutable string, not a
+    Drive-file ID grammar. Our bounded ASCII subset includes observed `t.0`
+    and existing undotted fixtures. Dots separate nonempty safe segments;
+    unknown shapes fail closed. This is a local support policy, not a claim
+    that Google guarantees this alphabet. Passed unchanged only in JSON.
+    """
+    if (not isinstance(identity, str) or not 1 <= len(identity) <= 200
+            or not re.fullmatch(r'[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*', identity)):
+        raise core.ContextError('UNSUPPORTED_NATIVE_TEXT')
+
+
 def parse_document(value, identity):
     """Only single-tab plain text. Strip one structural final LF, nothing else."""
     try:
@@ -73,7 +87,7 @@ def parse_document(value, identity):
             raise ValueError
         tab = tabs[0]
         tab_id = tab['tabProperties']['tabId']
-        c._identity(tab_id)
+        _tab_identity(tab_id)
         document = tab['documentTab']
         for name in ('headers', 'footers', 'footnotes', 'inlineObjects', 'positionedObjects'):
             if document.get(name):

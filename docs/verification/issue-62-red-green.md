@@ -132,3 +132,50 @@ Draft PR evidence, not this pre-commit RED/GREEN checkpoint. The validation
 runner that automatically removes its temporary worktree is deliberately not
 used: exact-head checks run on the clean committed topic worktree, preserving
 all existing worktrees/branches as requested.
+
+
+## PR #63 review #5528374222 - t.0 and registered-empty-first-create
+
+Starting HEAD: 4209f4bb3a9fad8c4ae33aa0f0c2ed4fa218279a,
+branch codex/issue-62-drive-api. Risk HIGH_IMPACT: external writes, private
+publication state, security boundary and Windows platform behavior.
+
+RED (before production edit):
+`python -m unittest discover -s tests -p test_shared_context_google_tab_ids.py -v`
+ran 5 methods in 0.020s, FAILED (errors=4): three Google-shaped empty/Unicode/LF
+subcases and replace_text raised UNSUPPORTED_NATIVE_TEXT for literal t.0.
+Hostile/file-ID guards and interrupted-create journal preservation passed.
+No real provider response or actual state file was copied into fixtures.
+
+GREEN after the dedicated tab validator: the same initial five methods passed
+in 0.013s. Two later boundary/revision methods also passed: final tab-ID suite
+7/7 in 0.013s. Read-only recovery-inspection suite 5/5 in 0.028s. Existing
+FakeAPI now returns t.0, exercising baseline/edit/withdraw/restore/stable-ID
+and CURRENT-last through that actual-shaped field. New native response fixtures
+use real-shaped paragraph boundaries and Japanese/astral UTF-16/LF indexes.
+Drive file/path IDs still reject dots before token access.
+
+Pre-commit Windows regression (before the final two added boundary methods were
+loaded): `python -m unittest discover -s tests -v`, 388/388 PASS, 118.345s,
+failure/error/skip 0. The final seven-method focused tab suite passed afterward.
+Baseline verify_repo, compileall and diff-check passed. Final committed exact-head
+full regression/CI/L2 results must be read from the PR's final evidence comment;
+this checkpoint is not substituted for those results.
+
+Read-only local diagnosis: valid schema, one registered C001, no CURRENT,
+exactly CREATE_ATTEMPT then CREATED_EMPTY_UNVERIFIED, latter ID matches registry;
+folder/parent/owner/namespace initialized, bytes unchanged across the read.
+No IDs, private paths, tokens, DPAPI contents or private document payload are
+included here. Remote blank/private/folder facts remain review observations.
+No Google product API call, credential read/refresh, actual state mutation,
+publication retry, Ready/merge or cleanup was performed by this correction.
+The explicit current instruction forbidding real Drive changes also means KB
+updates must remain a local unsent summary for this turn.
+
+The recovery deliverable is a DESIGN plus a fake-tested read-only inspector,
+not a resume executor. See docs/specs/0008-first-create-recovery.md for the
+four owner criteria, retained journal design, exact-ID conditional continuation,
+CURRENT-last rule, failure injection requirements and remote/local commit gap.
+Ordinary pending barriers, partial-set rejection and no automatic retry remain.
+As in the previous correction, committed exact-head checks use the retained clean
+topic checkout; the runner that removes a temporary worktree is not invoked.

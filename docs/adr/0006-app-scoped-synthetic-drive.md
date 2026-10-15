@@ -51,3 +51,12 @@ pending journal IDs and remote objects before explicit operator reconciliation;
 no cleanup/recovery executor is added. This Google synthetic write authority does
 not change ADR0004's X read-only boundary or blocked real-X cloud sharing.
 Official Google sources are linked in the unattended addendum.
+
+## Empty first-create recovery design (review #5528374222)
+
+Preserve the pending journal and exact registered ID. A read-only inspector can
+recognize only the known empty-C001/no-CURRENT interruption. Proposed continuation
+is separately owner-gated and requires durable resolved history, fresh identity/
+privacy/revision checks and CURRENT last; see
+[the recovery design](../specs/0008-first-create-recovery.md). No resume executor,
+automatic retry, pending erasure or live recovery is introduced in this change.
