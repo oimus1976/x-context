@@ -1,5 +1,17 @@
 # Changelog
 
+## Issue #62 / PR #63 - first-create recovery executor
+
+- Add an injected, explicitly approved baseline-only continuation from the exact
+  registered-empty-C001/no-CURRENT state. Preserve C001 ID with revision-conditional
+  text, verify four remaining records and write CURRENT last.
+- Preserve the original registry/pending and use a bounded exclusive append-only
+  sidecar for original history, intent, returned IDs, verified receipts and final
+  manifest. Any ambiguity stops; existing sidecars block re-entry. Ordinary publish
+  remains blocked, including after recovery, until separate reconciliation.
+- Add fake request/save fault injection and local synthetic persistence tests.
+  No live use, credential access, automatic retry or generic recovery is included.
+
 ## Issue #62 / PR #63 - native tab IDs and partial first-create design
 
 - Validate Google Docs tab IDs separately, including observed t.0, while retaining

@@ -60,3 +60,17 @@ is separately owner-gated and requires durable resolved history, fresh identity/
 privacy/revision checks and CURRENT last; see
 [the recovery design](../specs/0008-first-create-recovery.md). No resume executor,
 automatic retry, pending erasure or live recovery is introduced in this change.
+
+
+## Narrow executor follow-up (review #5532355581)
+
+Implement only the known empty-C001 incident through an injected one-shot API
+and explicit owner approval. Use a versioned exclusive append-only sidecar;
+keep original v1 publication bytes/pending untouched. The executor performs fresh
+identity/privacy/revision/body/state/journal checks around each intent/effect,
+keeps C001 ID and writes CURRENT last. A sidecar receipt does not unlock ordinary
+publish, and no interrupted recovery is resumed. This deliberately defers v1
+history migration and normal-publish reactivation to separate reconciliation.
+The earlier no-executor wording describes the original implementation checkpoint.
+No live credential loader, CLI, generic framework, cleanup or automatic retry
+is introduced. See the updated first-create recovery spec for authority and gaps.

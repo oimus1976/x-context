@@ -376,3 +376,14 @@ exact journal, namespace/roles, private parent/owner, empty body/revision, full
 visible inventory and concurrent remote/local changes. These are prerequisite
 checks for the proposed recovery design, not an implemented resume executor.
 No live recovery, credentials or actual publication state are used in tests.
+
+
+REC-01..07 / PR #63 review #5532355581 are requirement-first in
+`docs/specs/0008-first-create-recovery.md`, implemented by
+`google_recovery.plan_first_create/resume_first_create/Journal` and covered by
+`tests/test_shared_context_google_resume.py`. Tests assert exact C001 ID retention,
+revision/tab targeting, five creates, CURRENT last, immutable original pending,
+intent-before-effect/returned-ID-before-read, durable final manifest, explicit
+approval, stale plan/intent/privacy/body refusal, every HTTP request and journal
+write failing before/after, no later effect/retry, and exclusive bounded sidecar
+persistence/unsafe-path/corruption/fsync errors. Only fake IDs/temp files are used.

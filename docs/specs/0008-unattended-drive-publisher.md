@@ -151,3 +151,13 @@ CURRENT-last conditions and crash limitations are specified in
 retry is authorized/performed by this correction. Earlier LIVE_AUTH_PENDING
 statements describe their original checkpoints; the review reports a later
 separately approved partial live attempt, not a successful publication.
+
+
+## First-create executor follow-up (review #5532355581)
+
+The previous design-only checkpoint is superseded for the narrow incident by an
+injected owner-gated baseline executor and an exclusive versioned journal sidecar.
+See [the recovery spec](0008-first-create-recovery.md) and REC-01..07. The original
+v1 state is never mutated; ordinary publish remains blocked even after recovery
+COMPLETE pending separate reconciliation. No live API/credential/registry operation,
+recovery CLI, generic reconciliation or automatic retry occurs in this task.

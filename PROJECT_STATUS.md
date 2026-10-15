@@ -1,6 +1,23 @@
 # Project Status
 
-## PR #63 review #5528374222 - native tab ID and partial recovery
+## PR #63 review #5532355581 - narrow first-create executor
+
+Branch codex/issue-62-drive-api, starting 69395fa560a87c3f16b70c3df746fed94a53f581.
+The injected owner-gated baseline-only executor reuses the inspector, freshly
+checks state before each effect, writes the SAME empty C001 ID conditionally,
+creates only the remaining four records plus CURRENT last, and durably records
+intent/returned IDs/verified receipts/completion in an exclusive append-only
+sidecar. Original v1 state/pending stay unchanged, so normal publish stays blocked
+even after recovery; later reconciliation is outside this narrow slice.
+Requirements REC-01..07 precede RED; fault injection covers every fake HTTP
+request and every journal write before/after, with no automatic retry.
+No real Google, credentials or actual registry is accessed by this task. The
+prior owner-approved PARTIAL_UNPUBLISHED is review/operator evidence; auth and
+remote state have not been requalified. Windows/current-head CI/L2 evidence is
+reported in the updated Draft PR body; historical checkpoints below are separate.
+Ready, merge, cleanup and real-machine recovery remain unperformed/separately gated.
+
+## Historical checkpoint: review #5528374222 - native tab ID and design
 
 Existing branch codex/issue-62-drive-api; starting HEAD
 4209f4bb3a9fad8c4ae33aa0f0c2ed4fa218279a. The latest review reports an

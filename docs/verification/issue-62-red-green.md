@@ -179,3 +179,49 @@ CURRENT-last rule, failure injection requirements and remote/local commit gap.
 Ordinary pending barriers, partial-set rejection and no automatic retry remain.
 As in the previous correction, committed exact-head checks use the retained clean
 topic checkout; the runner that removes a temporary worktree is not invoked.
+
+
+## Review #5532355581 - first-create executor requirement-first RED/GREEN
+
+Starting HEAD 69395fa560a87c3f16b70c3df746fed94a53f581 on the existing branch.
+REC-01..07 were written in the recovery spec before tests/production changes.
+RED: `python -m unittest discover -s tests -p test_shared_context_google_resume.py -v`
+ran nine tests in 0.033s, errors=9 because plan_first_create/resume_first_create/
+Journal did not exist. This is a missing-feature RED, not a reproduced new
+provider bug. No old test was removed or weakened.
+GREEN: the same nine passed in 63.161s after implementation. Two additional
+focused methods for unsafe paths/corruption/fsync and post-effect body/ID/
+metadata mismatches passed separately (0.054s / 0.024s). The full final suite
+includes all eleven methods and all existing tests.
+
+HTTP fault injection enumerates all 1,241 fake requests in the successful path,
+before and after each request (2,482 interruption points). Journal injection
+covers 29 writes before/after (58 points), including exclusive claim, each
+intent/returned ID/verified receipt and completion save. Each asserts stopped
+subsequent effects, unchanged original state and no automatic re-entry/retry.
+Temporary real-file tests verify append-only/exclusive/fresh-instance readback,
+original registry bytes unchanged, corrupt/oversized/junction/path rejection and
+fsync error retention. All fixtures, IDs and approval references are fictional.
+
+One fake successful continuation performs 11 mutation attempts: same-ID C001
+text, four remaining creates/text and CURRENT create/text last. The final index
+has five records bound to stable C001 ID. Original v1 pending is never modified;
+ordinary publish stays blocked even after sidecar COMPLETE. The sidecar records
+original state/digests, approval reference, intent, returned IDs, verified body/
+revision receipts and final manifest. No generic interrupted-run reconciliation,
+registry migration, credential loader or live CLI is added.
+
+Full Windows, committed exact-head CI and independent L2 are later checkpoints
+and must not be inferred from this focused GREEN record. No real registry read
+or mutation, credential read/save, real Google access, Ready/merge/cleanup or
+live recovery is performed. Local KB updates remain unsent under the current
+explicit prohibition on actual Drive changes.
+
+
+Pre-commit Windows full regression: 401/401 PASS in 185.590s, failures/errors/
+skips 0. This run loaded the eleven new methods before the final aggregate-size
+precheck and returned-ID-before-next-request assertion refinement. Those two
+focused methods then passed in 0.071s / 0.042s. The committed exact-head full
+rerun is required for the final refinement; this checkpoint is not that evidence.
+Baseline verify_repo, compileall (x_context/tests/scripts), diff-check PASS.
+No pre-existing tests/assertions were removed or weakened.

@@ -1,155 +1,169 @@
-# PR #63: registered empty first-document recovery design
+# PR #63: empty first-C001 recovery executor
 
-Status: proposed owner-gated continuation design, not a recovery executor.
-Review: https://github.com/oimus1976/x-context/pull/63#pullrequestreview-5528374222
-Risk: HIGH_IMPACT (EXTERNAL_WRITE, PRIVATE_DATA, SECURITY_BOUNDARY,
-PLATFORM_DEPENDENT; inherited credential handling stays unchanged).
+Status: implemented injected executor, fake-tested; live use requires separate
+owner approval. No credential loader, new CLI, generic recovery or ordinary
+publisher bypass is included. Risk HIGH_IMPACT: EXTERNAL_WRITE, PRIVATE_DATA,
+SECURITY_BOUNDARY and PLATFORM_DEPENDENT; credential lifecycle is unchanged.
 
-## Incident and implemented correction
+Reviews:
+- https://github.com/oimus1976/x-context/pull/63#pullrequestreview-5528374222
+- https://github.com/oimus1976/x-context/pull/63#pullrequestreview-5532355581
 
-The operator/review reports a separately approved real publish stopped after the
-first native Doc create: PARTIAL_UNPUBLISHED, one registered C001, blank body,
-no CURRENT. Google returned tabId `t.0`; parse_document incorrectly applied the
-Drive-file ID alphabet. Tests previously used `TAB` and missed this boundary.
+## Incident and source/test correction
 
-Docs TabProperties documents tabId as an immutable string, with no published
-alphabet/length contract. `_tab_identity` implements our supported bounded ASCII
-subset: 1..200 characters, alphanumeric/underscore/hyphen segments separated by
-single dots. It accepts observed `t.0` and undotted fixtures, rejects missing,
-nonstring, whitespace, controls, URL/path/encoding delimiters and empty segments.
-It is not a claim about every possible provider-generated tab ID. IDs are used
-unchanged only in JSON tabId fields. Drive file IDs, registry IDs, HTTP paths,
-fixed endpoints, single-tab/plain-text rules and revision checks are unchanged.
-Unknown future tab formats require another explicit compatibility review.
+The review/operator reports a separately approved live publish stopped after
+C001 files.create: PARTIAL_UNPUBLISHED, registered blank native Doc, no CURRENT.
+Google's tabId t.0 was rejected by a Drive-file-ID validator. Starting HEAD
+69395fa560a87c3f16b70c3df746fed94a53f581 corrected the compatibility bug and
+added read-only inspection. Its 390 Windows tests/CI/L2 are historical evidence
+for that head, not evidence for this executor. The original state diagnosis was
+read-only in the preceding task: one C001 and the ordered two-event pending
+CREATE_ATTEMPT then matching CREATED_EMPTY_UNVERIFIED. This task does not read
+actual registry/credentials or access Google. Remote incident observations remain
+operator/review evidence, not new live measurements or completed recovery.
 
-Public primary sources checked 2026-10-15, without authenticated product calls:
+TabProperties documents tabId as an immutable string without a published grammar.
+The supported local subset is 1..200 ASCII alphanumeric/underscore/hyphen segments
+separated by single dots. It accepts observed t.0 and undotted fixtures, rejects
+hostile/missing shapes, and is used unchanged only in JSON. Strict Drive-ID/HTTP
+path validation, single-tab plain text and requiredRevisionId remain unchanged.
+Primary sources checked in the previous correction:
 - https://developers.google.com/workspace/docs/api/reference/rest/v1/documents#TabProperties
 - https://developers.google.com/workspace/docs/api/how-tos/tabs
 
-## Read-only diagnosis in this correction
+## Entry points and authority
 
-The real local publication state was read without loading/decrypting credentials
-or calling Google product APIs. Its schema validated; one C001 role is registered,
-no CURRENT, and exactly two pending events exist in order:
-`('', CREATE_ATTEMPT)`, `(registered_document_id, CREATED_EMPTY_UNVERIFIED)`.
-The created-event ID equals the registered ID. Folder/parent/owner/namespace are
-initialized. Bytes were unchanged across the diagnostic read. No IDs, private
-paths, credentials or private payload are retained in this document.
-Remote emptiness, same-folder placement and owner-only access are review/operator
-observations, not newly measured live facts in this correction. Registry-to-live
-ID agreement must be independently rechecked at the future approved inspection.
+`plan_first_create(transport, state_store)` reuses `inspect_first_create` and
+returns an observation bound to the baseline fixture digest, entire original
+state digest, owner/folder/ID/body/revision snapshot. It grants no authority.
+The existing inspector accepts only one C001, blank application body (only the
+provider structural final LF), no CURRENT, exact original two-event sequence,
+namespace/roles/app authorization, owner-only permissions, same parent and
+complete APP_VISIBLE inventory. It rereads remote and local observations.
 
-## Implemented inspection contract (no writes)
+`resume_first_create(transport, state_store, journal, plan, approved=True,
+approval_reference=...)` is a separately invoked API for an already authorized
+caller. Approval must be exactly True with a bounded nonsecret owner-reference;
+it is not authentication or a claim that the owner already approved live use.
+The function rejects absent approval before any state/journal/transport access.
+Only compiled baseline is supported. It rereads the current plan and requires
+exact equality, including revision and fixture intent. No arbitrary text input.
 
-`google_recovery.inspect_first_create(transport, state_store)` is an injected
-read-only primitive, tested only with a fake provider here. It has no CLI,
-credential loader, refresh path, write method or automatic call from publish.
-A caller must separately obtain authorization for live inspection; the ordinary
-CLI continues to block pending before credential access/refresh/network.
+No existing publish/init/login CLI mode calls the executor. A future live caller
+must be separately reviewed/approved with exact paths/account/IDs and a fixed
+sidecar location. Do not issue live commands from this document. Implementing the
+injected executor does not authorize credential load/refresh or remote effects.
 
-It accepts only the incident-specific first C001 role, one registered exact ID,
-and the exact two-event journal above. An unknown create result, additional or
-reordered events, CONTENT_ATTEMPTED/UPDATE_ATTEMPT, another role, missing ID or
-CURRENT require another recovery design. No candidate search by title is allowed.
+## Persistent history and ordered effects
 
-It reads exact registry folder/document IDs and requires:
-1. Exact Drive response IDs, app authorization, namespace, role and synthetic-v1
-   appProperties for both objects; no adopted same-name object.
-2. Exact stored folder parent/title/type, owner-only single user-owner permission,
-   unshared/untrashed folder and document, same registered owner, and document's
-   sole parent equal to that folder. A recreated/moved/stolen/shared object blocks.
-3. Complete APP_VISIBLE all-MIME paginated inventory containing exactly that one
-   registered document, no CURRENT or unknown/hidden-by-type child. drive.file
-   cannot establish a global inventory; the dedicated-folder owner contract stays.
-4. Native single-tab plain text, valid revision, empty application body (exactly
-   the structural final LF remotely). An extra blank paragraph is not empty.
-5. Repeated full snapshots and a final local state read agreeing with the initial
-   state. Concurrent changes, unsupported structure or any failed read block.
+The original v1 publication registry is read-only for the entire operation,
+including success. `Journal(explicit_absolute_jsonl_path)` exclusively claims a
+new sidecar with xb. Existing, empty, malformed, partial or completed files block
+re-entry. The sidecar is bounded append-only JSONL; each write flushes/fsyncs and
+rereads. It never truncates/replaces prior history. Storage errors are terminal;
+no automatic recovery of torn append, cleanup, rollback or retry is attempted.
 
-The receipt holds the state digest and observed folder/document/revision in
-memory, suppresses them from repr, and explicitly says NOT_AUTHORIZED. It does
-not prove future freshness, protect against same-user tampering, authorize a
-write, clear pending, or make ordinary preview accept a partial set.
+BEGIN contains the original complete logical registry/pending, original-state
+and fixture digests, initial revision and owner approval reference. The original
+file itself remains byte-for-byte unchanged and remains the incident record.
+All sidecar IDs/revisions/manifest are local operational data, not normal logs,
+PR text or CI artifacts. Caller must choose a private local folder, quiesce the
+single publisher and preserve this one sidecar; do not pick a new file to evade
+a failed claim. No concurrent-writer lock or hostile same-user tamper protection
+is claimed. Path checks reject symlinks/junctions and unsupported filenames.
 
-## Proposed separately approved resume protocol
+For EACH effect: compare original state and journal; fresh folder/whole visible
+inventory/metadata/owner/parent/revision/body checks; append INTENT durably;
+repeat those checks; invoke the remote operation once. Before the original C001
+write, also rerun inspect_first_create after INTENT and require the original plan.
+C001 is written at its exact registered ID with requiredRevisionId and observed
+tabId. No C001 create/delete/move/rename is possible in the executor.
 
-No executor is shipped or run by this correction. Before implementing/using this
-protocol, obtain owner approval for the exact account, existing folder/document
-IDs, compiled baseline fixture digest, allowed operations, request budget and
-stop conditions. Consent to the original attempt does not authorize recovery.
-Do not copy the real registry into tests, publish its IDs, or change credentials.
-A future executor needs its own tests and exact-head L2 review.
+For each of the four remaining roles: create empty native Doc in the same folder,
+persist the returned ID in CREATED before another remote request, check exact
+empty body/privacy/namespace/parent and inventory, then conditionally insert the
+compiled body. Read back and persist VERIFIED (ID/revision/body digest) for each.
+A create that returns an unknown/duplicate/unsafe ID stops without adoption.
 
-1. Quiesce the single publisher. Preserve the original registry bytes and pending
-   history in an access-restricted, non-Git local recovery record. Do not delete,
-   truncate, replace with pending=[] or synthesize a successful commit. Use a
-   versioned recovery journal with an incident identity, original-state digest,
-   owner authorization reference, baseline digest and immutable observed IDs.
-   Schema v1 has neither intent digests nor recovery event types; do not overload
-   it or bypass validate_state. A sidecar/versioned migration must preserve v1
-   pending evidence verbatim until verified completion.
-2. Freshly run the inspection contract immediately before effects. Compare the
-   entire local state/digest and current remote snapshot to the approved plan.
-   No CURRENT exists. If changed, stop without writing. A cached inspection
-   receipt is evidence only. Recheck owner/namespace/parent/privacy/inventory and
-   revision before each subsequent effect; requiredRevisionId guards text races,
-   but cannot atomically guard independent Drive permissions/parent changes.
-3. Persist a durable recovery-intent entry BEFORE touching the existing C001:
-   exact ID, old empty-body digest/revision and approved baseline-body digest.
-   Insert compiled C001 text into THAT SAME ID with requiredRevisionId from the
-   fresh read and observed `t.0` in JSON. Do not call files.create for C001; no
-   delete, rename, move, sharing change, title-based adoption or replacement ID.
-   Read back exact ID/title/parent/owner/permissions/body/new revision and record
-   the verified result. Never infer success from HTTP success alone.
-4. Resume the remaining four fixture roles as individually journaled creates in
-   the SAME folder, recording each returned ID durably before writing its text.
-   Read back each exact body and identity. Only a recorded success permits the
-   next step. An ambiguous create stops: never create a second candidate. A
-   CONTENT_ATTEMPTED or unknown-response interruption is outside the narrow
-   empty-first-create inspector; inspect exact IDs and write outcomes under a
-   separately reviewed reconciliation path, rather than automatic retry.
-5. Keep CURRENT absent while any record is incomplete. After all five exact IDs,
-   bodies, digests, revisions and privacy checks pass a fresh complete inventory,
-   journal CURRENT creation and bind its returned exact ID. If an incomplete
-   CURRENT body is used during staging, its status must be RECOVERY_IN_PROGRESS,
-   which normal parse_index rejects; no COMPLETE links may be exposed early.
-   Promote to the canonical COMPLETE index only as the final conditional remote
-   write, using links/digests constructed from the five VERIFIED documents.
-   Verify its exact body and the entire set again. Only then report COMPLETE.
-6. Durably commit a recovery-completion record referencing the original history,
-   evidence and final manifest. Transition active pending to resolved history in
-   the new schema only after that durable commit, preserving original events.
-   Future normal publish must verify that resolution and final CURRENT snapshot;
-   merely erasing old events is never an entry condition.
+Only after all FIVE records have exact verified bodies and fresh metadata does
+the executor construct CURRENT from those verified IDs/URLs/digests. CURRENT is
+created empty last; it contains no COMPLETE index while records are incomplete.
+Its conditional text insertion is the final remote write. Revalidate all six
+bodies/revisions/permissions/parents/inventory, append and verify COMPLETE with
+the final manifest, and only then return COMPLETE. Successful fake run performs
+11 mutation attempts: existing C001 text, four creates plus text, CURRENT create
+plus text. One fake successful run observed 1,241 HTTP requests (273 Docs GETs,
+962 Drive calls) and 29 journal writes. These are fake counts, not live quota,
+latency or permission qualification; the future owner must approve a real request
+budget before execution. Provider throttling stops without retry. It never creates a replacement sandbox, shares, deletes or calls X.
 
-A multi-file remote write and local journal commit are not an atomic transaction.
-A crash after final CURRENT promotion can leave remote COMPLETE with local
-unresolved history. Report the attempt PARTIAL/REQUIRES_INSPECTION, never claim
-local recovery complete or retry; explicit reconciliation must confirm exact
-final bodies/IDs/revisions and record completion without repeating creates.
-Likewise an interrupted final journal save cannot authorize a fresh publication.
-Readers have a last-written remote index, not proof of local journal completion.
-This residual limitation must be included in owner approval, not hidden by tests.
+## Failure/recovery semantics and limits
 
-## Required future executor acceptance tests
+Any exception stops the one-shot call. Once a remote operation was attempted,
+return PARTIAL_UNPUBLISHED; otherwise BLOCKED. Append STOPPED only if the current
+sidecar still equals the in-memory history; a persistence error can prevent even
+that append, so absence of STOPPED is not success. Never retry in the same call.
+Any existing sidecar blocks subsequent invocations before remote inspection.
+Original pending remains; ordinary AppBackend/publish always blocks it.
 
-Use fictional IDs and Google-shaped t.0 responses. Demonstrate the existing C001
-ID/URL survives, exactly four remaining records plus CURRENT are created in the
-same folder, and no CURRENT COMPLETE is written before all record readbacks.
-Inject failure before/after every request and durable journal save, including
-ambiguous create/text/final-CURRENT outcomes and local commit failure. Require
-retained history, zero blind retry/recreation, no ordinary publish while pending,
-fresh requiredRevisionId, state-digest checks, and refusal of moved/shared/
-nonempty/replaced IDs, unknown children, stale receipts and changed fixture intent.
-The implemented inspection tests establish prerequisites only; they do not claim
-an executable resume, successful live recovery or atomic publication.
+A crash/error after CURRENT promotion can leave a remote COMPLETE index with an
+unresolved local completion record. The function cannot make those two systems
+atomic. A failure at final readback or COMPLETE append returns PARTIAL even when
+the append itself may have reached disk. A future reconciliation must independently
+inspect exact final IDs/revisions/bodies and preserve history without recreating
+objects. That broader reconciliation and later normal-publish reactivation are
+outside this incident executor. No automated resume of an interrupted recovery.
 
-## Owner C2 checkpoint
+Permissions/parent and Docs revision are different Google authorities and cannot
+be checked atomically with one text write. Fresh checks bound the window;
+requiredRevisionId protects native text concurrency. APP_VISIBLE inventory still
+does not prove absence of hidden owner-added files under drive.file. The owner
+must retain a dedicated folder and single writer. Fake tests establish contracts,
+not real scope/metadata/rendering/quota/refresh qualification or live success.
 
-The registry owns expected IDs and historical attempts; Google owns current
-object/revision/permission facts. Both must agree. Pending is unresolved evidence,
-not a disposable error flag. Exact ID recovery preserves links; a duplicate create
-would hide the incident. CURRENT is the final reader entry point and stays
-incomplete until records are verified. The next decision is whether to authorize
-the separately reviewed recovery implementation/live plan. Ready, merge and
-cleanup remain human-final and are not performed here.
+## Owner C2 and separate real-machine approval
+
+The registry owns original IDs/attempt history; Google owns current object facts;
+the sidecar owns this explicit recovery attempt's intent and observed completion.
+Pending is evidence and is never erased. Successful recovery means six verified
+remote Docs plus durable completion evidence; it does NOT reactivate normal
+publish. A later operation needs separately specified registry reconciliation.
+
+Before real use, the owner must approve the exact account/folder/C001 ID, compiled
+baseline/state digest, reviewed caller and sidecar path, allowed eleven mutations,
+quota/request budget, single-writer window and ambiguity stop plan. No such live
+approval is consumed by this implementation, tests, PR update or review. Ready,
+merge and cleanup are separate human-final effects and remain unperformed.
+
+## Requirements and AC (frozen before RED; review #5532355581)
+
+This slice provides an injected `plan_first_create` / `resume_first_create` API.
+It does not load credentials or add a live CLI. A separately approved caller must
+supply the existing authorized Transport, exact State and explicit Journal path.
+Only the compiled baseline is supported. No interrupted recovery is resumed.
+
+| Requirement | AC | RED test contract |
+|---|---|---|
+| R1 exact incident/approval | REC-01 | No approval => no reads/writes; fresh inspect_first_create must equal the approved plan; changed fixture intent/state/revision/owner/parent/body blocks |
+| R2 preserve existing C001 | REC-02 | Same C001 ID/URL, conditional text update with t.0; no C001 create/delete/move; five creates total (four records plus CURRENT) |
+| R3 durable evidence | REC-03 | Exclusive versioned append-only sidecar preserves original state/pending, bound state/fixture digests and owner reference; intent before every remote effect, returned IDs before further requests, verified receipts, completion manifest last |
+| R4 ordered completion | REC-04 | All five record bodies/IDs/privacy/revisions verified before CURRENT create/text; final whole-set readback precedes durable COMPLETE and return COMPLETE |
+| R5 stop on uncertainty | REC-05 | Inject failure before/after every fake HTTP request and journal write; no later remote write, no automatic retry, repeat blocked by existing sidecar; failure at/after final remote effect or completion save cannot report success |
+| R6 retain ordinary barrier | REC-06 | Original v1 registry bytes and pending remain untouched on success/failure; AppBackend/normal publish stay blocked, including after recovery COMPLETE |
+| R7 narrow persistence | REC-07 | Exclusive claim, no overwrite on re-entry, bounded corrupt/symlink/junction/read/save failures block; separate fresh instances see retained events; no credentials/private fixture import |
+
+The original design's proposed v1-to-resolved-history migration (step 6) is
+explicitly deferred from this narrow implementation. The sidecar completion
+record resolves this attempt for audit; it does not remove/override v1 pending.
+Normal publishing remains blocked even after successful recovery. Enabling later
+edit/no-op operations requires a separately specified registry reconciliation;
+never remove pending manually. This narrower boundary prevents completion from
+becoming an implicit ordinary-publish bypass.
+
+Success means remote six-document completion plus a durably verified sidecar
+COMPLETE receipt. It does not mean real-provider qualification, ordinary-publish
+reactivation, Ready, merge or permission to execute in a real account. The parent
+registry remains the original incident record. A partial sidecar, even one whose
+last COMPLETE append may have reached disk, requires manual inspection; no second
+executor invocation is authorized. Sidecar is local operational data, never a
+normal log, repository fixture, CI artifact or PR body. Do not print its IDs.
