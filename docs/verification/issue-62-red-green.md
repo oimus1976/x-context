@@ -225,3 +225,17 @@ focused methods then passed in 0.071s / 0.042s. The committed exact-head full
 rerun is required for the final refinement; this checkpoint is not that evidence.
 Baseline verify_repo, compileall (x_context/tests/scripts), diff-check PASS.
 No pre-existing tests/assertions were removed or weakened.
+
+
+Independent L2 on 32a7a7792df23f9306669cc5d821dee8c478ab18: CRITICAL0/MAJOR0/
+MINOR1. Independent new eleven methods PASS 61.319s. The MINOR found that ADS
+and reserved Windows device names passed Journal._guard (guard-only observation,
+no actual device/ADS opened). Requirement REC-07 was refined and a guard-only RED
+method reproduced 17 rejected-name expectations failing in 0.064s. The repair
+rejects ADS/devices/normalization aliases and unsupported Windows namespaces,
+while retaining normal Unicode/interior-space local paths. New exact-head full
+Windows/CI/independent delta revalidation is required; prior 401-head evidence
+must not be relabelled as evidence for the repaired head.
+
+Guard GREEN: the new Windows-name method PASS 0.011s; persistence/path
+regression PASS 0.074s. No unsafe path was opened or created.

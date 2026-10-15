@@ -6,6 +6,7 @@ The original v1 registry remains untouched; the sidecar is operational evidence.
 import copy
 import json
 import os
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -96,12 +97,22 @@ class Journal:
     No default path: callers must explicitly select a private operational path.
     """
     LIMIT = 262144
+    _DEVICES = {'CON', 'PRN', 'AUX', 'NUL',
+                *(prefix + digit for prefix in ('COM', 'LPT')
+                  for digit in '123456789\u00b9\u00b2\u00b3')}
 
     def __init__(self, path):
         self.path = Path(path)
 
     def _guard(self):
-        if (not self.path.is_absolute() or self.path.suffix != '.jsonl'
+        # Only normal local files: no ADS, devices, relative components or
+        # Win32 normalization aliases. Keep Unicode/interior spaces supported.
+        unsafe = any(part in {'.', '..'} or part.endswith((' ', '.'))
+                     or part.split('.')[0].rstrip(' ').upper() in self._DEVICES
+                     or any(ord(ch) < 32 or ch in '<>:"|?*' for ch in part)
+                     for part in self.path.parts[1:])
+        if (not self.path.is_absolute() or self.path.suffix != '.jsonl' or unsafe
+                or (os.name == 'nt' and not re.fullmatch('[A-Za-z]:' + re.escape(os.sep), self.path.anchor))
                 or any(p.is_symlink() or p.is_junction() for p in (self.path, *self.path.parents))):
             raise core.ContextError('GOOGLE_RECOVERY_JOURNAL_ERROR')
 

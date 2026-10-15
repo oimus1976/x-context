@@ -277,3 +277,24 @@ class ResumeTests(unittest.TestCase):
                 self.assertEqual(len(http.effects), 1 if variant == 'body' else 2)
                 self.assertEqual(journal.records[-1]['type'], 'STOPPED')
                 self.assertNotIn(drive.CURRENT, [http.files[i]['name'] for op, i in http.effects])
+
+
+    def test_REC07_windows_ads_device_names_and_normalization_aliases_rejected(self):
+        # Guard-only checks: never create/open an ADS or reserved device.
+        root = Path(tempfile.gettempdir()).resolve()
+        names = ['FAKE-original.json:recovery.jsonl', 'CON.jsonl', 'prn.jsonl',
+                 'AUX.jsonl', 'NUL.jsonl', 'COM1.jsonl', 'lpt9.jsonl',
+                 'COM\u00b9.jsonl', 'LPT\u00b2.jsonl', 'COM\u00b3.jsonl',
+                 'CON .jsonl', 'trailing. /safe.jsonl', 'space /safe.jsonl',
+                 'bad?name/safe.jsonl', 'bad|name/safe.jsonl', 'bad\x01name/safe.jsonl',
+                 '../safe.jsonl']
+        for name in names:
+            with self.subTest(name=name), self.assertRaises(core.ContextError):
+                recovery.Journal(root / name)._guard()
+        for name in ('owner-safe.jsonl', 'COM10.jsonl', 'CONSOLE.jsonl', 'space name.jsonl', '\u65e5\u672c\u8a9e.jsonl'):
+            recovery.Journal(root / name)._guard()
+
+        if recovery.os.name == 'nt':
+            for path in ('//server/share/fake.jsonl', '//?/C:/fake.jsonl', '//./C:/fake.jsonl'):
+                with self.subTest(namespace=path), self.assertRaises(core.ContextError):
+                    recovery.Journal(Path(path))._guard()

@@ -70,7 +70,12 @@ All sidecar IDs/revisions/manifest are local operational data, not normal logs,
 PR text or CI artifacts. Caller must choose a private local folder, quiesce the
 single publisher and preserve this one sidecar; do not pick a new file to evade
 a failed claim. No concurrent-writer lock or hostile same-user tamper protection
-is claimed. Path checks reject symlinks/junctions and unsupported filenames.
+is claimed. Path checks reject symlinks/junctions and unsupported filenames: ADS colons,
+reserved device basenames (including superscript COM/LPT aliases), controls,
+Win32 reserved punctuation, relative components and trailing-dot/space aliases.
+Windows supports only normal drive-rooted local paths; UNC and extended/device
+namespaces are excluded. Unicode and interior spaces remain supported.
+Source checked 2026-10-15: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
 
 For EACH effect: compare original state and journal; fresh folder/whole visible
 inventory/metadata/owner/parent/revision/body checks; append INTENT durably;

@@ -387,3 +387,8 @@ intent-before-effect/returned-ID-before-read, durable final manifest, explicit
 approval, stale plan/intent/privacy/body refusal, every HTTP request and journal
 write failing before/after, no later effect/retry, and exclusive bounded sidecar
 persistence/unsafe-path/corruption/fsync errors. Only fake IDs/temp files are used.
+
+REC-07 L2 remediation: guard-only regression rejects Windows ADS, device names
+(including superscript aliases), controls, normalization aliases and unsupported
+UNC/extended/device namespaces without opening any such path; normal local
+Unicode/interior-space filenames remain supported.
