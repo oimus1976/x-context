@@ -93,9 +93,15 @@ class ReconcileTests(unittest.TestCase):
             with self.subTest(index=index), self.assertRaises(core.ContextError):
                 self.local()
         self.write_events(self.events)
+        # BEGIN stores canonical logical state, not original raw-byte SHA.
+        # A whitespace-only change is valid local evidence, but must invalidate
+        # any plan that was approved against the previous raw bytes.
+        planned = self.plan()
         self.state_path.write_bytes(self.original + b' ')
-        with self.assertRaises(core.ContextError):
-            self.local()
+        self.assertEqual(self.local().original_bytes, self.original + b' ')
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+        self.assertFalse(self.backup_path.exists())
         self.state_path.write_bytes(self.original)
 
     def test_RCN02_exact_remote_six_docs_and_current_ok(self):
