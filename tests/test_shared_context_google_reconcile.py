@@ -22,7 +22,8 @@ class ReconcileTests(unittest.TestCase):
         root = Path(self.temp.name).resolve()
         self.state_path = root / 'fake-publication-v1.json'
         self.sidecar_path = root / 'fake-completed-recovery.jsonl'
-        self.backup_path = root / 'fake-original-backup.json'
+        self.backup_path = self.state_path.with_name(
+            self.state_path.stem + '.issue65-original-claim.json')
         self.http, source_state = incident()
         self.original = core.encode(source_state.value)
         self.state_path.write_bytes(self.original)
@@ -165,6 +166,19 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(self.http.effects, [])
         self.assertEqual(self.state_path.read_bytes(), self.original)
         self.assertFalse(self.backup_path.exists())
+
+    def test_RCN04_alternate_backup_name_cannot_evict_existing_claim(self):
+        planned = self.plan()
+        self.backup_path.write_bytes(b'FAKE previous ambiguous claim')
+        alternate = self.state_path.with_name('FAKE-ALTERNATE-BACKUP.json')
+        result = reconcile.commit_reconciliation(
+            self.transport, self.state, recovery.Journal(self.sidecar_path),
+            alternate, planned, reviewed_code='FAKE-REVIEWED-CODE-HEAD',
+            approved=True, read_authorized=True, approval_digest=planned.digest,
+            approved_backup_path=str(alternate))
+        self.assertEqual(result, 'BLOCKED')
+        self.assertFalse(alternate.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
 
     def test_RCN04_exclusive_exact_backup_and_single_atomic_commit(self):
         planned = self.plan()
