@@ -1,6 +1,6 @@
 # Issue #65 — RED-first fake-only test matrix
 
-Status: **planned test contracts only** (not executed, not PASS). Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
+Status: **21 fake-only tests implemented and Linux CI verified**; direct Windows and independent L2 remain pending. Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
 
 ## Test harness (no actual Google/DPAPI/owner files)
 
@@ -40,3 +40,37 @@ Status: **planned test contracts only** (not executed, not PASS). Depends on `do
 5. Never load real `%LOCALAPPDATA%\x-context\google-drive\publication-v1.json`, real recovery sidecar, actual private IDs, saved Google credentials or operator backups in this stage. No real Google requests, no Ready/merge/cleanup.
 
 These tests qualify code *only*. They do not grant the independent live owner Gates R/W or permission to use/clear the actual registry.
+
+## Implementation / CI evidence — 2026-10-18
+
+- RED checkpoint `84c4b5a6d8fe414c0e44f91a71ad25bfc5dd0d60`:
+  [project-ci failure](https://github.com/oimus1976/x-context/actions/runs/39130312351)
+  was the intended missing-contract failure: `ImportError: cannot import name
+  'google_reconcile'`. 403 total discovered tests, one import error, one skip.
+- Initial GREEN `23474bc9e5f2aa9737cf038e15da27046f63e750`:
+  [project-ci passed](https://github.com/oimus1976/x-context/actions/runs/39130474953).
+- Broader tests found one *incorrect test assumption*: an appended whitespace
+  byte changes original raw state but not the BEGIN canonical-state hash.
+  It is valid for local inspection, and instead must invalidate an already
+  approved plan. The test was corrected, not removed. Checkpoint
+  `38efeff85204bc447f9e3d9c957def2241a03c2e` passed project-ci.
+- Expanded fake suite at `f61d0904a1c828a252466f53cc6207cded853e08`:
+  [project-ci passed](https://github.com/oimus1976/x-context/actions/runs/39130943391),
+  **423 tests, 0 failures/errors, 1 pre-existing skip**. The new file
+  `tests/test_shared_context_google_reconcile.py` contains 21 test methods
+  spanning RCN-01..07. Policy check, status docs and final branch HEAD need
+  separate exact-head confirmation.
+- Gates exercised by fake test only: exact 29-event history, six-role positive
+  manifest, malformed history, tampered permissions/body/revisions, extra
+  APP_VISIBLE child, snapshot races, changed raw bytes and module source,
+  pending-only rejection, exact backup authorization, exclusive claim,
+  backup fsync, ambiguous after-commit response and failure after claim,
+  redacted errors and unsafe path guards.
+- No Windows PowerShell exact-head run, independent Codex/L2 review, actual
+  Google client/API usage, owner registry/sidecar/DPAPI reads or writes, live
+  Gate R/W authorization, normal publish invocation, Ready or merge.
+  Existing fake read GET counts are NOT real provider quota evidence.
+
+A logical-state-only BEGIN digest cannot reconstruct original unrecorded raw
+JSON bytes. The reconciliation captures their current raw hash and binds it to
+the later owner-approved plan; it never asserts that the BEGIN recorded them.
