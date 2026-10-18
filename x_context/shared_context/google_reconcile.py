@@ -16,6 +16,11 @@ from . import google_recovery as recovery
 _CODE_LIMIT = 200
 
 
+def _module_sha():
+    # Exact source bytes in the running checkout, not a caller-supplied assertion.
+    return core.digest(Path(__file__).read_bytes())
+
+
 @dataclass(frozen=True, repr=False)
 class LocalEvidence:
     original_bytes: bytes
@@ -287,6 +292,7 @@ def plan_reconciliation(transport, state_store, journal, *, reviewed_code):
                        fixture_sha256=evidence.fixture_digest,
                        projected_sha256=core.digest(core.encode(evidence.projected)),
                        remote_digest=first, reviewed_code=reviewed_code,
+                       module_source_sha256=_module_sha(),
                        registry_path=str(state_store.path),
                        sidecar_path=str(journal.path))
         return ReconciliationPlan(core.digest(core.encode(binding)),
