@@ -11,7 +11,8 @@ the exact successful 29-event sidecar sequence and original C001-only registry.
 Fresh read-only app-visible provider snapshots must match all six manifest IDs,
 bodies, revisions, privacy, parent, namespace, and canonical CURRENT. The
 projection installs all six IDs before clearing pending. The separately gated
-local write claims a byte-exact backup, repeats provider checks and attempts
+local write claims a byte-exact backup at a fixed registry-derived path,
+rejecting any alternate claim filename, repeats provider checks and attempts
 one v1 atomic replacement; failure after claim means inspection, no retry.
 Plans bind raw local bytes and running module source digest as well as reviewed
 caller identity. No live operator entrypoint or credential loader was added.

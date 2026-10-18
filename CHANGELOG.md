@@ -10,7 +10,7 @@
   original raw bytes, sidecar bytes, remote snapshots, baseline, caller label
   and running reconciler source bytes.
 - Add explicit Gate W owner path/hash/read-permission checks, an exclusive
-  byte-exact backup and one atomic registry replace. Ambiguous persistence
+  byte-exact backup at a registry-derived, fixed claim path and one atomic registry replace. Ambiguous persistence
   stops without retry or rollback; ordinary publish is never invoked.
 - Add fake-only RED/GREEN tests, mutation/race and persistence fault checks.
   No owner credential, actual registry/sidecar, live Google/X or publisher

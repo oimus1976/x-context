@@ -1,6 +1,6 @@
 # Issue #65 — RED-first fake-only test matrix
 
-Status: **21 fake-only tests implemented and Linux CI verified**; direct Windows and independent L2 remain pending. Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
+Status: **22 fake-only tests implemented and Linux CI verified**; direct Windows and independent L2 remain pending. Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
 
 ## Test harness (no actual Google/DPAPI/owner files)
 
@@ -57,7 +57,7 @@ These tests qualify code *only*. They do not grant the independent live owner Ga
 - Expanded fake suite at `f61d0904a1c828a252466f53cc6207cded853e08`:
   [project-ci passed](https://github.com/oimus1976/x-context/actions/runs/39130943391),
   **423 tests, 0 failures/errors, 1 pre-existing skip**. The new file
-  `tests/test_shared_context_google_reconcile.py` contains 21 test methods
+  `tests/test_shared_context_google_reconcile.py` contains 22 test methods
   spanning RCN-01..07. Policy check, status docs and final branch HEAD need
   separate exact-head confirmation.
 - Gates exercised by fake test only: exact 29-event history, six-role positive
@@ -74,3 +74,6 @@ These tests qualify code *only*. They do not grant the independent live owner Ga
 A logical-state-only BEGIN digest cannot reconstruct original unrecorded raw
 JSON bytes. The reconciliation captures their current raw hash and binds it to
 the later owner-approved plan; it never asserts that the BEGIN recorded them.
+
+- Additional one-shot claim regression: do not permit a fresh backup filename to bypass an existing original-registry claim. Use only the registry-derived `*.issue65-original-claim.json` path, still requiring exact Gate W path approval.
+- Source/test fix at `1febd91bf5a2555bf506fe0490a2904cb3462a4b`: [project-ci](https://github.com/oimus1976/x-context/actions/runs/39131205840) SUCCESS, **424 tests, 0 failures/errors, 1 pre-existing skip**; [policy-check](https://github.com/oimus1976/x-context/actions/runs/39131205803) SUCCESS. Direct Windows/L2/live gates remain pending.
