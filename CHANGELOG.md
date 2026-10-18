@@ -1,5 +1,22 @@
 # Changelog
 
+## Issue #65 / Draft PR #66 — fake-only completed-recovery reconciliation
+
+- Add an injected, incident-specific local inspector for the exact 29-event
+  first-create sidecar and original one-C001/two-pending v1 registry.
+- Verify six app-visible private native Docs, immutable receipts, revisions,
+  baseline bodies and canonical CURRENT without title adoption or remote writes.
+- Derive a deterministic full six-ID v1 registry projection; bind plans to
+  original raw bytes, sidecar bytes, remote snapshots, baseline, caller label
+  and running reconciler source bytes.
+- Add explicit Gate W owner path/hash/read-permission checks, an exclusive
+  byte-exact backup and one atomic registry replace. Ambiguous persistence
+  stops without retry or rollback; ordinary publish is never invoked.
+- Add fake-only RED/GREEN tests, mutation/race and persistence fault checks.
+  No owner credential, actual registry/sidecar, live Google/X or publisher
+  operation is invoked. Gate R/W live qualification remains separate.
+
+
 ## Issue #62 / PR #63 - first-create recovery executor
 
 - Add an injected, explicitly approved baseline-only continuation from the exact
