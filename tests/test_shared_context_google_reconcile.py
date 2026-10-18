@@ -59,7 +59,7 @@ class ReconcileTests(unittest.TestCase):
         return reconcile.commit_reconciliation(
             self.transport, self.state, recovery.Journal(self.sidecar_path),
             self.backup_path, plan, reviewed_code='FAKE-REVIEWED-CODE-HEAD',
-            **kwargs)
+            approved_backup_path=str(self.backup_path), **kwargs)
 
     def test_RCN01_valid_29_event_history_reconstructs_original_incident(self):
         local = self.local()
@@ -167,6 +167,17 @@ class ReconcileTests(unittest.TestCase):
         self.assertNotEqual(self.apply(planned, approved=True, read_authorized=True,
                                        approval_digest=planned.digest), 'RECONCILED')
 
+    def test_RCN04_wrong_explicit_backup_approval_path_blocks(self):
+        planned = self.plan()
+        result = reconcile.commit_reconciliation(
+            self.transport, self.state, recovery.Journal(self.sidecar_path),
+            self.backup_path, planned, reviewed_code='FAKE-REVIEWED-CODE-HEAD',
+            approved=True, read_authorized=True, approval_digest=planned.digest,
+            approved_backup_path=str(self.backup_path) + '-NOT-APPROVED')
+        self.assertEqual(result, 'BLOCKED')
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+
     def test_RCN04_preexisting_claim_or_changed_plan_refuses_commit(self):
         planned = self.plan()
         self.backup_path.write_bytes(b'')
@@ -267,6 +278,24 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(self.backup_path.read_bytes(), self.original)
         self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
                                     approval_digest=planned.digest), 'BLOCKED')
+
+    def test_RCN05_changed_remote_snapshot_after_backup_never_commits(self):
+        planned = self.plan()
+        original_plan = reconcile.plan_reconciliation
+        count = 0
+        def stop_after_claim(*args, **kwargs):
+            nonlocal count
+            count += 1
+            if count == 2:
+                raise core.ContextError('FAKE stale plan')
+            return original_plan(*args, **kwargs)
+        with patch.object(reconcile, 'plan_reconciliation', side_effect=stop_after_claim):
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest),
+                             'UNCERTAIN_REQUIRES_INSPECTION')
+        self.assertTrue(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.http.effects, [])
 
     def test_RCN05_backup_fsync_failure_preserves_old_registry_and_claim(self):
         planned = self.plan()
