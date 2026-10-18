@@ -147,6 +147,15 @@ class ReconcileTests(unittest.TestCase):
             self.plan()
         self.sidecar_path.write_bytes(before)
 
+    def test_RCN03_module_source_change_invalidates_approved_digest(self):
+        planned = self.plan()
+        with patch.object(reconcile, '_module_sha', return_value='0'*64):
+            self.assertNotEqual(self.plan().digest, planned.digest)
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest), 'BLOCKED')
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+
     def test_RCN04_missing_approval_does_not_create_backup_or_commit(self):
         planned = self.plan()
         self.http.calls.clear()
@@ -314,6 +323,15 @@ class ReconcileTests(unittest.TestCase):
         self.assertTrue(self.backup_path.exists())
         self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
                                     approval_digest=planned.digest), 'BLOCKED')
+
+    def test_RCN07_guard_rejects_unsafe_paths_without_creating_files(self):
+        root = Path(self.temp.name).resolve()
+        for name in ('CON.json', 'COM1.json', 'bad?name.json', 'bad|name.json',
+                     'alias. /safe.json', 'space /safe.json',
+                     'record.json:stream', 'NUL.json', '../escape.json'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                reconcile._safe_path(root / name, suffix='.json')
+        self.assertEqual(self.state_path.read_bytes(), self.original)
 
     def test_RCN07_redacted_errors_and_no_authentication_or_network(self):
         from x_context.shared_context import google_auth as auth
