@@ -202,5 +202,107 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(self.http.effects, [])
 
 
+    def test_RCN01_duplicate_manifest_and_wrong_c001_mapping_block(self):
+        role = recovery.FIRST_ROLE
+        bad = copy.deepcopy(self.events)
+        bad[-1]['manifest'][role]['id'] = 'FAKE-FORGED-ID'
+        self.write_events(bad)
+        with self.assertRaises(core.ContextError):
+            self.local()
+        self.write_events(self.events)
+        self.state_path.write_bytes(self.original.replace(b'CREATED_EMPTY_UNVERIFIED',
+                                                          b'CONTENT_ATTEMPTED'))
+        with self.assertRaises(core.ContextError):
+            self.local()
+        self.state_path.write_bytes(self.original)
+
+    def test_RCN02_extra_visible_child_and_concurrent_snapshot_block(self):
+        fake_id = 'FAKE-UNREGISTERED'
+        self.http.files[fake_id] = dict(copy.deepcopy(self.http.files[next(
+            identity for identity, item in self.http.files.items()
+            if item['name'] == drive.CURRENT)]), id=fake_id)
+        self.http.text[fake_id] = '\n'
+        self.http.rev[fake_id] = 'REV-NEW'
+        with self.assertRaises(core.ContextError):
+            self.plan()
+        del self.http.files[fake_id], self.http.text[fake_id], self.http.rev[fake_id]
+        original = self.transport.children
+        count = 0
+        role = drive.PREFIX + 'SYN-XCTX-P002'
+        identity = self.events[-1]['manifest'][role]['id']
+        def racing(folder):
+            nonlocal count
+            result = original(folder)
+            count += 1
+            if count == 2:
+                self.http.rev[identity] += '-RACE'
+            return result
+        with patch.object(self.transport, 'children', side_effect=racing):
+            with self.assertRaises(core.ContextError):
+                self.plan()
+        self.assertEqual(self.http.effects, [])
+
+    def test_RCN03_remote_revision_change_invalidates_prior_approved_plan(self):
+        planned = self.plan()
+        role = drive.PREFIX + 'SYN-XCTX-C002'
+        identity = planned.projected['documents'][role]
+        self.http.rev[identity] += '-EDITED'
+        result = self.apply(planned, approved=True, read_authorized=True,
+                            approval_digest=planned.digest)
+        self.assertEqual(result, 'BLOCKED')
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+
+    def test_RCN05_after_commit_uncertainty_never_claims_old_state(self):
+        planned = self.plan()
+        original_save = self.state.save
+        def save_then_ambiguous(new_value):
+            original_save(new_value)
+            raise RuntimeError('FAKE-SECRET after atomic replace')
+        with patch.object(self.state, 'save', side_effect=save_then_ambiguous):
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest),
+                             'UNCERTAIN_REQUIRES_INSPECTION')
+        self.assertEqual(self.state.load(), planned.projected)
+        self.assertEqual(self.backup_path.read_bytes(), self.original)
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+
+    def test_RCN05_backup_fsync_failure_preserves_old_registry_and_claim(self):
+        planned = self.plan()
+        with patch.object(reconcile.os, 'fsync',
+                          side_effect=OSError('FAKE-SECRET fsync error')):
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest),
+                             'UNCERTAIN_REQUIRES_INSPECTION')
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertTrue(self.backup_path.exists())
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+
+    def test_RCN07_redacted_errors_and_no_authentication_or_network(self):
+        from x_context.shared_context import google_auth as auth
+        sentinel = 'FAKE-SECRET-CREDENTIAL-DO-NOT-LOG'
+        with patch.object(auth.Store, 'load', side_effect=AssertionError('auth forbidden')), \
+             patch.object(auth.Provider, 'access_token', side_effect=AssertionError('refresh forbidden')), \
+             patch.object(auth, 'token_request', side_effect=AssertionError('token forbidden')):
+            local = self.local()
+            self.assertEqual(len(local.manifest), 6)
+            planned = self.plan()
+            self.assertTrue(planned.digest)
+        with patch.object(self.transport, 'metadata',
+                          side_effect=RuntimeError(sentinel)):
+            try:
+                self.plan()
+            except core.ContextError as error:
+                self.assertNotIn(sentinel, str(error))
+                self.assertNotIn(sentinel, repr(error))
+            else:
+                self.fail('hostile provider error must fail closed')
+        self.assertNotIn(sentinel, repr(planned))
+        self.assertNotIn(self.original.decode('utf-8'), repr(planned))
+        self.assertEqual(self.http.effects, [])
+
+
 if __name__ == '__main__':
     unittest.main()
