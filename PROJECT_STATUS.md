@@ -1,5 +1,36 @@
 # Project Status
 
+## Issue #65 / Draft PR #66 — injected registry reconciliation (2026-10-18)
+
+Workstream: `issue-65-registry-reconciliation-spec`, based on Draft PR #63
+`f098de73eec2dd75ddfa315a2067835121622387`; PR #66 targets that topic
+branch while PR #63 remains unmerged. Keep both branches isolated.
+
+Added `google_reconcile.py` and fake-only tests. Strict local parsing requires
+the exact successful 29-event sidecar sequence and original C001-only registry.
+Fresh read-only app-visible provider snapshots must match all six manifest IDs,
+bodies, revisions, privacy, parent, namespace, and canonical CURRENT. The
+projection installs all six IDs before clearing pending. The separately gated
+local write claims a byte-exact backup, repeats provider checks and attempts
+one v1 atomic replacement; failure after claim means inspection, no retry.
+Plans bind raw local bytes and running module source digest as well as reviewed
+caller identity. No live operator entrypoint or credential loader was added.
+
+RED at `84c4b5a6d8fe414c0e44f91a71ad25bfc5dd0d60`:
+GitHub project-ci failed on missing `google_reconcile` import, as intended.
+GREEN at `23474bc9e5f2aa9737cf038e15da27046f63e750`:
+GitHub project-ci succeeded. A later broader fault-test run exposed one incorrect
+test assumption about canonical vs raw original-state evidence; repaired to
+bind raw byte drift when replanning, without weakening history validation.
+Latest exact-head CI and policy evidence is tracked on Draft PR #66.
+
+Gate S only: the synthetic fake environment is exercised; actual Google
+credentials, local owner registry/sidecar, provider GET/WRITE, normal publish,
+Ready/merge and cleanup are NOT performed. Real Gate R and W remain separately
+owner-approved; direct Windows exact-head testing and independent L2 are still
+required, regardless of Linux CI success. Existing PR #63 stays independent.
+
+
 ## PR #63 review #5532355581 - narrow first-create executor
 
 Branch codex/issue-62-drive-api, starting 69395fa560a87c3f16b70c3df746fed94a53f581.
