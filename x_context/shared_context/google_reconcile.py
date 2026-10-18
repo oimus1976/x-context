@@ -298,7 +298,7 @@ def plan_reconciliation(transport, state_store, journal, *, reviewed_code):
 
 def commit_reconciliation(transport, state_store, journal, backup_path, plan, *,
                           reviewed_code, approved=False, read_authorized=False,
-                          approval_digest=None):
+                          approval_digest=None, approved_backup_path=None):
     """Gate W: exclusive immutable backup then ONE local atomic registry replace.
 
     Never loads OAuth credentials, retries a write, or runs normal publish.
@@ -308,10 +308,14 @@ def commit_reconciliation(transport, state_store, journal, backup_path, plan, *,
             or not isinstance(plan, ReconciliationPlan)
             or not isinstance(approval_digest, str)
             or approval_digest != plan.digest
-            or reviewed_code != plan.reviewed_code):
+            or reviewed_code != plan.reviewed_code
+            or not isinstance(approved_backup_path, str)
+            or not approved_backup_path):
         return 'BLOCKED'
     try:
         backup = _safe_path(backup_path, suffix='.json')
+        if str(backup) != approved_backup_path:
+            return 'BLOCKED'
         registry = _safe_path(state_store.path, suffix='.json')
         journal._guard()
         if backup in (registry, journal.path) or backup.exists() or backup.parent != registry.parent:
