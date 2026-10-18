@@ -323,6 +323,11 @@ def commit_reconciliation(transport, state_store, journal, backup_path, plan, *,
         if str(backup) != approved_backup_path:
             return 'BLOCKED'
         registry = _safe_path(state_store.path, suffix='.json')
+        # A deterministic claim path prevents bypassing a failed or complete
+        # one-shot reconciliation by choosing a fresh backup filename.
+        fixed_claim = registry.with_name(registry.stem + '.issue65-original-claim.json')
+        if backup != fixed_claim:
+            return 'BLOCKED'
         journal._guard()
         if backup in (registry, journal.path) or backup.exists() or backup.parent != registry.parent:
             return 'BLOCKED'
