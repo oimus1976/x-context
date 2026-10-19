@@ -1,6 +1,6 @@
 # Issue #65 — RED-first fake-only test matrix
 
-Status: **22 fake-only tests implemented and Linux CI verified**; direct Windows and independent L2 remain pending. Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
+Status: **35 synthetic-only methods after F1/F3/F7 remediation and material F6 coverage**. New committed-head Windows/CI evidence belongs to the exact SHA reported on Draft PR #66; independent Claude Code L2 remains required. Depends on `docs/specs/0008-recovery-reconciliation.md` and the exact revision of the Issue #62 one-shot executor in Draft PR #63. Design freeze precedes RED.
 
 ## Test harness (no actual Google/DPAPI/owner files)
 
@@ -8,40 +8,79 @@ Status: **22 fake-only tests implemented and Linux CI verified**; direct Windows
 - To build canonical positive evidence, call the **existing fake** `recovery.resume_first_create` once from `tests/test_shared_context_google_resume.py`'s `incident()` fixture and an in-memory journal. Confirm it produced 11 fake write attempts and an actual `COMPLETE` history, then feed the resulting 29 events, initial state bytes and fake six-document folder to the new reconciler. Do **not** use a real operator's JSONL or ID.
 - Corrupt one dimension at a time; confirm failure before any backup or mutation. For tests that need a fake local claim, use a separately guarded temp path, instrument exclusive file-create and `pub.State.save` call counts.
 - Independent hostile tripwires must fail if `auth.Store.load/save`, `auth.token_request`, DPAPI, socket/urllib network, X authentication, or any external Google request is invoked during **local-only** inspection. For approved-read fake paths, only injected read-only Transport GET is allowed; POST/create/replace/delete/share must fail.
-- Assert nonsecret, bounded output and no exception chain leakage, even on malformed CLI args, malicious fake filenames, invalid fake provider responses and errors containing sentinel tokens/IDs.
+- Assert nonsecret bounded ordinary API errors on malicious fake filenames, invalid fake provider responses and sentinel exceptions. There is no reconciliation CLI; its future caller's argument/termination reporting is outside this module's tested boundary.
 
-## Test contracts, in execution order
+## Actual executable test methods (2026-10-20)
 
-| Proposed test | Expected RED behavior / target |
+All methods are in `tests/test_shared_context_google_reconcile.py`. Existing
+RCN method names describe their bounded checks; F-method rows state the new
+adversarial coverage explicitly. Broad requirement labels do not imply exhaustive
+fault or interleaving coverage.
+
+| Executable method | Checked boundary |
 | --- | --- |
-| `test_RCN01_valid_29_event_history_reconstructs_original_incident` | Parse one exactly complete fake sidecar and old two-pending-event C001 state; reconstruct event roles and six receipts without any mutation. |
-| `test_RCN01_mutated_order_missing_extra_or_stopped_event_blocks` | Omit/reorder/duplicate/append any of 29 events, or add STOPPED after COMPLETE; every case BLOCKED. |
-| `test_RCN01_bad_created_id_or_duplicate_manifest_blocks` | Fake create ID missing/duplicate/collides with folder/parent, untracked role, changed C001 ID, forged final manifest; BLOCKED. |
-| `test_RCN01_digest_revision_and_state_mismatch_blocks` | Wrong BEGIN old state/fixture/revision, wrong before revision/body SHA or final receipt, wrong old raw or normalized bytes; BLOCKED. |
-| `test_RCN02_exact_remote_six_docs_and_current_ok` | Six stable, private, exact-ID, same-parent Docs; correct canonical CURRENT/active IDs/links/hashes; read-only plan can be built. |
-| `test_RCN02_visible_inventory_and_permissions_fail_closed` | Missing/extra/duplicate app-visible children, nonnative MIME, changed appProperties/owner/parent, shared or inaccessible file, incomplete page; BLOCKED. |
-| `test_RCN02_remote_revision_body_current_or_concurrent_change_blocks` | Each revision/body mismatch, malformed CURRENT, URL/hash mislink, changed snapshot on second pass; BLOCKED. |
-| `test_RCN03_plan_contains_exact_six_ids_and_clears_pending_only_together` | Deterministic v1 registry six roles + pending empty; same namespace/folder/owner; existing validator PASS. |
-| `test_RCN03_old_registry_sidecar_or_remote_one_byte_change_invalidates_digest` | Any raw byte, sidecar event, revision, identity, CURRENT byte, baseline or code binding change invalidates approved plan. |
-| `test_RCN04_unapproved_apply_has_zero_effects` | No approved one-shot W gate -> zero backup and registry mutations, even with perfect fake evidence. |
-| `test_RCN04_backup_is_exclusive_byte_exact_and_registry_commit_once` | First fake W: approved plan exact; one `xb` backup with fsync/readback equals old bytes, then one full atomic state replacement and readback; original sidecar byte-identical. |
-| `test_RCN04_preexisting_claim_or_changed_plan_stops_before_write` | Existing empty/corrupt/COMPLETE backup or changed state/sidecar/remote/plan prevents registry commit; never alternate backup path. |
-| `test_RCN05_fault_injection_at_every_backup_and_commit_boundary` | Before/after exclusive claim, fsync, readback, before/after atomic replace and final readback: no false success, never repeated commit; registry either full old or full new. |
-| `test_RCN05_reentry_after_uncertainty_never_retries` | Restart with any existing backup claim blocks even if old pending remains; manual inspection required. |
-| `test_RCN06_original_pending_blocks_normal_backend_and_projection_works` | Unmodified `AppBackend` refuses old registry; projected fake state accepts a read-only preview, no automatic normal publish. |
-| `test_RCN07_redaction_and_no_live_capabilities` | Secret/ID/remote exception redacted; local-only never reaches credential/HTTP APIs; faux read-only rejects POST; X untouched. |
+| `test_RCN01_valid_29_event_history_reconstructs_original_incident` | RCN01 valid 29 event history reconstructs original incident |
+| `test_RCN01_mutated_order_missing_extra_or_stopped_event_blocks` | RCN01 mutated order missing extra or stopped event blocks |
+| `test_RCN01_wrong_created_id_receipt_or_original_state_blocks` | RCN01 wrong created id receipt or original state blocks |
+| `test_RCN02_exact_remote_six_docs_and_current_ok` | RCN02 exact remote six docs and current ok |
+| `test_RCN02_visible_inventory_permissions_body_and_revision_fail_closed` | RCN02 visible inventory permissions body and revision fail closed |
+| `test_RCN03_deterministic_projection_and_raw_bytes_binding` | RCN03 deterministic projection and raw bytes binding |
+| `test_RCN03_module_source_change_invalidates_approved_digest` | RCN03 module source change invalidates approved digest |
+| `test_RCN04_missing_approval_does_not_create_backup_or_commit` | RCN04 missing approval does not create backup or commit |
+| `test_RCN04_alternate_backup_name_cannot_evict_existing_claim` | RCN04 alternate backup name cannot evict existing claim |
+| `test_RCN04_exclusive_exact_backup_and_single_atomic_commit` | RCN04 exclusive exact backup and single atomic commit |
+| `test_RCN04_wrong_explicit_backup_approval_path_blocks` | RCN04 wrong explicit backup approval path blocks |
+| `test_RCN04_preexisting_claim_or_changed_plan_refuses_commit` | RCN04 preexisting claim or changed plan refuses commit |
+| `test_RCN05_failure_after_claim_requires_inspection_without_retry` | RCN05 failure after claim requires inspection without retry |
+| `test_RCN06_normal_backend_remains_blocked_until_complete_projection` | RCN06 normal backend remains blocked until complete projection |
+| `test_RCN01_duplicate_manifest_and_wrong_c001_mapping_block` | RCN01 duplicate manifest and wrong c001 mapping block |
+| `test_RCN02_extra_visible_child_and_concurrent_snapshot_block` | RCN02 extra visible child and concurrent snapshot block |
+| `test_RCN03_remote_revision_change_invalidates_prior_approved_plan` | RCN03 remote revision change invalidates prior approved plan |
+| `test_RCN05_after_commit_uncertainty_never_claims_old_state` | RCN05 after commit uncertainty never claims old state |
+| `test_RCN05_changed_remote_snapshot_after_backup_never_commits` | RCN05 changed remote snapshot after backup never commits |
+| `test_RCN05_backup_fsync_failure_preserves_old_registry_and_claim` | RCN05 backup fsync failure preserves old registry and claim |
+| `test_RCN07_guard_rejects_unsafe_paths_without_creating_files` | RCN07 guard rejects unsafe paths without creating files |
+| `test_RCN07_redacted_errors_and_no_authentication_or_network` | RCN07 redacted errors and no authentication or network |
+| `test_F1_forged_journal_events_cannot_replace_captured_bytes` | Forged Journal.load returns valid events for unrelated bytes: reject plan/apply before GET, backup or save. |
+| `test_F1_canonical_bytes_do_not_consult_overridable_load` | Canonical inspection and plan succeed while Journal.load is a forbidden tripwire. |
+| `test_F1_sidecar_change_after_capture_blocks_before_get` | Bounded sidecar read then file changes before equality check: reject before GET; no ABA-proof claim. |
+| `test_F3_writer_output_is_accepted_byte_for_byte` | Positive bytes produced by the unchanged actual Journal file writer. |
+| `test_F3_equivalent_noncanonical_encodings_block_before_get` | BOM, CR/CRLF, escaped key/value, whitespace, key order, separators, trailing data/blank line and missing LF. |
+| `test_F1_F6_malformed_unknown_duplicate_and_oversize_sidecar_blocks` | Malformed JSON, extra/unknown event, duplicate key, NaN and oversize fail before GET. |
+| `test_F7_claim_open_and_status_inspection_failure_returns_safe_status` | Failed xb plus hostile status probe: bounded UNCERTAIN, no second exists call or raw path error. |
+| `test_F6_duplicate_created_id_colliding_with_c001_blocks_before_get` | Actual CREATED ID equals C001, not merely a changed manifest: zero GET/effects. |
+| `test_F6_folder_and_document_metadata_mismatch_blocks_without_backup` | Both folder and C001: appProperties, owner, parent, MIME and isAppAuthorized; BLOCKED before backup. |
+| `test_F6_missing_child_and_current_link_tampering_block` | Missing inventory child and canonical CURRENT link mismatch; no backup/registry mutation. |
+| `test_F6_local_and_read_paths_have_true_no_auth_network_or_write_tripwires` | Counted fail tripwires for credential load/save, refresh, DPAPI, sockets, urllib, HTTP, X and publisher; local has zero GET; positive fake plan/apply use GET only. |
+| `test_F6_backup_open_fsync_readback_replace_and_postread_failures_stop` | Nine targeted boundaries: possible claim, write, flush, backup fsync/readback, state fsync, replace before/after and post-replace readback. Exact BLOCKED reentry, byte preservation, no later effects. |
+| `test_F6_keyboard_interrupt_retains_claim_and_exact_reentry_block` | KeyboardInterrupt propagates after claim; fixed claim blocks reentry before GET with bytes preserved. |
+
+### Deliberately untested / future caller boundaries
+
+- No real account/provider/token/store/registry qualification, revision lifetime, provider latency or quota measurement.
+- No OS user authentication/lock implementation, arbitrary concurrent ABA exclusion, complete dependency/caller-source verification or authority validation from booleans.
+- Targeted local fault injection is not exhaustive instruction-level crash coverage, process-kill/power-loss durability proof, directory-fsync proof, or a multi-resource transaction. KeyboardInterrupt after claim is tested; abrupt process death and OS claim loss are not.
+- No reconciliation CLI exists, so no claim of CLI argument redaction. Safe ordinary API error statuses are tested; future caller termination/reporting is separately reviewed.
+
+## Remediation RED / GREEN evidence (2026-10-20)
+
+- Unchanged starting implementation `aab87149a0e926c11e49c2c2471e0b1cbbfa5408` plus new tests: **34 methods, failures=8 (including subtests), errors=2, 3.962s**. F1 forged loader succeeded unexpectedly; F3 seven noncanonical subcases were accepted; F7 raised the sentinel PermissionError. Overridable-load tripwire also failed as intended.
+- First minimal GREEN: **34/34 PASS, 3.584s**. Then added bounded capture-drift and strengthened exact success reentry checks: final focused module has **35 methods**. Final Windows full-suite and committed-head evidence is recorded in PR #66 with its exact SHA.
+- Pre-commit full Windows regression: **437 PASS in 149.688s**, failure/error/skip=0, all 35 reconciliation methods included. Baseline/policy compilation/diff checks PASS. This is separate from the subsequent committed-head result.
+- Initial sandbox temp-directory PermissionError was an environment failure, not the RED proof. Logs remain private local evidence; no full log/private path upload.
+- New-head independent L2 remains assigned to Claude Code. Fake results do not authorize Gates R/W or Ready/merge.
 
 ## Red/Green evidence requirements
 
 1. Commit the spec as a separate documentation checkpoint; review AC before RED.
 2. Introduce a test module such as `tests/test_shared_context_google_reconcile.py`; first RED **must** demonstrate absent/new reconciliation APIs causing failure rather than bad test data. Preserve RED logs outside published credentials.
-3. GREEN implementation should reuse `pub.validate_state`, `pub.State`, `auth.atomic_write`, `google_recovery.Journal`, `google_api.Transport`, and `drive._index/parse_index` rather than a duplicate publisher implementation. Concurrency/race semantics must remain explicit.
+3. GREEN reuses state validation/atomic writer, injected Transport, core JSON codec and CURRENT construction. Journal is the unchanged format authority; its overridable load is deliberately not the reconciler semantic evidence source. Concurrency/race semantics must remain explicit.
 4. Fake suite, full Windows `python -m unittest discover -s tests -v`, policy/lint check, exact-head verification and independent L2. Record test count, SHA and precisely which boundaries were not covered.
 5. Never load real `%LOCALAPPDATA%\x-context\google-drive\publication-v1.json`, real recovery sidecar, actual private IDs, saved Google credentials or operator backups in this stage. No real Google requests, no Ready/merge/cleanup.
 
 These tests qualify code *only*. They do not grant the independent live owner Gates R/W or permission to use/clear the actual registry.
 
-## Implementation / CI evidence — 2026-10-18
+## Historical implementation / CI evidence — 2026-10-18
 
 - RED checkpoint `84c4b5a6d8fe414c0e44f91a71ad25bfc5dd0d60`:
   [project-ci failure](https://github.com/oimus1976/x-context/actions/runs/39130312351)

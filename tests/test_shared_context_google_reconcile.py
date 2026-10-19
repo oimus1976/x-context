@@ -1,6 +1,8 @@
 """RCN-01..07: fake-only, never opens operator registry or Google credentials."""
 import copy
+from contextlib import ExitStack
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,6 +15,7 @@ from x_context.shared_context import google_api as api
 from x_context.shared_context import google_publish as pub
 from x_context.shared_context import google_recovery as recovery
 from x_context.shared_context import google_reconcile as reconcile
+from x_context.shared_context import google_auth as auth
 
 
 class ReconcileTests(unittest.TestCase):
@@ -193,8 +196,14 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(self.http.effects, [])
         with self.assertRaises(core.ContextError):
             pub.AppBackend(self.transport, pub.State(self.backup_path))
-        self.assertNotEqual(self.apply(planned, approved=True, read_authorized=True,
-                                       approval_digest=planned.digest), 'RECONCILED')
+        preserved = tuple(path.read_bytes() for path in
+                          (self.state_path, self.backup_path, self.sidecar_path))
+        self.http.calls.clear()
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+        self.assertEqual(self.http.calls, [])
+        self.assertEqual(tuple(path.read_bytes() for path in
+                               (self.state_path, self.backup_path, self.sidecar_path)), preserved)
 
     def test_RCN04_wrong_explicit_backup_approval_path_blocks(self):
         planned = self.plan()
@@ -368,6 +377,347 @@ class ReconcileTests(unittest.TestCase):
                 self.fail('hostile provider error must fail closed')
         self.assertNotIn(sentinel, repr(planned))
         self.assertNotIn(self.original.decode('utf-8'), repr(planned))
+        self.assertEqual(self.http.effects, [])
+
+    def test_F1_forged_journal_events_cannot_replace_captured_bytes(self):
+        planned = self.plan()
+        valid_events = copy.deepcopy(self.events)
+        class ForgedJournal(recovery.Journal):
+            def load(self):
+                return valid_events
+        forged = ForgedJournal(self.sidecar_path)
+        unrelated = b'{"type": "UNRELATED"}\n' * 29
+        self.sidecar_path.write_bytes(unrelated)
+        self.http.calls.clear()
+        with patch.object(self.state, 'save') as save:
+            with self.assertRaises(core.ContextError):
+                reconcile.plan_reconciliation(self.transport, self.state, forged,
+                                              reviewed_code='FAKE-REVIEWED-CODE-HEAD')
+            self.assertEqual(reconcile.commit_reconciliation(
+                self.transport, self.state, forged, self.backup_path, planned,
+                reviewed_code='FAKE-REVIEWED-CODE-HEAD', approved=True,
+                read_authorized=True, approval_digest=planned.digest,
+                approved_backup_path=str(self.backup_path)), 'BLOCKED')
+            save.assert_not_called()
+        self.assertEqual(self.http.calls, [])
+        self.assertEqual(self.http.effects, [])
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.sidecar_path.read_bytes(), unrelated)
+
+    def test_F1_canonical_bytes_do_not_consult_overridable_load(self):
+        with patch.object(recovery.Journal, 'load',
+                          side_effect=AssertionError('separate evidence forbidden')) as load:
+            self.assertEqual(self.local().sidecar_bytes, self.sidecar_path.read_bytes())
+            self.assertTrue(self.plan().digest)
+            load.assert_not_called()
+
+    def test_F1_sidecar_change_after_capture_blocks_before_get(self):
+        original_open = Path.open
+        changed = False
+        altered = b'{"type": "UNRELATED"}\n' * 29
+        expected_read = recovery.Journal.LIMIT + 1
+        def changing_open(path, mode='r', *args, **kwargs):
+            nonlocal changed
+            handle = original_open(path, mode, *args, **kwargs)
+            if path != self.sidecar_path or mode != 'rb' or changed:
+                return handle
+            class CapturedThenChanged:
+                def __enter__(self): return self
+                def read(self, count):
+                    if count != expected_read:
+                        raise AssertionError('sidecar read must be bounded')
+                    return handle.read(count)
+                def __exit__(self, *exc):
+                    nonlocal changed
+                    handle.close()
+                    changed = True
+                    with original_open(path, 'wb') as writer:
+                        writer.write(altered)
+            return CapturedThenChanged()
+        with patch.object(Path, 'open', changing_open):
+            with self.assertRaises(core.ContextError):
+                self.plan()
+        self.assertTrue(changed)
+        self.assertEqual(self.http.calls, [])
+        self.assertEqual(self.http.effects, [])
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.sidecar_path.read_bytes(), altered)
+
+    def test_F3_writer_output_is_accepted_byte_for_byte(self):
+        # Exercise the authoritative file writer, not just equivalent json.dumps.
+        writer = recovery.Journal(Path(self.temp.name) / 'fake-writer.jsonl')
+        writer.create(self.events[0])
+        for event in self.events[1:]:
+            writer.append(event)
+        canonical = writer.path.read_bytes()
+        self.assertEqual(canonical, self.sidecar_path.read_bytes())
+        self.assertEqual(reconcile.inspect_local(self.state, writer).sidecar_bytes, canonical)
+
+    def test_F3_equivalent_noncanonical_encodings_block_before_get(self):
+        canonical = self.sidecar_path.read_bytes()
+        variants = {
+            'bom': b'\xef\xbb\xbf' + canonical,
+            'crlf': canonical.replace(b'\n', b'\r\n'),
+            'cr': canonical.replace(b'\n', b'\r'),
+            'escaped-key': canonical.replace(b'"type"', b'"t\\u0079pe"', 1),
+            'escaped-value': canonical.replace(b'"BEGIN"', b'"BEG\\u0049N"', 1),
+            'whitespace': canonical.replace(b'": ', b'":  ', 1),
+            'key-order': (json.dumps(dict(reversed(list(self.events[0].items()))),
+                                     ensure_ascii=True, allow_nan=False) + '\n').encode('ascii')
+                         + canonical.split(b'\n', 1)[1],
+            'compact': b'\n'.join(json.dumps(e, sort_keys=True, separators=(',', ':')).encode('ascii')
+                                  for e in self.events) + b'\n',
+            'trailing-space': canonical + b' ',
+            'blank-line': canonical + b'\n',
+            'missing-final-lf': canonical[:-1],
+        }
+        for name, raw in variants.items():
+            with self.subTest(encoding=name):
+                self.assertNotEqual(raw, canonical)
+                self.sidecar_path.write_bytes(raw)
+                self.http.calls.clear()
+                with self.assertRaises(core.ContextError):
+                    self.plan()
+                self.assertEqual(self.http.calls, [])
+                self.assertEqual(self.http.effects, [])
+                self.assertFalse(self.backup_path.exists())
+                self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.sidecar_path.write_bytes(canonical)
+
+    def test_F1_F6_malformed_unknown_duplicate_and_oversize_sidecar_blocks(self):
+        canonical = self.sidecar_path.read_bytes()
+        unknown = copy.deepcopy(self.events)
+        unknown[3]['type'] = 'UNKNOWN'
+        self.write_events(unknown)
+        unknown_bytes = self.sidecar_path.read_bytes()
+        variants = [b'{broken}\n', canonical + b'{}\n', unknown_bytes,
+                    canonical.replace(b'"type": "BEGIN"', b'"type": "BEGIN", "type": "BEGIN"', 1),
+                    canonical.replace(b'"type": "BEGIN"', b'"type": NaN', 1),
+                    b' ' * (recovery.Journal.LIMIT + 1)]
+        for raw in variants:
+            with self.subTest(size=len(raw)):
+                self.sidecar_path.write_bytes(raw)
+                self.http.calls.clear()
+                with self.assertRaises(core.ContextError):
+                    self.plan()
+                self.assertEqual(self.http.calls, [])
+                self.assertEqual(self.http.effects, [])
+                self.assertFalse(self.backup_path.exists())
+        self.sidecar_path.write_bytes(canonical)
+
+    def test_F7_claim_open_and_status_inspection_failure_returns_safe_status(self):
+        planned = self.plan()
+        original_exists, original_open = Path.exists, Path.open
+        exists_calls = 0
+        def failed_status(path):
+            nonlocal exists_calls
+            if path == self.backup_path:
+                exists_calls += 1
+                if exists_calls > 1:
+                    raise PermissionError('FAKE-PRIVATE-PATH-AND-ID')
+            return original_exists(path)
+        def failed_open(path, mode='r', *args, **kwargs):
+            if path == self.backup_path and mode == 'xb':
+                # A failed open is not proof that no claim could exist.
+                raise PermissionError('FAKE-PRIVATE-PATH-AND-ID')
+            return original_open(path, mode, *args, **kwargs)
+        with patch.object(Path, 'exists', failed_status), patch.object(Path, 'open', failed_open):
+            outcome = self.apply(planned, approved=True, read_authorized=True,
+                                 approval_digest=planned.digest)
+        self.assertEqual(outcome, 'UNCERTAIN_REQUIRES_INSPECTION')
+        self.assertEqual(exists_calls, 1)
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.sidecar_path.read_bytes(), self.local().sidecar_bytes)
+        self.assertEqual(self.http.effects, [])
+
+    def test_F6_duplicate_created_id_colliding_with_c001_blocks_before_get(self):
+        duplicate = copy.deepcopy(self.events)
+        created = next(row for row in duplicate if row['type'] == 'CREATED')
+        created['id'] = duplicate[-1]['manifest'][recovery.FIRST_ROLE]['id']
+        self.write_events(duplicate)
+        with self.assertRaises(core.ContextError):
+            self.plan()
+        self.assertEqual(self.http.calls, [])
+        self.assertEqual(self.http.effects, [])
+        self.assertFalse(self.backup_path.exists())
+
+    def test_F6_folder_and_document_metadata_mismatch_blocks_without_backup(self):
+        planned = self.plan()
+        targets = [planned.projected['folder'], planned.projected['documents'][recovery.FIRST_ROLE]]
+        mutations = [('appProperties', {}), ('parents', ['FAKE-WRONG-PARENT']),
+                     ('mimeType', 'application/octet-stream'), ('isAppAuthorized', False)]
+        for identity in targets:
+            for key, value in mutations:
+                before = copy.deepcopy(self.http.files[identity])
+                with self.subTest(target=identity, field=key):
+                    self.http.files[identity][key] = value
+                    self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                                approval_digest=planned.digest), 'BLOCKED')
+                    self.assertFalse(self.backup_path.exists())
+                    self.assertEqual(self.state_path.read_bytes(), self.original)
+                    self.assertEqual(self.http.effects, [])
+                self.http.files[identity] = before
+        request = self.http.request
+        for identity in targets:
+            def wrong_owner(service, method, path, **kwargs):
+                if path == 'files/' + identity + '/permissions':
+                    return {'permissions': [{'id': 'FAKE-WRONG-OWNER', 'type': 'user', 'role': 'owner'}]}
+                return request(service, method, path, **kwargs)
+            with self.subTest(owner=identity), patch.object(self.http, 'request', side_effect=wrong_owner):
+                self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                            approval_digest=planned.digest), 'BLOCKED')
+                self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.http.effects, [])
+
+    def test_F6_missing_child_and_current_link_tampering_block(self):
+        planned = self.plan()
+        identity = planned.projected['documents'][recovery.FIRST_ROLE]
+        current = planned.projected['documents'][drive.CURRENT]
+        request = self.http.request
+        def missing_child(service, method, path, **kwargs):
+            result = request(service, method, path, **kwargs)
+            if service == 'drive' and path == 'files':
+                result['files'] = [item for item in result['files'] if item['id'] != identity]
+            return result
+        with patch.object(self.http, 'request', side_effect=missing_child):
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest), 'BLOCKED')
+        before = self.http.text[current]
+        self.assertIn('/' + identity + '/edit', before)
+        self.http.text[current] = before.replace('/' + identity + '/edit', '/FAKE-WRONG-LINK/edit')
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+        self.assertFalse(self.backup_path.exists())
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.http.effects, [])
+
+    def test_F6_local_and_read_paths_have_true_no_auth_network_or_write_tripwires(self):
+        import socket
+        import urllib.request
+        from x_context import credential_lifecycle, x_api
+        blocked = []
+        def tripwire(*args, **kwargs):
+            blocked.append('forbidden capability')
+            raise AssertionError('FAKE forbidden capability')
+        request = self.http.request
+        def read_only(service, method, path, **kwargs):
+            if method != 'GET':
+                return tripwire()
+            return request(service, method, path, **kwargs)
+        with ExitStack() as stack:
+            for target, name in [(auth.Store, 'load'), (auth.Store, 'save'),
+                                 (auth.Provider, 'access_token'), (auth, 'token_request'),
+                                 (auth, '_dpapi_protect'), (auth, '_dpapi_unprotect'),
+                                 (credential_lifecycle.DPAPIFileCredentialStore, 'load'),
+                                 (socket, 'socket'), (socket, 'create_connection'),
+                                 (urllib.request, 'urlopen'), (api, 'build_opener'),
+                                 (api.HTTP, 'request'), (x_api, 'lookup_post'),
+                                 (pub, 'publish')]:
+                stack.enter_context(patch.object(target, name, side_effect=tripwire))
+            stack.enter_context(patch.object(self.http, 'request', side_effect=read_only))
+            self.http.calls.clear()
+            self.assertEqual(len(self.local().manifest), 6)
+            self.assertEqual(self.http.calls, [])
+            planned = self.plan()
+            self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                        approval_digest=planned.digest), 'RECONCILED')
+        self.assertEqual(blocked, [])
+        self.assertEqual(self.http.effects, [])
+        self.assertTrue(all(row[1] == 'GET' for row in self.http.calls))
+
+    def test_F6_backup_open_fsync_readback_replace_and_postread_failures_stop(self):
+        planned = self.plan()
+        sidecar = self.sidecar_path.read_bytes()
+        original_open, original_read = Path.open, Path.read_bytes
+        original_fsync, original_replace = os.fsync, os.replace
+        for boundary in ('open-after-claim', 'backup-write', 'backup-flush', 'backup-fsync',
+                         'backup-readback', 'state-fsync', 'replace-before',
+                         'replace-after', 'post-replace-readback'):
+            self.state_path.write_bytes(self.original)
+            if self.backup_path.exists():
+                self.backup_path.unlink()  # Only reset this test's disposable fake incident.
+            fsync_calls = 0
+            replaced = False
+            def failed_open(path, mode='r', *args, **kwargs):
+                handle = original_open(path, mode, *args, **kwargs)
+                if path != self.backup_path or mode != 'xb':
+                    return handle
+                if boundary == 'open-after-claim':
+                    handle.close()
+                    raise PermissionError('FAKE-private claim result unknown')
+                class BackupHandle:
+                    def __enter__(self): return self
+                    def __exit__(self, *exc): handle.close()
+                    def write(self, data):
+                        if boundary == 'backup-write':
+                            raise OSError('FAKE-private write')
+                        return handle.write(data)
+                    def flush(self):
+                        if boundary == 'backup-flush':
+                            raise OSError('FAKE-private flush')
+                        return handle.flush()
+                    def fileno(self): return handle.fileno()
+                return BackupHandle()
+            def failed_fsync(fd):
+                nonlocal fsync_calls
+                fsync_calls += 1
+                if (boundary == 'backup-fsync' and fsync_calls == 1
+                        or boundary == 'state-fsync' and fsync_calls == 2):
+                    raise OSError('FAKE-private fsync')
+                return original_fsync(fd)
+            def failed_replace(source, destination):
+                nonlocal replaced
+                if boundary == 'replace-before':
+                    raise OSError('FAKE-private replace')
+                result = original_replace(source, destination)
+                replaced = True
+                if boundary == 'replace-after':
+                    raise OSError('FAKE-private post-replace')
+                return result
+            def failed_read(path):
+                if boundary == 'backup-readback' and path == self.backup_path:
+                    return b'FAKE-CORRUPT-READBACK'
+                if boundary == 'post-replace-readback' and replaced and path == self.state_path:
+                    raise PermissionError('FAKE-private readback')
+                return original_read(path)
+            with self.subTest(boundary=boundary), patch.object(Path, 'open', failed_open), \
+                 patch.object(Path, 'read_bytes', failed_read), \
+                 patch.object(os, 'fsync', failed_fsync), patch.object(os, 'replace', failed_replace):
+                result = self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest)
+                self.assertEqual(result, 'UNCERTAIN_REQUIRES_INSPECTION')
+            self.assertTrue(self.backup_path.exists())
+            self.assertIn(self.state_path.read_bytes(), (self.original, core.encode(planned.projected)))
+            preserved = tuple(path.read_bytes() for path in
+                              (self.state_path, self.backup_path, self.sidecar_path))
+            self.http.calls.clear()
+            with patch.object(self.state, 'save') as save:
+                self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                            approval_digest=planned.digest), 'BLOCKED')
+                save.assert_not_called()
+            self.assertEqual(self.http.calls, [])
+            self.assertEqual(tuple(path.read_bytes() for path in
+                                   (self.state_path, self.backup_path, self.sidecar_path)), preserved)
+            self.assertEqual(self.sidecar_path.read_bytes(), sidecar)
+            self.assertEqual(self.http.effects, [])
+
+    def test_F6_keyboard_interrupt_retains_claim_and_exact_reentry_block(self):
+        planned = self.plan()
+        sidecar = self.sidecar_path.read_bytes()
+        with patch.object(self.state, 'save', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.apply(planned, approved=True, read_authorized=True,
+                           approval_digest=planned.digest)
+        self.assertEqual(self.backup_path.read_bytes(), self.original)
+        self.assertEqual(self.state_path.read_bytes(), self.original)
+        self.assertEqual(self.sidecar_path.read_bytes(), sidecar)
+        self.http.calls.clear()
+        self.assertEqual(self.apply(planned, approved=True, read_authorized=True,
+                                    approval_digest=planned.digest), 'BLOCKED')
+        self.assertEqual(self.http.calls, [])
+        self.assertEqual(self.backup_path.read_bytes(), self.original)
         self.assertEqual(self.http.effects, [])
 
 

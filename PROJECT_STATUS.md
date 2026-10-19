@@ -1,6 +1,37 @@
 # Project Status
 
-## Issue #65 / Draft PR #66 — injected registry reconciliation (2026-10-18)
+## Issue #65 / Draft #66 — review remediation (2026-10-20)
+
+Target remains `issue-65-registry-reconciliation-spec`, starting
+`aab87149a0e926c11e49c2c2471e0b1cbbfa5408`, with unchanged Draft #63 base
+`f098de73eec2dd75ddfa315a2067835121622387`.
+
+F1/F3 bind semantic history to the exact bounded captured sidecar bytes and
+the unchanged Journal writer's canonical encoding. F7 removes filesystem I/O
+from the write-phase exception handler and treats possible-claim outcomes as
+uncertain. Essential F6 tests cover actual ID collision, folder/doc metadata,
+CURRENT links, malformed input, no-auth/network/remote-write tripwires,
+exact reentry and backup/atomic-replacement failures. F2 keeps exact historical
+revision equality: drift blocks before backup until a separate human decision.
+F4/F5 now distinguish module checks from future operator identity, locking,
+dependency/caller binding, no-refresh transport, budgets and approval duties.
+
+RED on the unchanged starting implementation: 34 focused tests, 8 failures
+(including subtests), 2 errors, 3.962s; forged evidence/noncanonical bytes and
+raw filesystem error reproduced. First focused GREEN: 34 PASS in 3.584s.
+The matrix records final test names and subsequent evidence; exact new HEAD,
+Windows runner and hosted checks are reported in the PR evidence after commit.
+An initial sandbox temp-permission failure is environment evidence, not RED.
+Pre-commit final full Windows regression: 437 tests PASS in 149.688s, zero
+failures/errors/skips, including all 35 reconciliation methods. Baseline,
+policy-script compilation and diff checks passed. This is pre-commit evidence;
+committed exact-head Windows validation and separate L2 are distinct gates.
+
+No real Google/X, operator registry/sidecar/backup or actual credentials are
+accessed. Independent new-head L2 is assigned separately to Claude Code and
+remains required. PRs #63/#66 remain Draft; Ready/merge/live R/W are unapproved.
+
+## Historical: Issue #65 / Draft PR #66 — initial implementation (2026-10-18)
 
 Workstream: `issue-65-registry-reconciliation-spec`, based on Draft PR #63
 `f098de73eec2dd75ddfa315a2067835121622387`; PR #66 targets that topic
@@ -14,8 +45,9 @@ projection installs all six IDs before clearing pending. The separately gated
 local write claims a byte-exact backup at a fixed registry-derived path,
 rejecting any alternate claim filename, repeats provider checks and attempts
 one v1 atomic replacement; failure after claim means inspection, no retry.
-Plans bind raw local bytes and running module source digest as well as reviewed
-caller identity. No live operator entrypoint or credential loader was added.
+Plans bind raw local bytes and running module source digest plus a caller-supplied
+reviewed-code label. That label does not verify caller identity or dependencies.
+No live operator entrypoint or credential loader was added.
 
 RED at `84c4b5a6d8fe414c0e44f91a71ad25bfc5dd0d60`:
 GitHub project-ci failed on missing `google_reconcile` import, as intended.

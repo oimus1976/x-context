@@ -1,6 +1,6 @@
 # SPEC-0008 — One-time reconciliation after completed first-create recovery (Issue #65)
 
-Status: **DESIGN / TEST CONTRACT ONLY**. No local owner files or live Drive were accessed while authoring this spec. No registry write, OAuth refresh, recovery re-run, scheduled job, Ready, or merge is authorized by this document.
+Status: **FAKE-ONLY IMPLEMENTATION / REMEDIATION CONTRACT** (2026-10-20). No local owner files or live Drive are accessed by this work. No registry write, OAuth refresh, recovery re-run, scheduled job, Ready, or merge is authorized by this document.
 
 Base dependency: Draft PR #63 exact source head `f098de73eec2dd75ddfa315a2067835121622387` (2026-10-18). This document lives on a **separate** Issue #65 topic branch, based on that head. The resulting PR should target the #63 topic branch until #63 is merged, then be deliberately rebased/retargeted to actual main. No implementation belongs on #63.
 
@@ -38,11 +38,42 @@ A useful, reviewable implementation is a small injected module (e.g. `google_rec
 
 Do not combine R and W solely because a fake test passed or because old recovery returned COMPLETE. Human retains Ready/merge/destructive decision authority.
 
+### Implemented checks versus future caller duties (F4/F5)
+
+The injected module validates explicit safe paths, captured local bytes and
+event semantics, the supplied transport's observations, historical receipt
+equality, plan equality, fixed exclusive backup claim and full local projection.
+It makes GET-shaped calls only and has no credential loader or live entrypoint.
+Tests supply an in-memory transport and invented files; they grant no real
+authority. `approved`, `read_authorized` and `reviewed_code` are caller-supplied
+inputs, not authenticated approval or proof of reviewed dependencies.
+
+A **future independently reviewed operator caller**, outside this PR, must
+enforce same Windows user, real account/target identity, private storage,
+single-writer quiescence plus an OS lock or equivalent coordination, complete
+dependency/caller source binding, no implicit OAuth refresh/save, a genuinely
+GET-only transport, per-service request/time budgets and unexpired owner read
+approval at every replan. Gate R and the later exact-plan/path Gate W each
+require distinct owner approval. The reconciler does not enforce those caller
+duties by accepting a boolean or hashing its own source. No live caller/CLI,
+credential loader or broader provider capability is added here.
+
 ## 4. Exact local evidence and event-state machine — RCN-01
 
 Inputs must be a **specific existing absolute registry path**, a **specific existing absolute recovery JSONL sidecar path** and compiled `baseline` records; no directory search or arbitrary import. Apply existing path guards; reject symlink, junction, malformed/oversized files, trailing junk, duplicate keys, invalid strings and unsafe Windows aliases. Compute both **raw byte SHA256** and canonical normalized-state digest before any possible effect; keep original bytes for backup. BEGIN records the *canonical state* digest, not the registry's original raw-byte digest. Whitespace-only differences may pass history inspection but must change the fresh plan digest and block any previously approved apply.
 
-The sidecar is an append-only record stream. The existing `google_recovery.Journal.load` validates transport/storage framing, **not** the semantic completeness of an arbitrary event stream. The reconciler must validate meaning as well. For this unique successful baseline incident, expect exactly **29 ordered entries**:
+The sidecar is an append-only record stream. The reconciler reads at most
+`Journal.LIMIT + 1` bytes, rejects oversize, and parses **that exact captured
+array** with `core.decode`; it never takes semantic evidence from an overridable
+`Journal.load()`. Duplicate keys and NaN remain invalid. Each decoded line must
+reserialize byte-for-byte as the unchanged authoritative writer's
+`(json.dumps(event, ensure_ascii=True, sort_keys=True, allow_nan=False) + '\n').encode('ascii')`.
+Exactly 29 LF-terminated lines and no extra bytes are accepted. BOM, CR/CRLF,
+escaped equivalent keys/values, changed whitespace/key order/separators and
+trailing bytes are rejected before remote reads or claim creation. Later byte
+equality checks detect observed drift; they do not prove absence of an
+undetectable concurrent ABA change without a caller lock/snapshot model.
+For this unique successful baseline incident, expect exactly **29 ordered entries**:
 
 1. `BEGIN` with `schema='first-create-recovery-v1'`, an exact copy of the original v1 registry state, original state digest, baseline fixture digest, the initial C001 revision and a bounded nonsecret approval reference.
 2. Original C001: `INTENT(WRITE_TEXT)`, then final `VERIFIED` receipt.
@@ -63,7 +94,7 @@ A separately approved read-only Google Transport, with refresh/save disabled, mu
 - Complete **APP_VISIBLE** all-MIME inventory of precisely the six IDs from the sidecar, with no duplicate, missing or extra *visible* items; `drive.file` is not a global owner-inventory proof. Require same-account single-writer dedicated-folder assumption.
 - For each role, exact document ID, title, `parents=(folder_id,)`, native Docs MIME, appProperties and owner-only permission, stable nonempty revision; exact text matches compiled baseline Markdown for five records; CURRENT body matches `drive._index(baseline_records, verified_docs)` byte-for-byte after provider text normalization.
 - Parse CURRENT using the existing index parser; expect status COMPLETE, schema 1, exactly five `active_ids` / `active_links`, all link URLs and hashes bound to the **observed** five IDs/bodies; never trust CURRENT as an authority for adopting unknown IDs.
-- Match all final remote revisions and body digests to the six final `VERIFIED`/COMPLETE manifest receipts. Exact revisions are part of the approved frozen plan; changed revision even if body unchanged requires new inspection/plan, never silent acceptance.
+- Match all final remote revisions and body digests to the six final `VERIFIED`/COMPLETE manifest receipts. Historical revision equality remains a strict fail-closed precondition. An opaque revision ID may change even without a body change: any mismatch is `BLOCKED` before backup, with no substitution, adoption, receipt rebind or automatic requalification. A fresh human decision on a separately proposed recovery/requalification path is required. This is historical identity evidence, not a long-term provider stability guarantee; a new read plan alone does not waive receipt equality.
 - Repeat remote snapshot and original local raw-byte comparisons before completing the read-only plan, and immediately before any later Gate W commit. Reject unstable snapshots, permission expansion, missing metadata, stale journal, pagination disagreement, or any mismatch.
 
 No Google WRITE, scope expansion, token refresh, local registry mutation or backup in this phase.
@@ -77,7 +108,7 @@ Create a deterministic canonical plan digest bound to:
 - entire **raw sidecar bytes** SHA256 and strict 29-event validation/COMPLETE manifest;
 - six verified remote identities, owners/parents/permissions/appProperties, revisions, bodies and CURRENT text;
 - compiled baseline SHA256, projected registry canonical bytes SHA256;
-- exact reviewed code/caller version/sha, approved private location identities (without showing raw values).
+- this reconciler's source-file byte SHA, caller-supplied reviewed-code label and explicit private location identities (without showing raw values). Complete caller/dependency source binding is a future caller obligation, not a guarantee of this module's source hash.
 
 Output statuses are nonsecret. The digest does **not** itself grant permission. Never persist a plan file into the protected live path automatically; any needed private receipt must be explicit and owner-approved.
 
@@ -85,11 +116,11 @@ Output statuses are nonsecret. The digest does **not** itself grant permission. 
 
 After a separately approved read plan and independent W authorization:
 
-1. Enforce the expected exact-head/caller/code digest, same Windows user, private path guards and single writer; no source in progress, sidecar/backup/registry path aliases, and no existing claim/backup file. Re-inspect local sidecar + original registry raw bytes and fresh remote plan; require exact equality to the owner-approved plan including revisions and hashes. Do not refresh credentials.
+1. The future caller must enforce exact-head/caller/dependency binding, same Windows user, single writer and valid read/write authority as defined in section 3. The module checks private path guards, fixed claim identity, absence of an existing claim/backup, and fresh plan equality including original registry/sidecar bytes and remote revisions. No credential refresh is implemented by the reconciler; injected transport behavior must be constrained by the caller.
 2. **First persistent effect**: make a byte-exact original-registry backup at the sole owner-approved private path derived from the registry's stem: `<registry-stem>.issue65-original-claim.json`, in the same directory with exclusive create (`xb` or `O_EXCL`), flush/fsync, and readback. This backup is simultaneously the one-shot **claim**; any existing backup (even empty/corrupt) blocks all later write attempts. Never overwrite, delete, or use an alternate backup path to evade ambiguity. Keep recovery sidecar untouched.
 3. Just before registry replacement recheck that original registry and sidecar raw bytes are still identical to the approved plan, and that the verified remote plan remains unchanged. Do not assume that exclusive backup locks the unrelated original registry; explicitly retain the single-writer assumption.
 4. Commit the **complete** projected registry with existing safeguarded `pub.State.save` / `auth.atomic_write` and read back bytes; report COMPLETE only on exact byte equality plus unchanged sidecar/backup and appropriate durable-write evidence. Note that Windows rename + file fsync is not a cross-resource transaction or blanket power-loss guarantee; treat post-commit errors/unknown persistence as `UNCERTAIN_REQUIRES_INSPECTION`.
-5. If any failure occurs after backup creation, never auto-repeat or auto-rollback. Operator must read-only compare old and projected registry bytes, immutable backup/sidecar and current remote state; return a safe category. If failure occurs before backup claim, no registry write was authorized/performed.
+5. Every ordinary exception after entering the exclusive-open phase, including an ambiguous open result, returns `UNCERTAIN_REQUIRES_INSPECTION`; do not query `backup.exists()` or other throwing filesystem status in the exception handler. Only pre-effect validation failures are provably `BLOCKED`. Never auto-repeat or auto-rollback. Operator inspection and a new human decision are required even if an uncertain open left no visible claim. An existing fixed claim blocks a later call before remote reads. `KeyboardInterrupt`/process termination is not converted to success: a claim already created remains a reentry barrier. This is not a guarantee against OS-level loss/removal of that claim.
 
 `pending=[]` is allowed **only** as part of the fully populated, verified six-document replacement. In particular, a simple `state['pending']=[]` operation on the original one-document registry is invalid.
 
@@ -102,7 +133,7 @@ Do not call normal `publish` automatically; user must separately authorize its *
 - Backup claim/backup readback failure -> stop. If backup may already have been created, **any later attempt is forbidden** without new inspection and owner decision.
 - Fail/crash between backup creation, registry atomic replacement, or readback -> `UNCERTAIN_REQUIRES_INSPECTION`. Do not label success based only on a remote CURRENT COMPLETE or local `pending=[]`.
 - On proven final state only -> `RECONCILED` (normal publish still NOT_INVOKED). Before that, ordinary `AppBackend` must keep rejecting the incident's original pending.
-- Every stop requires safe stdout/stderr without traceback containing private paths/IDs; redaction regression tests should include hostile exceptions, invalid CLI args and file names.
+- Ordinary API errors return safe categories without exposing exception text, private paths or IDs. There is no reconciliation CLI in this PR. A future caller must sanitize its stdout/stderr and termination reporting; no claim is made that this module catches process kills, `KeyboardInterrupt` or unrecoverable OS conditions.
 - No automatic retry, rollback, new Google objects, sharing changes, registry truncation, sidecar deletion, hidden credential update, cron/Task Scheduler, or X calls.
 
 ## 9. Requirement → AC → RED test contract (freeze before implementation)
@@ -119,8 +150,8 @@ Do not call normal `publish` automatically; user must separately authorize its *
 
 ## 10. Required follow-up sequence
 
-1. Peer-review this specification and freeze AC. The current Issue #65 branch contains **specification only**; no RED/GREEN or real-operation claim.
-2. Have Codex create synthetic in-memory/fake tests **RED** for RCN-01..07 in the dependent topic branch, with deterministic fixtures built via the real fake recovery executor rather than hand-invented private state. Keep error reports safe.
-3. Implement only the narrow code needed for **GREEN**; validate all tests Windows Python 3.12, full regression, policy check, exact HEAD and separate adversarial L2. Update Draft PR with evidence.
+1. The prior design and RED/GREEN checkpoints are historical evidence; the owner-approved F1/F3/F7 correction and essential F6 test additions are the current scope. See the actual-method test matrix.
+2. Keep fake evidence built by the existing recovery executor, captured RED probes, minimum GREEN, Windows Python 3.12 full regression, policy/line-ending checks and committed exact-head evidence. Update Draft PR with the exact SHA rather than transferring old-head results.
+3. Obtain a new independent Claude Code L2 of the entire base-to-new-head high-impact diff. Codex implementation/testing is not that review.
 4. Resolve PR #63's human Ready/merge independently; after it is merged, rebase/retarget Issue #65 against actual main without taking a human gate.
 5. Only then request separate owner Gate R (live read-only) and later W (one-time local registry write). After proven reconciliation, request distinct authorizations for normal dry-run and publisher scenario qualification.

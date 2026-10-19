@@ -1,5 +1,18 @@
 # Changelog
 
+## Issue #65 / PR #66 — review F1/F3/F7 remediation (2026-10-20)
+
+- Parse and hash the same bounded captured sidecar bytes with duplicate-key/NaN
+  rejection; reject any encoding different from the unchanged Journal writer.
+  An overridable Journal.load cannot supply evidence for unrelated file bytes.
+- Return a safe uncertain status for every ordinary exception in the exclusive
+  claim/write phase, without throwing filesystem I/O in the error handler.
+- Add synthetic collision/metadata/CURRENT/no-auth/network/GET-only tripwires,
+  bounded capture drift, exact reentry and targeted persistence fault tests.
+- Retain strict historical revision equality and document its human stop rule.
+  Clarify future caller identity, locking, full source binding, budget and owner
+  approval duties. No live caller, provider access or authority expansion.
+
 ## Issue #65 / Draft PR #66 — fake-only completed-recovery reconciliation
 
 - Add an injected, incident-specific local inspector for the exact 29-event

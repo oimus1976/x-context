@@ -3,9 +3,15 @@
 Injected transports and exact paths only. No OAuth, Google caller, X collection, or
 automatic publish invocation. The real operator caller and its separate Gate R/W
 approvals are deliberately NOT supplied here.
+
+The reviewed_code label and approval booleans are test/API inputs, not real
+authorization. Module-source hashing does not bind the caller or dependencies;
+OS identity, writer coordination, credential policy and read budgets belong to
+a future independently reviewed caller. Readback checks are not an ABA lock.
 """
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 import copy
+import json
 import os
 from pathlib import Path
 import re
@@ -58,26 +64,42 @@ def _safe_path(path, *, suffix):
 
 def _read_inputs(state_store, journal):
     state_path = _safe_path(state_store.path, suffix='.json')
-    journal._guard()
-    sidecar_path = journal.path
+    sidecar_path = _safe_path(journal.path, suffix='.jsonl')
     if state_path == sidecar_path or not state_path.is_file() or not sidecar_path.is_file():
         raise ValueError
     if os.path.samefile(state_path, sidecar_path):
         raise ValueError
-    raw = state_path.read_bytes()
-    sidecar = sidecar_path.read_bytes()
-    if not raw or len(raw) > 65536 or not sidecar or len(sidecar) > journal.LIMIT:
-        raise ValueError
+    raw = _read_bounded(state_path, 65536)
+    sidecar = _read_bounded(sidecar_path, recovery.Journal.LIMIT)
     value = pub.validate_state(core.decode(raw))
-    # State.load and Journal.load are the repository's ordinary format guards.
     if state_store.load() != value:
         raise ValueError
-    events = journal.load()
-    if not isinstance(events, list) or len(events) != 29:
+    # Decode ONLY the captured bytes that will be hashed into the plan. A
+    # subclassable Journal.load() is not evidence of these particular bytes.
+    lines = sidecar.split(b'\n')
+    if len(lines) != 30 or lines[-1] != b'':
         raise ValueError
-    if state_path.read_bytes() != raw or sidecar_path.read_bytes() != sidecar:
+    events = []
+    for line in lines[:-1]:
+        event = core.decode(line)
+        # Journal._write's exact ASCII, sorted-key, spaced-separator encoding.
+        # Compare the original line, never a normalized replacement for it.
+        if (json.dumps(event, ensure_ascii=True, sort_keys=True,
+                       allow_nan=False).encode('ascii') != line):
+            raise ValueError
+        events.append(event)
+    if (_read_bounded(state_path, 65536) != raw
+            or _read_bounded(sidecar_path, recovery.Journal.LIMIT) != sidecar):
         raise ValueError
     return raw, sidecar, value, events
+
+
+def _read_bounded(path, limit):
+    with path.open('rb') as handle:
+        raw = handle.read(limit + 1)
+    if not raw or len(raw) > limit:
+        raise ValueError
+    return raw
 
 
 def _expect(row, event_type, keys):
@@ -336,11 +358,9 @@ def commit_reconciliation(transport, state_store, journal, backup_path, plan, *,
             return 'BLOCKED'
     except Exception:
         return 'BLOCKED'
-    claimed = False
     try:
         # Exclusive create is a one-shot claim, not a cross-process registry lock.
         with backup.open('xb') as handle:
-            claimed = True
             handle.write(plan.original_bytes)
             handle.flush()
             os.fsync(handle.fileno())
@@ -358,5 +378,7 @@ def commit_reconciliation(transport, state_store, journal, backup_path, plan, *,
             raise ValueError
         return 'RECONCILED'
     except Exception:
-        # Even a failed xb/flush/fsync may have left a claim; never retry here.
-        return 'UNCERTAIN_REQUIRES_INSPECTION' if claimed or backup.exists() else 'BLOCKED'
+        # Entering xb may create a claim even when open itself raises. No
+        # filesystem I/O is safe as an error-status oracle here. Inspection
+        # and a fresh human decision are required; never retry in this call.
+        return 'UNCERTAIN_REQUIRES_INSPECTION'
