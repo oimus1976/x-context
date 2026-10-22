@@ -1,5 +1,20 @@
 # Project Status
 
+## Issue #67 — pending-state explicit authentication repair (2026-10-23)
+
+Branch `issue-67-pending-reauth` starts at merged canonical main
+`80c6d4e5fbaa505f53a066460d71a8eaed7c4fe0` (PRs #63/#66 merged).
+Only explicit approved login bypasses publication State construction; sandbox
+and publish pending/invalid-registry barriers, bootstrap consent and credential
+overwrite protection remain intact. No provider/store/recovery behavior changes.
+Seven focused synthetic methods reproduced RED (8 failures including subtests),
+then all passed GREEN after command dispatch separation. Pre-commit Windows full
+regression passed 444 tests with zero failures/errors/skips. Exact-head runner
+and hosted CI evidence are recorded with the Draft PR at its published head.
+Independent L2 remains required before human Ready/merge. No real Google/X,
+credentials, registry/sidecar/backup, normal publishing or scheduler is exercised;
+the existing 17 worktrees are retained and outside this implementation's scope.
+
 ## Issue #65 / Draft #66 — review remediation (2026-10-20)
 
 Target remains `issue-65-registry-reconciliation-spec`, starting

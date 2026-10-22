@@ -249,35 +249,37 @@ def main(argv=None):
             result=dict(status='LIVE_GOOGLE_AUTH_PENDING',scope=auth.SCOPE,account_project='OWNER_SELECTION_REQUIRED',
                         credential_storage='%LOCALAPPDATA%/x-context/google-drive/credential-v1.dpapi',
                         guide='docs/specs/0008-unattended-drive-publisher.md',external_testing_refresh_days=7)
+        elif args.mode=='login':
+            # Explicit consent renews auth only; never open the publication journal.
+            credential_path,_=default_paths()
+            auth.bootstrap(auth.Store(credential_path),args.client_config,
+                           approved=args.approve_new_auth,reauthorize=args.reauthorize)
+            result=dict(status='GOOGLE_AUTHORIZED',scope=auth.SCOPE)
         else:
             credential_path,state_path=default_paths()
             state=State(state_path)
-            # Pending effects must stop before auth load/refresh or network.
+            # Drive operations must stop before auth load/refresh or network.
             validated=state.load()
             if validated['pending']:
                 raise core.ContextError('GOOGLE_EFFECT_REQUIRES_INSPECTION')
             store=auth.Store(credential_path)
-            if args.mode=='login':
-                auth.bootstrap(store,args.client_config,approved=args.approve_new_auth,reauthorize=args.reauthorize)
-                result=dict(status='GOOGLE_AUTHORIZED',scope=auth.SCOPE)
+            if args.mode=='publish' and not validated['folder']:
+                raise core.ContextError('GOOGLE_SANDBOX_INITIALIZATION_REQUIRED')
+            if store.load() is None:
+                raise core.ContextError('LIVE_GOOGLE_AUTH_PENDING')
+            backend=AppBackend(api.Transport(api.HTTP(auth.Provider(store).access_token)),state)
+            if args.mode=='init-sandbox':
+                result=dict(status='GOOGLE_SANDBOX_INITIALIZED',folder=backend.initialize(),inventory_scope='APP_VISIBLE')
             else:
-                if args.mode=='publish' and not validated['folder']:
-                    raise core.ContextError('GOOGLE_SANDBOX_INITIALIZATION_REQUIRED')
-                if store.load() is None:
-                    raise core.ContextError('LIVE_GOOGLE_AUTH_PENDING')
-                backend=AppBackend(api.Transport(api.HTTP(auth.Provider(store).access_token)),state)
-                if args.mode=='init-sandbox':
-                    result=dict(status='GOOGLE_SANDBOX_INITIALIZED',folder=backend.initialize(),inventory_scope='APP_VISIBLE')
+                plan=drive.preview(backend,backend.target,records)
+                if args.dry_run:
+                    result=dict(status='PREVIEW',folder=backend.target,inventory_scope='APP_VISIBLE',remote_content_writes=0)
                 else:
-                    plan=drive.preview(backend,backend.target,records)
-                    if args.dry_run:
-                        result=dict(status='PREVIEW',folder=backend.target,inventory_scope='APP_VISIBLE',remote_content_writes=0)
-                    else:
-                        outcome=publish(backend,records,plan)
-                        result=dict(status=outcome.status,folder=backend.target,writes_attempted=outcome.writes_attempted,inventory_scope='APP_VISIBLE')
-                        if outcome.status!='COMPLETE':
-                            print(json.dumps(result,sort_keys=True),file=sys.stderr)
-                            return 2
+                    outcome=publish(backend,records,plan)
+                    result=dict(status=outcome.status,folder=backend.target,writes_attempted=outcome.writes_attempted,inventory_scope='APP_VISIBLE')
+                    if outcome.status!='COMPLETE':
+                        print(json.dumps(result,sort_keys=True),file=sys.stderr)
+                        return 2
         print(json.dumps(dict(x_requests_attempted=0,**result),sort_keys=True))
         return 0
     except core.ContextError as error:

@@ -1,5 +1,15 @@
 # Changelog
 
+## Issue #67 — explicit authentication while publication is pending (2026-10-23)
+
+- Dispatch approved `login` before constructing publication State. Pending,
+  missing or malformed registry state no longer blocks explicit authentication;
+  registry bytes/history remain untouched.
+- Preserve login argument/reauthorization guards and the pending/invalid-state
+  barriers for sandbox initialization and publish preview/apply before auth/API.
+- Add synthetic consent, state-isolation, credential-protection and zero-effect
+  regressions. No real Google access or permission to publish/recover is added.
+
 ## Issue #65 / PR #66 — review F1/F3/F7 remediation (2026-10-20)
 
 - Parse and hash the same bounded captured sidecar bytes with duplicate-key/NaN
