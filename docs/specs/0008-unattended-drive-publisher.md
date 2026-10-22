@@ -31,7 +31,7 @@ restore it through provider structure, preserving every application newline.
 Unsupported tables, objects, tabs and suggestions block rather than flatten.
 
 Persistent single-writer journal is written before every remote effect.
-Pending/ambiguous effects block subsequent processes. Successful publication
+Pending/ambiguous effects block subsequent Drive operations. Successful publication
 requires final full readback then journal commit; failures preserve inspection
 state. No automatic retry, adoption, deletion or rollback. IDs are nonsecret
 local state; credential envelope is separate DPAPI CurrentUser protected storage.
@@ -49,6 +49,31 @@ local state; credential envelope is separate DPAPI CurrentUser protected storage
 | Unattended invocation | A07 | new lifecycle/backend instances load state and refresh without browser |
 | Multi-AI proof | A08 | LIVE_AUTH_PENDING; new app folder reader test after consent, optional Meowth/PC-off |
 | Evidence | A09 | regression, Windows synthetic DPAPI, exact-head baseline/CI, independent L2, Draft PR |
+
+### A02 Authentication while publication is pending (Issue #67)
+
+Explicit `login --approve-new-auth [--reauthorize] --client-config <outside-Git-path>`
+is authentication-only. Dispatch it without constructing, reading or writing
+publication State, even when the registry is missing, malformed, unsafe or has
+pending effects. Leave registry bytes and pending history untouched. The existing
+bootstrap still validates the outside-Git Desktop client configuration and
+requires `--reauthorize` before replacing an existing stored credential.
+Missing approval/configuration or conflicting command flags stop before auth.
+
+`init-sandbox --apply`, `publish --dry-run` and `publish --apply` retain their
+registry validation and pending barrier before credential load/refresh, backend
+construction or any provider effect. Malformed/unsafe registries remain rejected.
+Renewing credentials grants no publication, recovery or reconciliation authority;
+normal Drive operations remain blocked until the separate incident checks pass.
+This source repair does not approve or exercise real authentication or Gate R/W.
+
+| Issue #67 AC | Fake-only regression in `test_shared_context_google_pending_auth.py` |
+|---|---|
+| P1-01 | approved login/reauth with pending; missing/corrupt/unsafe registry never opened |
+| P1-02 | pending and corrupt registry block sandbox, preview and apply before auth/API/write |
+| P1-03 | missing/unapproved/invalid login, existing-credential protection, bounded failure output |
+| P1-04 | constructor/effect tripwires and byte-identical fictional registry/credential checks |
+| P1-05 | RED on unchanged base, smallest dispatch GREEN, full/exact-head Windows and CI evidence in PR |
 
 ### A02 Desktop client metadata compatibility (PR #63 review #5505171117)
 
