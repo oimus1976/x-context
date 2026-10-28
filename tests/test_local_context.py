@@ -42,12 +42,12 @@ class RenderTests(unittest.TestCase):
         self.assertIn('https://t.co/XYZ', body)
 
     def test_terminal_and_format_controls_are_escaped_not_emitted(self):
-        source = 'idea\\x1b[31m RED\\x1b[0m and bidi\\u202e mark'
+        source = 'idea\x1b[31m RED\x1b[0m and bidi\u202e mark'
         body = local_context.render(fake_store([(123, source)]))
-        self.assertNotIn('\\x1b', body)
-        self.assertNotIn('\\u202e', body)
-        self.assertIn('\\\\u001b', body)
-        self.assertIn('\\\\u202e', body)
+        self.assertNotIn('\x1b', body)
+        self.assertNotIn('\u202e', body)
+        self.assertIn('\\u001b', body)
+        self.assertIn('\\u202e', body)
 
     def test_no_link_is_not_claimed_as_verified_absence(self):
         body = local_context.render(fake_store([(123, 'text with no URL')]))
