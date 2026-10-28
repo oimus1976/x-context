@@ -270,25 +270,33 @@ class WindowsPlatform:
                 kernel.CloseHandle(handle)
         return acquire()
 
-    def _check_private_acl(self, paths, sid):
+    def _check_private_acl(self, paths, sid, ancestors=()):
         import base64, json, os, subprocess
         script = r'''$ErrorActionPreference = "Stop"
 $inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 $allowed = @($inputData.sid, "S-1-5-18", "S-1-5-32-544")
-foreach ($item in $inputData.paths) {
+foreach ($item in @($inputData.paths) + @($inputData.ancestors)) {
+  $private = $item -in $inputData.paths
   if ([System.IO.Directory]::Exists($item)) { $acl = [System.IO.Directory]::GetAccessControl($item) } else { $acl = [System.IO.File]::GetAccessControl($item) }
   $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
-  if ($owner -ne $inputData.sid) { exit 2 }
-  $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
-  foreach ($rule in $rules) {
-    if ($rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
-        $rule.IdentityReference.Value -notin $allowed) { exit 3 }
+  if (($private -and $owner -ne $inputData.sid) -or (-not $private -and $owner -notin $allowed)) { exit 2 }
+  $raw = New-Object System.Security.AccessControl.RawSecurityDescriptor ($acl.GetSecurityDescriptorBinaryForm()), 0
+  if ($null -eq $raw.DiscretionaryAcl) { exit 3 }
+  foreach ($ace in $raw.DiscretionaryAcl) {
+    if ($ace -isnot [System.Security.AccessControl.CommonAce] -or $ace.IsCallback -or
+        $ace.AceQualifier -notin @([System.Security.AccessControl.AceQualifier]::AccessAllowed, [System.Security.AccessControl.AceQualifier]::AccessDenied) -or
+        (([int]$ace.AceFlags -band 0xE0) -ne 0)) { exit 4 }
+    if ($ace.AceQualifier -eq [System.Security.AccessControl.AceQualifier]::AccessAllowed -and $ace.SecurityIdentifier.Value -notin $allowed) {
+      $mask = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int]$ace.AccessMask), 0)
+      # Include inherited-only ACEs: they may grant mutation to children.
+      if ($private -or (($mask -band [uint32]0x500D0156) -ne 0) -or (($mask -band [uint32]0x0FE0FE00) -ne 0)) { exit 5 }
+    }
   }
 }
 [Console]::Out.Write("OK")'''
         try:
             encoded = base64.b64encode(script.encode('utf-16le')).decode('ascii')
-            payload = json.dumps({'sid':sid, 'paths':[str(p) for p in paths]}).encode('utf-8')
+            payload = json.dumps({'sid':sid, 'paths':[str(p) for p in paths], 'ancestors':[str(p) for p in ancestors]}).encode('utf-8')
             result = subprocess.run([str(Path(os.environ['SystemRoot']) / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'), '-NoProfile','-NonInteractive','-EncodedCommand',encoded],
                 input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15,
                 creationflags=subprocess.CREATE_NO_WINDOW)
@@ -310,14 +318,15 @@ foreach ($item in $inputData.paths) {
                 raise ValueError
             if any((ancestor / '.git').exists() for p in safe for ancestor in p.parents):
                 raise ValueError
-            checked_paths = list(safe)
+            private = tuple(dict.fromkeys((*safe, *(p.parent for p in safe))))
+            ancestors = []
             for p in safe:
                 for parent in p.parents:
-                    checked_paths.append(parent)
+                    if parent not in private:
+                        ancestors.append(parent)
                     if parent == profile:
                         break
-            checked = tuple(dict.fromkeys(checked_paths))
-            if not self._check_private_acl(checked, selected_user):
+            if not self._check_private_acl(private, selected_user, tuple(dict.fromkeys(ancestors))):
                 raise ValueError
             return selected_user
         except Exception:

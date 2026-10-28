@@ -206,7 +206,7 @@ class WindowsBoundaryTests(unittest.TestCase):
             with patch.object(platform, '_check_private_acl', return_value=True) as check:
                 self.assertEqual(platform.validate(paths, sid), sid)
                 check.assert_called_once()
-                self.assertIn(Path(os.environ['USERPROFILE']).resolve(), check.call_args.args[0])
+                self.assertIn(Path(os.environ['USERPROFILE']).resolve(), check.call_args.args[2])
                 with self.assertRaises(Exception):
                     platform.validate((paths[0], paths[1], paths[0]), sid)
             with patch.object(platform, '_check_private_acl', return_value=False):
@@ -400,6 +400,84 @@ class WorkerDecodeTests(unittest.TestCase):
         self.assertEqual(fake_output.buffer.getvalue(), b'')
 
 class WindowsAclTests(unittest.TestCase):
+    def test_real_profile_chain_accepts_read_only_and_rejects_mutation(self):
+        import os, tempfile, subprocess, base64, json
+        from pathlib import Path
+        if os.name != 'nt': self.skipTest('Windows only')
+        platform = gate.WindowsPlatform()
+        sid = platform.current_user()
+        powershell = Path(os.environ['SystemRoot'])/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe'
+        script = r'''$ErrorActionPreference='Stop'
+$d=[Console]::In.ReadToEnd() | ConvertFrom-Json
+$who=New-Object System.Security.Principal.SecurityIdentifier($d.sid)
+$everyone=New-Object System.Security.Principal.SecurityIdentifier($d.other)
+if ([System.IO.Directory]::Exists($d.path)) { $acl=[System.IO.Directory]::GetAccessControl($d.path) } else { $acl=[System.IO.File]::GetAccessControl($d.path) }
+$acl.SetAccessRuleProtection($true,$false)
+foreach ($r in $acl.GetAccessRules($true,$false,[System.Security.Principal.SecurityIdentifier])) { $acl.RemoveAccessRuleAll($r) }
+$acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($who,'FullControl','Allow')))
+if ($d.extra -and $d.inherit) { $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($everyone,$d.extra,'ContainerInherit, ObjectInherit','InheritOnly','Allow'))) }
+elseif ($d.extra) { $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($everyone,$d.extra,'Allow'))) }
+if ([System.IO.Directory]::Exists($d.path)) { [System.IO.Directory]::SetAccessControl($d.path,$acl) } else { [System.IO.File]::SetAccessControl($d.path,$acl) }'''
+        def acl(path, extra='', inherit=False, allowed_sid=None, other='S-1-1-0'):
+            result = subprocess.run([str(powershell), '-NoProfile', '-NonInteractive', '-EncodedCommand',
+                base64.b64encode(script.encode('utf-16le')).decode('ascii')],
+                input=json.dumps({'path':str(path),'sid':allowed_sid or sid,'extra':extra,'inherit':inherit,'other':other}).encode(),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+        with tempfile.TemporaryDirectory(dir=os.environ['USERPROFILE']) as directory:
+            ancestor = Path(directory)
+            private = ancestor/'private'
+            private.mkdir()
+            paths = (private/'fake.json', private/'fake.jsonl', private/'fake.dpapi')
+            for path in paths: path.write_bytes(b'fake')
+            for path in (private, *paths): acl(path)
+            acl(ancestor, 'ReadAndExecute')
+            self.assertEqual(platform.validate(paths, sid), sid)
+            # Use the real synthetic directory DACL and replace only its owner in
+            # the in-memory descriptor; non-admin users cannot assign these owners.
+            from unittest.mock import patch
+            real_run = subprocess.run
+            for owner, accepted in (('S-1-5-18', True), ('S-1-5-32-544', True), ('S-1-1-0', False)):
+                def with_owner(args, **kwargs):
+                    args = list(args)
+                    script_text = base64.b64decode(args[-1]).decode('utf-16le')
+                    needle = '  $owner = $acl.GetOwner('
+                    injected = "  $acl.SetOwner((New-Object System.Security.Principal.SecurityIdentifier('" + owner + "')))\n"
+                    self.assertIn(needle, script_text)
+                    args[-1] = base64.b64encode(script_text.replace(needle, injected + needle).encode('utf-16le')).decode('ascii')
+                    return real_run(args, **kwargs)
+                with patch('subprocess.run', side_effect=with_owner):
+                    self.assertEqual(platform._check_private_acl((), sid, (ancestor,)), accepted)
+            # SYSTEM-only allow isolates the owner check: removing it would accept
+            # the file for Everyone even though its real owner is the test user.
+            acl(paths[0], allowed_sid='S-1-5-18')
+            self.assertFalse(platform._check_private_acl((paths[0],), 'S-1-1-0'))
+            acl(paths[0])
+            junction = ancestor/'junction'
+            result = subprocess.run([os.environ['ComSpec'], '/d', '/c', 'mklink', '/J', str(junction), str(private)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(result.returncode, 0, 'synthetic junction setup failed')
+            try:
+                with self.assertRaises(Exception):
+                    platform.validate((junction/'fake.json', paths[1], paths[2]), sid)
+            finally:
+                junction.rmdir()
+            with patch.object(Path, 'is_symlink', return_value=True):
+                with self.assertRaises(Exception): platform.validate(paths, sid)
+            for right in ('WriteData', 'CreateFiles', 'DeleteSubdirectoriesAndFiles', 'ChangePermissions', 'TakeOwnership'):
+                with self.subTest(right=right):
+                    acl(ancestor, right)
+                    with self.assertRaises(Exception): platform.validate(paths, sid)
+            acl(ancestor, 'ReadAndExecute', True, other='S-1-15-3-1')
+            self.assertEqual(platform.validate(paths, sid), sid)
+            acl(ancestor, 'CreateFiles', True)
+            with self.assertRaises(Exception): platform.validate(paths, sid)
+            acl(ancestor, 'ReadAndExecute')
+            for path in (private, paths[0]):
+                acl(path, 'Read')
+                with self.assertRaises(Exception): platform.validate(paths, sid)
+                acl(path)
+
     def test_real_synthetic_acl_accepts_owner_only_and_rejects_everyone(self):
         import os, tempfile, subprocess, base64, json
         from pathlib import Path

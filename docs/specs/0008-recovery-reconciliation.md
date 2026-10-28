@@ -164,9 +164,14 @@ only explicit bounded local incident evidence and returns an opaque digest;
 that digest is not authorization. A future owner must independently approve an
 exact plan before the read step. The caller never invokes Gate W or publication.
 
-The read step checks the same Windows SID and conservative owner/ACL policy on
-all selected paths and ancestors through the user profile; unexpected ACL entries
-fail closed. Its named mutex excludes cooperating local callers only: it does not
+The read step checks the same Windows SID. Each selected file and its immediate
+private parent must be owned by that SID and allow only that SID, SYSTEM and
+Administrators. Higher ancestors through the profile may also be owned by SYSTEM
+or Administrators and may grant other principals read/traverse rights only;
+mutating or unsupported ACEs fail closed, including inherit-only mutating ACEs.
+This trusts those privileged owners and admits ancestor reads without granting
+access to the strictly protected leaves and private parents. Provision private
+parents separately if they do not meet the strict rule; the caller never changes ACLs. Its named mutex excludes cooperating local callers only: it does not
 lock other programs, arbitrary local writers, Google, or an ABA change. The
 operator must arrange a single-writer window. No protection against a malicious
 process running with the same Windows identity or an administrator is claimed.
