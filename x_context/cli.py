@@ -9,6 +9,7 @@ import sys
 from typing import Callable, Mapping, TextIO
 
 from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
+from .local_context import ContextViewError, render as render_local_context
 
 from .credential_lifecycle import (
     Clock,
@@ -55,6 +56,8 @@ def _build_parser() -> argparse.ArgumentParser:
             collection_parser.add_argument('bookmark_action', nargs='?', choices=('save',))
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
+    context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
+    context_parser.add_argument("--max-items", type=int, default=10)
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", required=True)
     auth_subparsers.add_parser("login", add_help=True, allow_abbrev=False)
@@ -241,6 +244,12 @@ def main(
         if selected_argv and selected_argv[0] in ("bookmarks", "likes", "posts"):
             _collection_diagnostic(selected_stderr, operation=selected_argv[0], error=XApiError("invalid_input"))
             return 2
+        if selected_argv and selected_argv[0] == "context":
+            _write_json_line(selected_stderr, {
+                "diagnostic": "error", "operation": "context",
+                "error_category": "invalid_input", "provider_requests_attempted": 0,
+            })
+            return 2
         if selected_argv and selected_argv[0] == "auth":
             _auth_error(selected_stderr, category="invalid_input")
             return 2
@@ -249,6 +258,29 @@ def main(
             category="invalid_input",
             requests_attempted=0,
         )
+        return 2
+
+    if args.command == "context":
+        # Explicit local-only display: no credentials, provider request or write.
+        if type(args.max_items) is not int or not 1 <= args.max_items <= 10:
+            category = "invalid_input"
+        else:
+            try:
+                snapshot = bookmark_preflight(selected_environ)
+                if snapshot.value is None:
+                    raise BookmarkStoreError("storage_error")
+                view = render_local_context(snapshot.value, max_items=args.max_items)
+            except (BookmarkStoreError, ContextViewError) as exc:
+                category = exc.category
+            except Exception:
+                category = "storage_error"
+            else:
+                selected_stdout.write(view)
+                return 0
+        _write_json_line(selected_stderr, {
+            "diagnostic": "error", "operation": "context",
+            "error_category": category, "provider_requests_attempted": 0,
+        })
         return 2
 
     if args.command == "auth":
