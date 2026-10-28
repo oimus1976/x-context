@@ -89,7 +89,8 @@ class Store:
                 raise ValueError
             if not self.path.exists():
                 return None
-            blob = self.path.read_bytes()
+            with self.path.open('rb') as handle:
+                blob = handle.read(LIMIT + 1)
             if not blob or len(blob) > LIMIT:
                 raise ValueError
             value = core.decode(self.unprotect(blob))

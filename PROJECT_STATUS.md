@@ -308,3 +308,16 @@ Real-provider login/refresh/revoke qualification was not performed as part of th
 - Traceability: `docs/TEST_MATRIX.md`.
 - Authoritative exact-head validator: `scripts/Invoke-XContextValidation.ps1`.
 - Preserve unaccounted local work and fail closed on uncertain GitHub evidence, native-command failure, credential/private-data exposure, or destructive cleanup.
+
+## Issue #65 Gate R caller — in-progress fake-only implementation
+
+Branch `codex/issue-65-gate-r-caller`; acceptance contract is
+`docs/verification/issue-65-gate-r-caller-ac.md`. The read caller composes
+existing strict local inspection and two-snapshot planning, binds selected
+Windows SID/paths/code/evidence/fixture/limits, checks current account
+permissionId and uses bounded GET-only transport with no refresh/save. A local
+named mutex is a cooperative caller guard, not a remote or general writer lock.
+Synthetic normal trace: 81 Drive (including about) and 24 Docs GET. The owner
+must separately approve any actual Gate R; Gate W, ordinary publication, Ready
+and merge are not authorized by this implementation. Exact-head Windows/CI and
+independent L2 evidence must be checked at the eventual PR head.
