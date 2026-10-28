@@ -73,9 +73,9 @@ class ContextCommandTests(unittest.TestCase):
 
     def run_command(self, args):
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(cli, 'resolve_user_access_token', side_effect=AssertionError('credential accessed')) as cred, \\
-             patch.object(cli, 'default_credential_store', side_effect=AssertionError('credential store accessed')) as stored, \\
-             patch.object(cli, 'lookup_bookmarks', side_effect=AssertionError('X request')) as x_lookup:
+        with (patch.object(cli, 'resolve_user_access_token', side_effect=AssertionError('credential accessed')) as cred,
+              patch.object(cli, 'default_credential_store', side_effect=AssertionError('credential store accessed')) as stored,
+              patch.object(cli, 'lookup_bookmarks', side_effect=AssertionError('X request')) as x_lookup):
             rc = cli.main(args, environ=self.env, stdout=out, stderr=err)
             cred.assert_not_called()
             stored.assert_not_called()
@@ -120,9 +120,12 @@ class ContextCommandTests(unittest.TestCase):
                 read.assert_not_called()
 
     def test_missing_localappdata_has_zero_provider_requests(self):
-        rc, out, err = cli.main(['context'], environ={},
-                                stdout=io.StringIO(), stderr=io.StringIO()), '', ''
+        out, err = io.StringIO(), io.StringIO()
+        rc = cli.main(['context'], environ={}, stdout=out, stderr=err)
         self.assertEqual(rc, 2)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(json.loads(err.getvalue())['error_category'], 'configuration_error')
+        self.assertEqual(json.loads(err.getvalue())['provider_requests_attempted'], 0)
 
 
 if __name__ == '__main__':
