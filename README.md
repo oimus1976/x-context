@@ -20,6 +20,7 @@ The current product boundary is read-only. It normalizes successful results into
 | `read` | Parses a supported `x.com` or `twitter.com` Post URL and reads that single Post through the official API. | App-only Bearer Token |
 | `bookmarks` | Resolves the authenticated user, binds the request to that subject, and reads at most one bookmark page. | Explicit env override or lifecycle-managed OAuth 2.0 user credential |
 | `bookmarks save` | Reads one authenticated bookmark page and explicitly merges it into the fixed local plaintext JSON store. | Same user credential as `bookmarks` |
+| `context` | Explicit offline Markdown view of up to 10 already-saved bookmarks; includes ID-derived Post links and text URLs marked unverified. | None: no X/Drive calls |
 | `likes` | Resolves the authenticated user, binds the request to that subject, and reads at most one liked-Post page. | Explicit env override or lifecycle-managed OAuth 2.0 user credential |
 | `auth login` | Runs one native/public-client Authorization Code + PKCE ceremony and commits a refresh-capable credential to the lifecycle store after bounded validation. | Client ID + exact registered loopback redirect URI; no client secret |
 | OAuth acquisition library | Runs one native/public-client Authorization Code + PKCE ceremony and returns the resulting token data in memory. | Client ID; no client secret |
@@ -69,6 +70,8 @@ python -m x_context bookmarks save --max-results 25
 python -m x_context likes --max-results 25
 python -m x_context likes --page-token "<token-from-a-previous-page>"
 ```
+
+Run `python -m x_context context --max-items 10` for an **explicit local-only** Markdown view of existing saved bookmarks. It makes no X or Google request, does not refresh credentials, and writes no export file. **The stdout contains private saved Post text:** protect terminal captures and separately decide whether to copy or upload it to an AI. Post URLs are derived from numeric IDs (not checked live), while any URLs extracted from saved text are lexical and unverified. Observation timestamps are not Post/bookmark creation dates. This command does not enable cross-device sync or cloud publication.
 
 `bookmarks save` explicitly persists one page to `%LOCALAPPDATA%\x-context\data\bookmarks-v1.json`; `LOCALAPPDATA` must be an existing directory outside a repository. The bookmark store is UTF-8 plaintext, without encryption at rest. Items absent from a later partial page are retained and are never deleted merely because they were not returned. Plain `bookmarks` remains non-persistent.
 
