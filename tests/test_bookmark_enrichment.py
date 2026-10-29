@@ -172,6 +172,91 @@ class AC1Tests(unittest.TestCase):
                 self.assertFalse(self.primary.exists())
                 self.assertFalse(self.sidecar.exists())
 
+    def test_P1_full_page_26_posts_104_included_media_is_saved(self):
+        # Reproduces the independent L2 report: four media each, 26 Posts.
+        posts, media = [], []
+        for n in range(26):
+            keys = [f'3_synthetic_{n}_{i}' for i in range(4)]
+            posts.append({'id': str(50000+n), 'text': f'Synthetic post {n}',
+                          'attachments': {'media_keys': keys}})
+            media += [{'media_key': k, 'type': 'photo', 'url': f'https://example.org/{k}.jpg'}
+                      for k in keys]
+        t = FakeTransport(posts=posts, includes={'media': media})
+        rc, out, diag, _ = self.run_cli(
+            ['bookmarks', 'save', '--enrich', '--max-results', '26'], t)
+        self.assertEqual((rc, diag['provider_requests_attempted']), (0, 2))
+        self.assertEqual(len(json.loads(self.primary.read_text())['items']), 26)
+        items = json.loads(self.sidecar.read_text())['items']
+        self.assertEqual(len(items), 26)
+        self.assertTrue(all(len(v['included_media']) == 4 for v in items.values()))
+
+    def test_P1_101_included_referenced_posts_in_one_page(self):
+        posts, related = [], []
+        for n in range(51):
+            refs = [{'id': str(600000+n*2+j), 'type': 'quoted'} for j in range(2)]
+            posts.append({'id': str(51000+n), 'text': f'Synthetic {n}',
+                          'referenced_posts': refs})
+            related.extend({'id': r['id'], 'text': f"Quoted {r['id']}"} for r in refs)
+        t = FakeTransport(posts=posts, includes={'posts': related})
+        rc, out, diag, _ = self.run_cli(
+            ['bookmarks', 'save', '--enrich', '--max-results', '51'], t)
+        self.assertEqual((rc, diag['provider_requests_attempted']), (0, 2))
+        items = json.loads(self.sidecar.read_text())['items']
+        self.assertEqual(len(items), 51)
+        self.assertEqual(sum(len(v['included_posts']) for v in items.values()), 102)
+
+    def test_P2_schema_nullable_media_and_url_without_url_attribute(self):
+        input_post = {
+            'id': '1', 'text': 'synthetic',
+            'entities': {'urls': [{'title': 'Card title', 'description': 'Card description'}]},
+            'attachments': {'media_keys': None}
+        }
+        record = meta.capture(input_post, {})
+        self.assertEqual(record['fields']['entities.urls']['value'],
+                         [{'title': 'Card title', 'description': 'Card description'}])
+        self.assertEqual(record['fields']['attachments.media_keys'],
+                         {'state': 'present', 'value': None})
+        rc, out, diag, _ = self.run_cli(transport=FakeTransport(posts=[input_post], includes={}))
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(self.sidecar.read_text())['items']['1']['fields'],
+                         record['fields'])
+
+    def test_P2_duplicate_expansions_and_reference_ids_rejected(self):
+        for post, inc in (
+            (POST, {'media': [INCLUDES['media'][0], INCLUDES['media'][0]]}),
+            (POST, {'posts': [INCLUDES['posts'][0], INCLUDES['posts'][0]]}),
+            (dict(POST, referenced_posts=[{'id': '5555', 'type': 'quoted'}] * 2), {}),
+        ):
+            with self.subTest(inc=inc):
+                with self.assertRaises(ValueError):
+                    meta.capture(post, inc)
+        for invalid in ('evil', 'unknown', '', None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    meta.capture(dict(POST, referenced_posts=[{'id': '5555', 'type': invalid}]), {})
+
+    def test_P2_orphan_sidecar_stops_before_creating_main_store(self):
+        self.data.mkdir(parents=True)
+        orphan = b'{"schema_version":"1","subject_id":"41","items":{}}'
+        self.sidecar.write_bytes(orphan)
+        with patch.object(cli, 'resolve_user_access_token', side_effect=AssertionError('credentials accessed')):
+            rc, out, diag, t = self.run_cli()
+        self.assertEqual((rc, out, diag['error_category']), (2, '', 'storage_error'))
+        self.assertEqual(t.requests, [])
+        self.assertFalse(self.primary.exists())
+        self.assertEqual(self.sidecar.read_bytes(), orphan)
+
+    def test_P2_existing_sidecar_size_checked_before_decoding(self):
+        self.data.mkdir(parents=True)
+        oversize = b'x' * (meta._LIMIT_BYTES + 1)
+        self.sidecar.write_bytes(oversize)
+        with patch.object(cli, 'resolve_user_access_token', side_effect=AssertionError('credentials accessed')):
+            rc, out, diag, t = self.run_cli()
+        self.assertEqual((rc, out, diag['error_category']), (2, '', 'storage_error'))
+        self.assertEqual(t.requests, [])
+        self.assertFalse(self.primary.exists())
+        self.assertEqual(self.sidecar.stat().st_size, len(oversize))
+
     def test_repeated_save_and_enrichment_fail_does_not_destroy_original(self):
         rc, out, diag, _ = self.run_cli()
         self.assertEqual(rc, 0)
