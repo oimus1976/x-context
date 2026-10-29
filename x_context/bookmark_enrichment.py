@@ -68,8 +68,7 @@ def capture(post: dict, includes: dict) -> dict:
         for entry in _list(entities["urls"]):
             if not isinstance(entry, dict):
                 raise ValueError("invalid URL")
-            values = {k: _string(entry[k], 4096) if k != "status" else entry[k]
-                      for k in _URL_KEYS if k in entry}
+            values = {k: _string(entry[k], 4096) for k in _URL_KEYS if k in entry}
             if "status" in entry:
                 if type(entry["status"]) is not int or not 100 <= entry["status"] <= 599:
                     raise ValueError("invalid URL status")
@@ -122,7 +121,8 @@ def capture(post: dict, includes: dict) -> dict:
             posts.append({"id": obj["id"], "text": _string(obj.get("text"))})
     fields = {
         "entities.urls": _status(urls, "urls" in entities),
-        "attachments.media_keys": _status(media_keys, "media_keys" in attachments),
+        "attachments.media_keys": _status(None if attachments.get("media_keys", False) is None else media_keys,
+                                          "media_keys" in attachments),
         "referenced_posts": _status(references, ref_field in post),
         "card_uri": _status(_string(post["card_uri"], 4096) if "card_uri" in post else None,
                             "card_uri" in post),
@@ -186,11 +186,14 @@ def preflight(bookmarks: StoreSnapshot) -> Snapshot:
             raise ValueError("invalid original store")
         path = bookmarks.path.with_name("bookmark-enrichment-v1.json")
         # Bound the read *before* UTF-8 decoding and JSON parsing.
-        with path.open("rb") as stream:
-            raw = stream.read(_LIMIT_BYTES + 1)
-        if len(raw) > _LIMIT_BYTES:
-            raise ValueError("oversized enrichment store")
-        value = json.loads(raw.decode("utf-8"),
+        if path.exists():
+            with path.open("rb") as stream:
+                raw = stream.read(_LIMIT_BYTES + 1)
+            if len(raw) > _LIMIT_BYTES:
+                raise ValueError("oversized enrichment store")
+        else:
+            raw = None
+        value = None if raw is None else json.loads(raw.decode("utf-8"),
                                                     object_pairs_hook=_unique)
         if value is not None:
             if not isinstance(value, dict) or set(value) != {"schema_version", "subject_id", "items"} or value["schema_version"] != "1":
