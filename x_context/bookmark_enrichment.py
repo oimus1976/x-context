@@ -90,12 +90,14 @@ def capture(post: dict, includes: dict) -> dict:
     if ref_field in post:
         seen_refs = set()
         for item in _list(post[ref_field]):
-            if not isinstance(item, dict) or not _id(item.get("id")) or item.get("type") not in _REFERENCE_TYPES:
+            if not isinstance(item, dict) or not _id(item.get("id")):
                 raise ValueError("invalid reference")
+            if "type" in item and item["type"] not in _REFERENCE_TYPES:
+                raise ValueError("invalid reference type")
             if item["id"] in seen_refs:
                 raise ValueError("duplicate reference")
             seen_refs.add(item["id"])
-            references.append({"id": item["id"], "type": item["type"]})
+            references.append({"id": item["id"], **({"type": item["type"]} if "type" in item else {})})
     refs = {r["id"] for r in references}
     media = []
     posts = []
