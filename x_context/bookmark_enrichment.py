@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from .bookmark_store import StoreSnapshot
+from .bookmark_store import StoreSnapshot, _timestamp
 
 _FIELDS = ("entities.urls", "attachments.media_keys", "referenced_posts", "card_uri")
 _URL_KEYS = ("url", "expanded_url", "unwound_url", "display_url", "title", "description", "media_key")
@@ -122,7 +122,7 @@ def _validate_record(record: dict) -> None:
         "id", "observed_at", "fields", "reference_field_name", "included_media", "included_posts"
     } or not _id(record["id"]):
         raise ValueError("invalid record")
-    if not isinstance(record["observed_at"], str) or len(record["observed_at"]) > 40:
+    if not _timestamp(record["observed_at"]):
         raise ValueError("invalid timestamp")
     if not isinstance(record["fields"], dict) or set(record["fields"]) != set(_FIELDS):
         raise ValueError("invalid fields")
@@ -208,7 +208,7 @@ def save(snapshot: Snapshot, records: tuple[dict, ...], *, subject_id: str, obse
     replaced = False
     fd = None
     try:
-        if not isinstance(snapshot, Snapshot) or not _id(subject_id) or not isinstance(observed_at, str):
+        if not isinstance(snapshot, Snapshot) or not _id(subject_id) or not _timestamp(observed_at):
             raise ValueError("invalid save arguments")
         if snapshot.value is not None and snapshot.value["subject_id"] != subject_id:
             raise EnrichmentError("subject_mismatch")
