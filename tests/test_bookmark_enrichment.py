@@ -109,7 +109,7 @@ class AC1Tests(unittest.TestCase):
         query = parse_qs(urlsplit(t.requests[1].url).query)
         self.assertEqual(query, {
             'max_results': ['1'],
-            'post.fields': ['entities,attachments,card_uri'],
+            'post.fields': ['entities,attachments,referenced_posts,card_uri'],
             'expansions': ['attachments.media_keys,referenced_posts'],
             'media.fields': ['media_key,type,url,preview_image_url,alt_text'],
         })
