@@ -17,7 +17,11 @@ from .bookmark_store import StoreSnapshot, _timestamp
 _FIELDS = ("entities.urls", "attachments.media_keys", "referenced_posts", "card_uri")
 _URL_KEYS = ("url", "expanded_url", "unwound_url", "display_url", "title", "description", "media_key")
 _MEDIA_KEYS = ("media_key", "type", "url", "preview_image_url", "alt_text")
-_LIMIT_BYTES = 4 * 1024 * 1024
+_LIMIT_BYTES = 32 * 1024 * 1024
+# Up to 100 Posts/page, 4 media each, up to 20 references per Post.
+_PAGE_MEDIA_LIMIT = 400
+_PAGE_POST_LIMIT = 2000
+_REFERENCE_TYPES = frozenset(("retweeted", "quoted", "replied_to"))
 
 
 class EnrichmentError(ValueError):
@@ -70,14 +74,13 @@ def capture(post: dict, includes: dict) -> dict:
                 if type(entry["status"]) is not int or not 100 <= entry["status"] <= 599:
                     raise ValueError("invalid URL status")
                 values["status"] = entry["status"]
-            if "url" not in values:
-                raise ValueError("missing source URL")
+            # X URL entities may omit the url key; retain returned metadata only.
             urls.append(values)
     attachments = post.get("attachments", {})
     if not isinstance(attachments, dict):
         raise ValueError("invalid attachments")
     media_keys = []
-    if "media_keys" in attachments:
+    if "media_keys" in attachments and attachments["media_keys"] is not None:
         media_keys = [_string(k, 128) for k in _list(attachments["media_keys"])]
         if len(media_keys) != len(set(media_keys)):
             raise ValueError("duplicate media key")
@@ -86,22 +89,34 @@ def capture(post: dict, includes: dict) -> dict:
     ref_field = "referenced_posts" if "referenced_posts" in post else "referenced_tweets"
     references = []
     if ref_field in post:
+        seen_refs = set()
         for item in _list(post[ref_field]):
-            if not isinstance(item, dict) or not _id(item.get("id")) or not isinstance(item.get("type"), str):
+            if not isinstance(item, dict) or not _id(item.get("id")) or item.get("type") not in _REFERENCE_TYPES:
                 raise ValueError("invalid reference")
-            references.append({"id": item["id"], "type": _string(item["type"], 32)})
+            if item["id"] in seen_refs:
+                raise ValueError("duplicate reference")
+            seen_refs.add(item["id"])
+            references.append({"id": item["id"], "type": item["type"]})
     refs = {r["id"] for r in references}
     media = []
     posts = []
-    for obj in _list(includes.get("media", []), 100):
+    seen_media = set()
+    seen_posts = set()
+    for obj in _list(includes.get("media", []), _PAGE_MEDIA_LIMIT):
         if not isinstance(obj, dict):
             raise ValueError("invalid included media")
         if obj.get("media_key") in media_keys:
+            if obj["media_key"] in seen_media:
+                raise ValueError("duplicate included media")
+            seen_media.add(obj["media_key"])
             media.append({k: _string(obj[k], 8192) for k in _MEDIA_KEYS if k in obj})
-    for obj in _list(includes.get("posts", includes.get("tweets", [])), 100):
+    for obj in _list(includes.get("posts", includes.get("tweets", [])), _PAGE_POST_LIMIT):
         if not isinstance(obj, dict):
             raise ValueError("invalid included post")
         if obj.get("id") in refs:
+            if obj["id"] in seen_posts:
+                raise ValueError("duplicate included post")
+            seen_posts.add(obj["id"])
             if not _id(obj["id"]):
                 raise ValueError("invalid included id")
             posts.append({"id": obj["id"], "text": _string(obj.get("text"))})
@@ -170,21 +185,26 @@ def preflight(bookmarks: StoreSnapshot) -> Snapshot:
         if not isinstance(bookmarks, StoreSnapshot):
             raise ValueError("invalid original store")
         path = bookmarks.path.with_name("bookmark-enrichment-v1.json")
-        raw = path.read_bytes() if path.exists() else None
-        value = None if raw is None else json.loads(raw.decode("utf-8"),
+        # Bound the read *before* UTF-8 decoding and JSON parsing.
+        with path.open("rb") as stream:
+            raw = stream.read(_LIMIT_BYTES + 1)
+        if len(raw) > _LIMIT_BYTES:
+            raise ValueError("oversized enrichment store")
+        value = json.loads(raw.decode("utf-8"),
                                                     object_pairs_hook=_unique)
         if value is not None:
             if not isinstance(value, dict) or set(value) != {"schema_version", "subject_id", "items"} or value["schema_version"] != "1":
                 raise ValueError("invalid snapshot")
             if not _id(value["subject_id"]) or not isinstance(value["items"], dict):
                 raise ValueError("invalid snapshot")
-            if len(raw) > _LIMIT_BYTES:
-                raise ValueError("too large")
             for key, record in value["items"].items():
                 _validate_record(record)
                 if key != record["id"]:
                     raise ValueError("mismatched id")
-            if bookmarks.value is not None and value["subject_id"] != bookmarks.value["subject"]["id"]:
+            if bookmarks.value is None:
+                # An orphan sidecar cannot be safely joined to a new principal.
+                raise EnrichmentError("storage_error")
+            if value["subject_id"] != bookmarks.value["subject"]["id"]:
                 raise EnrichmentError("subject_mismatch")
         return Snapshot(path, raw, value)
     except EnrichmentError:
