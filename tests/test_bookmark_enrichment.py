@@ -235,6 +235,22 @@ class AC1Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     meta.capture(dict(POST, referenced_posts=[{'id': '5555', 'type': invalid}]), {})
 
+    def test_P2_reference_id_only_matches_documented_response(self):
+        doc_ref = meta.capture({'id': '1', 'text': 'Synthetic source',
+                                'referenced_posts': [{'id': '5555'}]},
+                               {'posts': [{'id': '5555', 'text': 'Synthetic referenced Post'}]})
+        self.assertEqual(doc_ref['fields']['referenced_posts'],
+                         {'state': 'present', 'value': [{'id': '5555'}]})
+        self.assertEqual(doc_ref['included_posts'],
+                         [{'id': '5555', 'text': 'Synthetic referenced Post'}])
+        rc, out, diag, _ = self.run_cli(
+            transport=FakeTransport(posts=[{'id': '1', 'text': 'Synthetic source',
+                                            'referenced_posts': [{'id': '5555'}]}],
+                                    includes={'posts': [{'id': '5555', 'text': 'Synthetic referenced Post'}]}))
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(self.sidecar.read_text())['items']['1']['fields']['referenced_posts'],
+                         {'state': 'present', 'value': [{'id': '5555'}]})
+
     def test_P2_orphan_sidecar_stops_before_creating_main_store(self):
         self.data.mkdir(parents=True)
         orphan = b'{"schema_version":"1","subject_id":"41","items":{}}'
