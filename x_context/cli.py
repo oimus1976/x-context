@@ -9,6 +9,7 @@ import sys
 from typing import Callable, Mapping, TextIO
 
 from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
+from .bookmark_enrichment import EnrichmentError, preflight as enrichment_preflight, save as save_enrichment
 from .local_context import ContextViewError, render as render_local_context
 
 from .credential_lifecycle import (
@@ -54,6 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
         collection_parser = subparsers.add_parser(operation, add_help=True, allow_abbrev=False)
         if operation == 'bookmarks':
             collection_parser.add_argument('bookmark_action', nargs='?', choices=('save',))
+            collection_parser.add_argument('--enrich', action='store_true', help='only with save: store X-provided URL/media/reference metadata locally')
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
     context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
@@ -311,11 +313,17 @@ def main(
             )
             return 2
 
+        if args.command == "bookmarks" and args.enrich and args.bookmark_action != "save":
+            _collection_diagnostic(selected_stderr, operation="bookmarks", error=XApiError("invalid_input"))
+            return 2
         bookmark_snapshot = None
+        enrichment_snapshot = None
         if args.command == 'bookmarks' and args.bookmark_action == 'save':
             try:
                 bookmark_snapshot = bookmark_preflight(selected_environ)
-            except BookmarkStoreError as exc:
+                if args.enrich:
+                    enrichment_snapshot = enrichment_preflight(bookmark_snapshot)
+            except (BookmarkStoreError, EnrichmentError) as exc:
                 _collection_diagnostic(
                     selected_stderr, operation=args.command, error=XApiError(exc.category),
                     page_size=args.max_results,
@@ -356,11 +364,13 @@ def main(
         lookup = {"bookmarks": lookup_bookmarks, "likes": lookup_likes, "posts": lookup_posts}[args.command]
         credential_requests = 1 if resolution.refresh_attempted else 0
         try:
+            lookup_kwargs = {'include_context': True} if enrichment_snapshot is not None else {}
             result = lookup(
                 user_access_token=resolution.access_token,
                 max_results=args.max_results,
                 page_token=args.page_token,
                 transport=transport,
+                **lookup_kwargs,
             )
         except XApiError as exc:
             _collection_diagnostic(
@@ -377,8 +387,12 @@ def main(
         if bookmark_snapshot is not None:
             try:
                 counts = save_bookmarks(bookmark_snapshot, result.envelope)
+                if enrichment_snapshot is not None:
+                    detail = result.envelope.to_dict()
+                    save_enrichment(enrichment_snapshot, result.enrichment,
+                                    subject_id=detail['subject']['id'], observed_at=detail['retrieved_at'])
                 storage = {'persistence_attempted': True, 'persistence_succeeded': True, **counts}
-            except BookmarkStoreError as exc:
+            except (BookmarkStoreError, EnrichmentError) as exc:
                 _collection_diagnostic(
                     selected_stderr, operation=args.command, result=result,
                     error=XApiError(exc.category, requests_attempted=result.requests_attempted),
@@ -386,7 +400,7 @@ def main(
                     refresh_attempted=resolution.refresh_attempted,
                     credential_requests_attempted=credential_requests,
                     storage={'persistence_attempted': True, 'persistence_succeeded': False,
-                             'persistence_may_have_occurred': exc.may_have_occurred},
+                             'persistence_may_have_occurred': exc.may_have_occurred or isinstance(exc, EnrichmentError)},
                 )
                 return _exit_code_for_category(exc.category)
         selected_stdout.write(result.envelope.to_json() + "\n")
