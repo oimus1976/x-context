@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen, HTTPRedirectHandler, build_opener
 from urllib.parse import urlencode
 
 from .canonical import CanonicalEnvelope, CanonicalPost, Page, make_read_envelope
+from .bookmark_enrichment import capture as capture_bookmark_metadata
 
 OFFICIAL_X_API_ORIGIN = "https://api.x.com"
 _SINGLE_POST_PATH = "/2/tweets/{post_id}"
@@ -430,7 +431,9 @@ class CollectionLookupResult:
 
 @dataclass(frozen=True, slots=True)
 class BookmarksLookupResult(CollectionLookupResult):
-    """Bookmark canonical output and safe per-endpoint diagnostics."""
+    """Canonical output plus optional private, non-canonical metadata."""
+
+    enrichment: tuple[dict, ...] = field(default_factory=tuple, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,10 +449,12 @@ class PostsLookupResult(CollectionLookupResult):
 def lookup_bookmarks(
     *, user_access_token: str | None, max_results: int = 25,
     page_token: str | None = None, transport: Transport | None = None,
+    include_context: bool = False,
 ) -> BookmarksLookupResult:
     """Resolve the user, bind the target, and fetch exactly one bookmark page."""
     return _lookup_collection("bookmarks", user_access_token=user_access_token,
-                              max_results=max_results, page_token=page_token, transport=transport)
+                              max_results=max_results, page_token=page_token, transport=transport,
+                              include_context=include_context)
 
 
 def lookup_likes(
@@ -473,6 +478,7 @@ def lookup_posts(
 def _lookup_collection(
     operation: str, *, user_access_token: str | None, max_results: int,
     page_token: str | None, transport: Transport | None,
+    include_context: bool = False,
 ) -> BookmarksLookupResult | LikesLookupResult | PostsLookupResult:
     # Closed operation mapping: callers cannot supply an endpoint or target user.
     if operation == "bookmarks":
@@ -485,6 +491,8 @@ def _lookup_collection(
         raise XApiError("invalid_input")
     min_results = 5 if operation == "posts" else 1
     if type(max_results) is not int or not min_results <= max_results <= 100:
+        raise XApiError("invalid_input")
+    if type(include_context) is not bool or (include_context and operation != "bookmarks"):
         raise XApiError("invalid_input")
     if page_token is not None and (
         not isinstance(page_token, str) or not page_token or any(ord(c) < 32 or ord(c) == 127 for c in page_token)
@@ -516,6 +524,12 @@ def _lookup_collection(
         exc.subject_rate_limit = resolution.rate_limit
         raise
     query = {"max_results": max_results}
+    if include_context:
+        # Exact bookmark endpoint names (not generic tweet.fields syntax).
+        # One authenticated bookmark GET; no additional expansion calls.
+        query["post.fields"] = "entities,attachments,card_uri"
+        query["expansions"] = "attachments.media_keys,referenced_posts"
+        query["media.fields"] = "media_key,type,url,preview_image_url,alt_text"
     if operation == "posts":
         query["exclude"] = "retweets"
     if page_token is not None:
@@ -552,10 +566,16 @@ def _lookup_collection(
         ):
             raise XApiError("provider_error")
         items = []
+        enrichments = []
+        includes = payload.get("includes", {}) if include_context else {}
+        if not isinstance(includes, dict):
+            raise XApiError("provider_error")
         for post in data:
             if not isinstance(post, dict) or not _is_provider_compatible_post_id(post.get("id")) or not isinstance(post.get("text"), str):
                 raise XApiError("provider_error")
             items.append(CanonicalPost(post["id"], post["text"]))
+            if include_context:
+                enrichments.append(capture_bookmark_metadata(post, includes))
         envelope = CanonicalEnvelope(operation, datetime.now(timezone.utc), resolution.subject,
                                      tuple(items), Page(next_token, next_token is None))
     except Exception as exc:
@@ -565,4 +585,7 @@ def _lookup_collection(
                             rate_limit=rate, requests_attempted=attempted)
         failure.subject_rate_limit = resolution.rate_limit
         raise failure from None
+    if include_context:
+        return BookmarksLookupResult(envelope, resolution.rate_limit, rate, attempted, max_results,
+                                     enrichment=tuple(enrichments))
     return result_type(envelope, resolution.rate_limit, rate, attempted, max_results)
