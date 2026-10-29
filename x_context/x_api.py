@@ -527,7 +527,7 @@ def _lookup_collection(
     if include_context:
         # Exact bookmark endpoint names (not generic tweet.fields syntax).
         # One authenticated bookmark GET; no additional expansion calls.
-        query["post.fields"] = "entities,attachments,referenced_posts,card_uri"
+        query["post.fields"] = "entities,attachments,card_uri"
         query["expansions"] = "attachments.media_keys,referenced_posts"
         query["media.fields"] = "media_key,type,url,preview_image_url,alt_text"
     if operation == "posts":
