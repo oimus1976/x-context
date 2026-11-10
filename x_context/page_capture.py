@@ -104,11 +104,9 @@ def _url_parts(url: str):
 
 
 def _resolver(host: str, port: int) -> tuple[str, ...]:
-    try:
-        return tuple(sorted({row[4][0] for row in socket.getaddrinfo(
-            host, port, type=socket.SOCK_STREAM)}))
-    except (OSError, ValueError):
-        return ()
+    # Resolver failures remain connection errors, not access-policy rejections.
+    return tuple(sorted({row[4][0] for row in socket.getaddrinfo(
+        host, port, type=socket.SOCK_STREAM)}))
 
 
 class _PinnedHTTP(http.client.HTTPConnection):
@@ -231,7 +229,10 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
             try:
                 p, host, port = _url_parts(current)
                 ips = selected_resolver(host, port)
-                if not isinstance(ips, tuple) or not ips or not all(_valid_public_ip(ip) for ip in ips):
+                if not isinstance(ips, tuple) or not ips:
+                    state = "connection_error"
+                    break
+                if not all(_valid_public_ip(ip) for ip in ips):
                     state = "blocked_target"
                     break
             except ValueError:
@@ -270,6 +271,8 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
                 state = "too_large"
             elif "text/html" not in (_get_header(reply.headers, "content-type") or "").lower():
                 state = "not_html"
+            elif (_get_header(reply.headers, "content-encoding") or "identity").lower() != "identity":
+                state = "invalid_response"
             else:
                 title, description, excerpt = _extract_html(reply.body)
                 state = "captured" if excerpt else "no_extractable_text"
