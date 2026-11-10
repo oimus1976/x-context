@@ -18,6 +18,7 @@ import re
 import socket
 import ssl
 import tempfile
+import time
 from typing import Callable, Mapping
 from urllib.parse import urljoin, urlsplit
 
@@ -34,8 +35,19 @@ MAX_STORE_BYTES = 16 * 1024 * 1024
 _STATES = frozenset({
     "captured", "blocked_target", "connection_error", "http_error",
     "authentication_required", "not_html", "too_large", "no_extractable_text",
-    "redirect_limit", "invalid_response",
+    "redirect_limit", "invalid_response", "timeout",
 })
+
+
+class PageTimeout(TimeoutError):
+    """The shared monotonic request/redirect/extraction deadline elapsed."""
+
+
+def _remaining(deadline: float) -> float:
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise PageTimeout()
+    return left
 
 
 class PageCaptureError(ValueError):
@@ -60,7 +72,7 @@ class PageSnapshot:
 
 
 Resolver = Callable[[str, int], tuple[str, ...]]
-Transport = Callable[[str, tuple[str, ...]], PageResponse]
+Transport = Callable[[str, tuple[str, ...], float], PageResponse]
 
 
 def _valid_public_ip(value: str) -> bool:
@@ -69,6 +81,11 @@ def _valid_public_ip(value: str) -> bool:
     except ValueError:
         return False
     # Explicitly disallow mapped IPv4 forms to avoid inconsistent reachability.
+    # Well-known and local-use NAT64 prefixes can translate to private IPv4.
+    if isinstance(address, ipaddress.IPv6Address) and any(address in network for network in (
+        ipaddress.IPv6Network("64:ff9b::/96"), ipaddress.IPv6Network("64:ff9b:1::/48"),
+    )):
+        return False
     return address.is_global and getattr(address, "ipv4_mapped", None) is None
 
 
@@ -78,8 +95,6 @@ def _url_parts(url: str):
     p = urlsplit(url)
     if p.scheme not in ("http", "https") or not p.hostname or p.username is not None or p.password is not None:
         raise ValueError("invalid URL")
-    if p.fragment:
-        raise ValueError("fragment not allowed")
     port = 443 if p.scheme == "https" else 80
     if p.port is not None and p.port != port:
         raise ValueError("nonstandard port blocked")
@@ -110,42 +125,70 @@ def _resolver(host: str, port: int) -> tuple[str, ...]:
 
 
 class _PinnedHTTP(http.client.HTTPConnection):
-    def __init__(self, host: str, port: int, ip: str, *, secure: bool):
-        super().__init__(host, port, timeout=TIMEOUT_SECONDS)
+    def __init__(self, host: str, port: int, ip: str, *, secure: bool,
+                 deadline: float):
+        super().__init__(host, port, timeout=_remaining(deadline))
         self._selected_ip = ip
         self._secure = secure
+        self._deadline = deadline
 
     def connect(self):
-        # Never reconnect via hostname: the same vetted IP is used by TCP.
-        sock = socket.create_connection((self._selected_ip, self.port), TIMEOUT_SECONDS)
-        if self._secure:
-            try:
-                sock = ssl.create_default_context().wrap_socket(sock, server_hostname=self.host)
-            except Exception:
-                sock.close()
-                raise
+        # Connect to a numeric IP using a numeric address-family socket;
+        # no second hostname resolution can occur during the TCP connection.
+        family = socket.AF_INET6 if ":" in self._selected_ip else socket.AF_INET
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(_remaining(self._deadline))
+            sock.connect((self._selected_ip, self.port))
+            if self._secure:
+                sock.settimeout(_remaining(self._deadline))
+                sock = ssl.create_default_context().wrap_socket(
+                    sock, server_hostname=self.host)
+            sock.settimeout(_remaining(self._deadline))
+        except BaseException:
+            sock.close()
+            raise
         self.sock = sock
 
 
-def _transport(url: str, vetted_ips: tuple[str, ...]) -> PageResponse:
+def _transport(url: str, vetted_ips: tuple[str, ...],
+               deadline: float) -> PageResponse:
     p, host, port = _url_parts(url)
     if not vetted_ips or not all(_valid_public_ip(ip) for ip in vetted_ips):
         raise OSError("no public addresses")
-    conn = _PinnedHTTP(host, port, vetted_ips[0], secure=p.scheme == "https")
+    conn = _PinnedHTTP(host, port, vetted_ips[0], secure=p.scheme == "https",
+                       deadline=deadline)
+    response = None
     try:
         path = p.path or "/"
         if p.query:
             path += "?" + p.query
+        _remaining(deadline)
         conn.request("GET", path, headers={
             "Host": p.netloc, "Accept": "text/html", "Accept-Encoding": "identity",
             "User-Agent": "x-context/AC2", "Connection": "close",
         })
+        # Connection: close may disown conn.sock after getresponse(). Retain
+        # the actual socket to refresh the remaining timeout for each read.
+        wire = conn.sock
+        wire.settimeout(_remaining(deadline))
         response = conn.getresponse()
-        # Size cap is enforced even when Content-Length is absent or misleading.
-        body = response.read(MAX_HTML_BYTES + 1)
+        body = bytearray()
+        # read1() returns after at most one socket read, unlike read(n) which
+        # may wait for all n bytes during a slow-trickle response.
+        while len(body) <= MAX_HTML_BYTES:
+            wire.settimeout(_remaining(deadline))
+            part = response.read1(min(8192, MAX_HTML_BYTES + 1 - len(body)))
+            if not part:
+                break
+            body.extend(part)
+        _remaining(deadline)
         return PageResponse(response.status,
-                            {k.lower(): v for k, v in response.getheaders()}, body)
+                            {k.lower(): v for k, v in response.getheaders()},
+                            bytes(body))
     finally:
+        if response is not None:
+            response.close()
         conn.close()
 
 
@@ -194,11 +237,23 @@ def _normalize_text(value: str, limit: int) -> str | None:
     return result[:limit] if result else None
 
 
-def _extract_html(body: bytes) -> tuple[str | None, str | None, str | None]:
-    # Deterministic UTF-8 HTML policy; no charset guessing / JS rendering.
+def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | None, str | None, str | None]:
+    # Incremental feed avoids a single long, non-interruptible malformed-HTML
+    # parse. Check the same monotonic deadline between small parse slices.
     page = _PageHTML()
-    page.feed(body.decode("utf-8", errors="replace"))
+    decoded = body.decode("utf-8", errors="replace")
+    for start in range(0, len(decoded), 1024):
+        if deadline is not None:
+            _remaining(deadline)
+        page.feed(decoded[start:start + 1024])
+        if deadline is not None:
+            _remaining(deadline)
+        # Invalid, never-ending tag fragments can cause quadratic rescanning.
+        if len(page.rawdata) > 16384:
+            raise ValueError("malformed HTML pending buffer")
     page.close()
+    if deadline is not None:
+        _remaining(deadline)
     return (_normalize_text(" ".join(page.title), 512),
             _normalize_text(page.description or "", 1024),
             _normalize_text(" ".join(page.body), MAX_PAGE_TEXT))
@@ -220,21 +275,29 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
     selected_transport = _transport if transport is None else transport
     original = url
     current = url
+    deadline = time.monotonic() + TIMEOUT_SECONDS
     final_url = None
     code = None
     state = "invalid_response"
     title = description = excerpt = None
     try:
         for redirect in range(MAX_REDIRECTS + 1):
+            _remaining(deadline)
             try:
                 p, host, port = _url_parts(current)
+                # Fragments are client-side anchors, never HTTP request bytes.
+                current = p._replace(fragment="").geturl()
                 ips = selected_resolver(host, port)
+                _remaining(deadline)
                 if not isinstance(ips, tuple) or not ips:
                     state = "connection_error"
                     break
                 if not all(_valid_public_ip(ip) for ip in ips):
                     state = "blocked_target"
                     break
+            except PageTimeout:
+                state = "timeout"
+                break
             except ValueError:
                 state = "blocked_target"
                 break
@@ -242,7 +305,11 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
                 state = "connection_error"
                 break
             try:
-                reply = selected_transport(current, ips)
+                reply = selected_transport(current, ips, deadline)
+                _remaining(deadline)
+            except (PageTimeout, TimeoutError, socket.timeout):
+                state = "timeout"
+                break
             except Exception:
                 state = "connection_error"
                 break
@@ -274,11 +341,19 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
             elif (_get_header(reply.headers, "content-encoding") or "identity").lower() != "identity":
                 state = "invalid_response"
             else:
-                title, description, excerpt = _extract_html(reply.body)
+                try:
+                    title, description, excerpt = _extract_html(reply.body, deadline=deadline)
+                except PageTimeout:
+                    state = "timeout"
+                    break
                 state = "captured" if excerpt else "no_extractable_text"
             break
+    except PageTimeout:
+        state = "timeout"
     except Exception:
         state = "invalid_response"
+    if state == "timeout":
+        title = description = excerpt = None
     return {
         "requested_url": original, "final_url": final_url,
         "http_status": code, "retrieved_at": at, "state": state,
