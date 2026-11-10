@@ -298,9 +298,12 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
         page.feed(decoded[start:start + 1024])
         if deadline is not None:
             _remaining(deadline)
-        # Invalid, never-ending tag fragments can cause quadratic rescanning.
-        if len(page.rawdata) > 16384:
-            raise ValueError("malformed HTML pending buffer")
+    # An incomplete token at EOF is malformed regardless of its length.
+    # While streaming, rawdata also legitimately buffers large complete
+    # script/style/comment/attribute elements. Never reject them by size:
+    # MAX_HTML_BYTES and the shared monotonic deadline are the resource limits.
+    if page.rawdata:
+        raise ValueError("incomplete HTML token at EOF")
     page.close()
     if deadline is not None:
         _remaining(deadline)
