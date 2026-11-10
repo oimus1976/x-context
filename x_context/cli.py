@@ -11,6 +11,8 @@ from typing import Callable, Mapping, TextIO
 from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
 from .bookmark_enrichment import EnrichmentError, preflight as enrichment_preflight, save as save_enrichment
 from .local_context import ContextViewError, render as render_local_context
+from . import page_capture
+from . import bookmark_enrichment
 
 from .credential_lifecycle import (
     Clock,
@@ -58,6 +60,12 @@ def _build_parser() -> argparse.ArgumentParser:
             collection_parser.add_argument('--enrich', action='store_true', help='only with save: store X-provided URL/media/reference metadata locally')
         collection_parser.add_argument("--max-results", type=int, default=25)
         collection_parser.add_argument("--page-token")
+    page_parser = subparsers.add_parser("page", add_help=True, allow_abbrev=False)
+    page_subparsers = page_parser.add_subparsers(dest="page_action", required=True)
+    page_command = page_subparsers.add_parser("capture", allow_abbrev=False)
+    page_command.add_argument("--post-id", required=True)
+    page_command.add_argument("--url-index", type=int, default=0)
+    page_command.add_argument("--confirm-network-request", action="store_true")
     context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
     context_parser.add_argument("--max-items", type=int, default=10)
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
@@ -246,6 +254,9 @@ def main(
         if selected_argv and selected_argv[0] in ("bookmarks", "likes", "posts"):
             _collection_diagnostic(selected_stderr, operation=selected_argv[0], error=XApiError("invalid_input"))
             return 2
+        if selected_argv and selected_argv[0] == "page":
+            _write_json_line(selected_stderr, {"diagnostic":"error","operation":"page","error_category":"invalid_input","external_requests_attempted":0})
+            return 2
         if selected_argv and selected_argv[0] == "context":
             _write_json_line(selected_stderr, {
                 "diagnostic": "error", "operation": "context",
@@ -260,6 +271,43 @@ def main(
             category="invalid_input",
             requests_attempted=0,
         )
+        return 2
+
+    if args.command == "page":
+        # Explicit one-Post/one-URL operation, no X credentials or requests.
+        if (args.page_action != "capture" or not args.confirm_network_request
+                or not isinstance(args.post_id, str) or not args.post_id.isascii()
+                or not args.post_id.isdigit() or not 1 <= len(args.post_id) <= 19
+                or type(args.url_index) is not int or not 0 <= args.url_index <= 19):
+            category = "invalid_input"
+            attempted = 0
+        else:
+            attempted = 0
+            try:
+                store = bookmark_preflight(selected_environ)
+                extras = bookmark_enrichment.preflight(store)
+                subject, url = page_capture.select_url(store, extras, args.post_id, args.url_index)
+                snapshot = page_capture.preflight(store, extras)
+                result = page_capture.capture_one(url, at=page_capture.utcnow())
+                # Some terminal result states make no external request.
+                attempted = 0 if result["state"] == "blocked_target" else None
+                page_capture.save(snapshot, subject_id=subject, post_id=args.post_id,
+                                  url_index=args.url_index, result=result)
+            except (BookmarkStoreError, EnrichmentError, page_capture.PageCaptureError) as exc:
+                category = exc.category
+            except Exception:
+                category = "storage_error"
+            else:
+                _write_json_line(selected_stdout, {
+                    "operation": "page", "post_id": args.post_id, "url_index": args.url_index,
+                    "state": result["state"], "http_status": result["http_status"],
+                    "persistence_succeeded": True,
+                })
+                return 0
+        _write_json_line(selected_stderr, {
+            "diagnostic": "error", "operation": "page", "error_category": category,
+            "external_requests_attempted": attempted,
+        })
         return 2
 
     if args.command == "context":
