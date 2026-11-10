@@ -271,7 +271,8 @@ class PageCaptureTests(unittest.TestCase):
         # Validate the actual socket loopback path while keeping all external
         # target guards active in production (patched in this test only).
         def safe_loopback_url(url):
-            return urlsplit(url), "example.org", port
+            # Use plaintext HTTP only for this synthetic loopback server.
+            return urlsplit(url)._replace(scheme="http"), "example.org", port
         started = time.monotonic()
         with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \
              patch.object(page_capture, "_url_parts", side_effect=safe_loopback_url), \
