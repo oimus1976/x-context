@@ -377,6 +377,49 @@ class PageCaptureTests(unittest.TestCase):
         self.assertEqual(outcome["state"], "timeout")
         self.assertLess(len(calls), 4)
 
+    def test_AC2_13bb_valid_long_html_elements_preserved_and_saved(self):
+        """Large, well-formed inline content is not incomplete markup.
+
+        Protects the exact independent L2 MAJOR regression: the old arbitrary
+        16-KiB rawdata guard rejected large valid script/style/comment/attrs.
+        No real website or external network is accessed.
+        """
+        head = (b'<html><head><title>Synthetic title</title>'
+                b'<meta name="description" content="Synthetic description">')
+        tail = b'</head><body><article><p>Article text</p></article></body></html>'
+        elements = {
+            "script_20000": b"<script>" + b"x" * 20000 + b"</script>",
+            "style_20000": b"<style>" + b"x" * 20000 + b"</style>",
+            "inline_json_100k": (b'<script type="application/json">'
+                                + b'{"padding":"' + b"x" * 100000 + b'"}'
+                                + b"</script>"),
+            "comment_30000": b"<!--" + b"x" * 30000 + b"-->",
+            "long_attribute_30000": (b'<meta name="synthetic" content="data:image/png;base64,'
+                                     + b"A" * 30000 + b'">'),
+        }
+        primary = bookmark_store.preflight(self.env)
+        enrich = bookmark_enrichment.preflight(primary)
+        original = (self.main.read_bytes(), self.extras.read_bytes())
+        for name, element in elements.items():
+            with self.subTest(name=name):
+                body = head + element + tail
+                self.assertLess(len(body), page_capture.MAX_HTML_BYTES)
+                result = page_capture.capture_one(
+                    URL, at=STAMP, resolver=self.resolver,
+                    transport=lambda *args, payload=body: page_capture.PageResponse(
+                        200, {"Content-Type": "text/html"}, payload))
+                self.assertEqual(result["state"], "captured")
+                self.assertEqual(result["title"], "Synthetic title")
+                self.assertEqual(result["description"], "Synthetic description")
+                self.assertEqual(result["excerpt"], "Article text")
+                snapshot = page_capture.preflight(primary, enrich)
+                page_capture.save(snapshot, subject_id="42", post_id="123",
+                                  url_index=0, result=result)
+                saved = json.loads(self.page_path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["items"]["123:0"]["state"], "captured")
+                self.assertEqual(saved["items"]["123:0"]["excerpt"], "Article text")
+                self.assertEqual((self.main.read_bytes(), self.extras.read_bytes()), original)
+
     def test_AC2_13c_malformed_html_returns_stable_failure(self):
         body = b"<html><body>" + b"</" * 20000
         outcome = page_capture.capture_one(
