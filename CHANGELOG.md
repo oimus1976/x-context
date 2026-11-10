@@ -1,5 +1,12 @@
 # Changelog
-\n## Issue #64 AC-2 — one selected external HTML page (2026-11-10; Draft)\n\n- Add explicit, bounded `page capture` route selecting one stored URL by Post ID/index, with no X or Google access. No actual network use in development.\n- Enforce public DNS/IP pinning through connection, capped redirects/body/time, and deterministic HTML title, description and excerpt extraction. Save success or stable failure state in an independent versioned local sidecar.\n- Add synthetic HTTP and local-store tests including blocked IP, private redirect, HTTP errors, oversized data, race/corruption boundaries and unchanged original bookmark bytes.\n- This change is not AC-3 image download, AC-5 Markdown, or real provider/Windows validation.\n
+
+## Issue #64 AC-2 — one selected external HTML page (2026-11-10; Draft)
+
+- Add explicit, bounded `page capture` route selecting one stored URL by Post ID/index, with no X or Google access. No actual network use in development.
+- Enforce public DNS/IP pinning through connection, capped redirects/body with a shared monotonic deadline (OS DNS lookup caveat), and deterministic HTML title, description and excerpt extraction. Save success or stable failure state in an independent versioned local sidecar.
+- Add synthetic HTTP and local-store tests including blocked IP, private redirect, HTTP errors, oversized data, race/corruption boundaries and unchanged original bookmark bytes.
+- This change is not AC-3 image download, AC-5 Markdown, or real provider/Windows validation.
+
 ## Issue #67 — explicit authentication while publication is pending (2026-10-23)
 
 - Dispatch approved `login` before constructing publication State. Pending,
