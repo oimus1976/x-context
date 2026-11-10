@@ -422,12 +422,26 @@ class PageCaptureTests(unittest.TestCase):
                 self.assertEqual(saved["items"]["123:0"]["excerpt"], "Article text")
                 self.assertEqual((self.main.read_bytes(), self.extras.read_bytes()), original)
 
-    def test_AC2_13c_malformed_html_returns_stable_failure(self):
-        body = b"<html><body>" + b"</" * 20000
+    def test_AC2_13c_tolerant_malformed_html_is_bounded(self):
+        # HTMLParser tolerates malformed content. It may return partial text,
+        # which must still be bounded and must never consume an unbounded body.
+        body = b"<html><body>Visible text" + b"</" * 20000
         outcome = page_capture.capture_one(
             URL, at=STAMP, resolver=self.resolver,
             transport=lambda *args: page_capture.PageResponse(
                 200, {"Content-Type": "text/html"}, body))
+        self.assertEqual(outcome["state"], "captured")
+        self.assertTrue(outcome["excerpt"].startswith("Visible text"))
+        self.assertLessEqual(len(outcome["excerpt"]), page_capture.MAX_PAGE_TEXT)
+
+    def test_AC2_13ca_html_parser_error_returns_stable_failure(self):
+        body = b"<html><body>synthetic input</body></html>"
+        with patch.object(page_capture._PageHTML, "feed",
+                          side_effect=ValueError("synthetic parser failure")):
+            outcome = page_capture.capture_one(
+                URL, at=STAMP, resolver=self.resolver,
+                transport=lambda *args: page_capture.PageResponse(
+                    200, {"Content-Type": "text/html"}, body))
         self.assertEqual(outcome["state"], "invalid_response")
         self.assertIsNone(outcome["excerpt"])
 
