@@ -154,6 +154,26 @@ class PageCaptureTests(unittest.TestCase):
                 self.assertEqual((result["state"], result["http_status"]), (state, status))
                 self.assertIsNone(result["excerpt"])
 
+    def test_AC2_06a_dns_error_does_not_claim_policy_block(self):
+        for resolver in (
+            lambda *x: (),
+            lambda *x: (_ for _ in ()).throw(OSError("synthetic DNS down")),
+        ):
+            with self.subTest(resolver=resolver):
+                result = page_capture.capture_one(
+                    URL, at=STAMP, resolver=resolver,
+                    transport=lambda *x: self.fail("request after DNS failure"))
+                self.assertEqual(result["state"], "connection_error")
+
+    def test_AC2_06b_unexpected_compression_has_no_false_text(self):
+        result = page_capture.capture_one(
+            URL, at=STAMP, resolver=self.resolver,
+            transport=lambda *x: page_capture.PageResponse(
+                200, {"Content-Type": "text/html", "Content-Encoding": "gzip"},
+                b"synthetic gzip placeholder"))
+        self.assertEqual(result["state"], "invalid_response")
+        self.assertIsNone(result["excerpt"])
+
     def test_AC2_07_redirect_limit(self):
         requests = []
         def transport(url, ips):
