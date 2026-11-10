@@ -257,8 +257,8 @@ class PageCaptureTests(unittest.TestCase):
                 with conn:
                     conn.settimeout(2)
                     conn.recv(4096)
-                    conn.sendall(b"HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n"
-                                 b"Content-Length: 40\\r\\nConnection: close\\r\\n\\r\\n")
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+                                 b"Content-Length: 40\r\nConnection: close\r\n\r\n")
                     for _ in range(20):
                         conn.sendall(b"x")
                         time.sleep(0.06)
@@ -273,8 +273,8 @@ class PageCaptureTests(unittest.TestCase):
         def safe_loopback_url(url):
             return urlsplit(url), "example.org", port
         started = time.monotonic()
-        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \\
-             patch.object(page_capture, "_url_parts", side_effect=safe_loopback_url), \\
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \
+             patch.object(page_capture, "_url_parts", side_effect=safe_loopback_url), \
              patch.object(page_capture, "_valid_public_ip", return_value=True):
             outcome = page_capture.capture_one(
                 URL, at=STAMP, resolver=lambda *args: ("127.0.0.1",))
@@ -292,7 +292,7 @@ class PageCaptureTests(unittest.TestCase):
             if len(calls) == 1:
                 time.sleep(0.05)
             return actual_feed(parser, part)
-        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.03), \\
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.03), \
              patch.object(page_capture._PageHTML, "feed", slow_once):
             outcome = page_capture.capture_one(
                 URL, at=STAMP, resolver=self.resolver,
