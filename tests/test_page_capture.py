@@ -284,6 +284,81 @@ class PageCaptureTests(unittest.TestCase):
         self.assertLess(elapsed, 0.80)
         thread.join(timeout=1.5)
 
+    def test_AC2_13aa_loopback_slow_header_hits_absolute_deadline(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+
+        def server():
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    conn.settimeout(2)
+                    conn.recv(4096)
+                    conn.sendall(b"HTTP/1.1 200 OK\r\nX-Drip: ")
+                    for _ in range(12):
+                        conn.sendall(b"x")
+                        time.sleep(0.06)
+            except OSError:
+                pass
+            finally:
+                listener.close()
+
+        thread = threading.Thread(target=server, daemon=True)
+        thread.start()
+        started = time.monotonic()
+        with (
+            patch.object(page_capture, "TIMEOUT_SECONDS", 0.25),
+            patch.object(page_capture, "_url_parts",
+                         side_effect=lambda url: (urlsplit(url)._replace(scheme="http"),
+                                                  "example.org", port)),
+            patch.object(page_capture, "_valid_public_ip", return_value=True),
+        ):
+            outcome = page_capture.capture_one(
+                URL, at=STAMP, resolver=lambda *args: ("127.0.0.1",))
+        elapsed = time.monotonic() - started
+        self.assertEqual(outcome["state"], "timeout")
+        self.assertLess(elapsed, 0.8)
+        thread.join(timeout=1.5)
+
+    def test_AC2_13ab_loopback_http_happy_path_uses_real_transport(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+
+        def server():
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    conn.settimeout(2)
+                    conn.recv(4096)
+                    conn.sendall(
+                        b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+                        + b"Content-Length: " + str(len(SAMPLE)).encode("ascii")
+                        + b"\r\nConnection: close\r\n\r\n" + SAMPLE
+                    )
+            except OSError:
+                pass
+            finally:
+                listener.close()
+
+        thread = threading.Thread(target=server, daemon=True)
+        thread.start()
+        with (
+            patch.object(page_capture, "_url_parts",
+                         side_effect=lambda url: (urlsplit(url)._replace(scheme="http"),
+                                                  "example.org", port)),
+            patch.object(page_capture, "_valid_public_ip", return_value=True),
+        ):
+            outcome = page_capture.capture_one(
+                URL, at=STAMP, resolver=lambda *args: ("127.0.0.1",))
+        self.assertEqual(outcome["state"], "captured")
+        self.assertEqual(outcome["title"], "Synthetic & Title")
+        self.assertEqual(outcome["excerpt"], "Heading first paragraph. Second & final.")
+        thread.join(timeout=1.5)
+
     def test_AC2_13b_deadline_interrupts_incremental_html_parser(self):
         body = b"<html><body>" + b"word " * 5000 + b"</body></html>"
         actual_feed = page_capture._PageHTML.feed
