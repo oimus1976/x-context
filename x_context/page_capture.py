@@ -228,6 +228,10 @@ def _transport(url: str, vetted_ips: tuple[str, ...],
             if not part:
                 break
             body.extend(part)
+            # A known Content-Length can close the HTTPResponse immediately
+            # after the last data chunk; do not touch its closed socket again.
+            if response.isclosed():
+                break
         _remaining(deadline)
         return PageResponse(response.status,
                             {k.lower(): v for k, v in response.getheaders()},
