@@ -298,12 +298,9 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
         page.feed(decoded[start:start + 1024])
         if deadline is not None:
             _remaining(deadline)
-    # An incomplete token at EOF is malformed regardless of its length.
-    # While streaming, rawdata also legitimately buffers large complete
-    # script/style/comment/attribute elements. Never reject them by size:
-    # MAX_HTML_BYTES and the shared monotonic deadline are the resource limits.
-    if page.rawdata:
-        raise ValueError("incomplete HTML token at EOF")
+    # HTMLParser is tolerant of incomplete HTML and may defer valid long
+    # elements until close(); its rawdata is NOT an EOF-validity signal.
+    # Trust only the bounded input and the shared monotonic deadline.
     page.close()
     if deadline is not None:
         _remaining(deadline)
