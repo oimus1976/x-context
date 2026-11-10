@@ -1,6 +1,10 @@
 """Issue #64 AC-2: synthetic-only page capture, no network or actual X data."""
 import io
 import json
+import socket
+import threading
+import time
+from urllib.parse import urlsplit
 from pathlib import Path
 import tempfile
 import unittest
@@ -49,7 +53,7 @@ class PageCaptureTests(unittest.TestCase):
         self.assertEqual(port, 443)
         return ("93.184.216.34",)
 
-    def transport(self, url, ips):
+    def transport(self, url, ips, deadline):
         self.requests.append((url, ips))
         return page_capture.PageResponse(200, {"Content-Type": "text/html"}, SAMPLE)
 
@@ -97,7 +101,7 @@ class PageCaptureTests(unittest.TestCase):
             page_capture.PageResponse(200, {"Content-Type": "text/html"}, SAMPLE)
         ]
         visits = []
-        def transport(url, ips):
+        def transport(url, ips, deadline):
             visits.append(url)
             return replies.pop(0)
         result = page_capture.capture_one(URL, at=STAMP, resolver=self.resolver, transport=transport)
@@ -107,7 +111,7 @@ class PageCaptureTests(unittest.TestCase):
 
     def test_AC2_03_forbidden_redirect_no_second_transport(self):
         attempts = []
-        def transport(url, ips):
+        def transport(url, ips, deadline):
             attempts.append(url)
             return page_capture.PageResponse(302, {"Location": "http://127.0.0.1/admin"}, b"")
         result = page_capture.capture_one(URL, at=STAMP, resolver=self.resolver, transport=transport)
@@ -176,7 +180,7 @@ class PageCaptureTests(unittest.TestCase):
 
     def test_AC2_07_redirect_limit(self):
         requests = []
-        def transport(url, ips):
+        def transport(url, ips, deadline):
             requests.append(url)
             return page_capture.PageResponse(302, {"Location": "/loop"}, b"")
         result = page_capture.capture_one(URL, at=STAMP, resolver=self.resolver, transport=transport)
@@ -239,6 +243,93 @@ class PageCaptureTests(unittest.TestCase):
         self.assertEqual(self.page_path.read_bytes(), original)
         self.assertNotIn("PRIVATE-ERROR", stderr)
         self.assertEqual(list(self.data.glob("*.tmp")), [])
+
+    def test_AC2_13a_loopback_slow_trickle_hits_entire_capture_budget(self):
+        # Execute the actual TCP/HTTP transport against loopback only.
+        # No public DNS, URL, X API or real user data is consulted.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        port = listener.getsockname()[1]
+        def server():
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    conn.settimeout(2)
+                    conn.recv(4096)
+                    conn.sendall(b"HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\n"
+                                 b"Content-Length: 40\\r\\nConnection: close\\r\\n\\r\\n")
+                    for _ in range(20):
+                        conn.sendall(b"x")
+                        time.sleep(0.06)
+            except OSError:
+                pass
+            finally:
+                listener.close()
+        thread = threading.Thread(target=server, daemon=True)
+        thread.start()
+        # Validate the actual socket loopback path while keeping all external
+        # target guards active in production (patched in this test only).
+        def safe_loopback_url(url):
+            return urlsplit(url), "example.org", port
+        started = time.monotonic()
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \\
+             patch.object(page_capture, "_url_parts", side_effect=safe_loopback_url), \\
+             patch.object(page_capture, "_valid_public_ip", return_value=True):
+            outcome = page_capture.capture_one(
+                URL, at=STAMP, resolver=lambda *args: ("127.0.0.1",))
+        elapsed = time.monotonic() - started
+        self.assertEqual(outcome["state"], "timeout")
+        self.assertLess(elapsed, 0.80)
+        thread.join(timeout=1.5)
+
+    def test_AC2_13b_deadline_interrupts_incremental_html_parser(self):
+        body = b"<html><body>" + b"word " * 5000 + b"</body></html>"
+        actual_feed = page_capture._PageHTML.feed
+        calls = []
+        def slow_once(parser, part):
+            calls.append(len(part))
+            if len(calls) == 1:
+                time.sleep(0.05)
+            return actual_feed(parser, part)
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.03), \\
+             patch.object(page_capture._PageHTML, "feed", slow_once):
+            outcome = page_capture.capture_one(
+                URL, at=STAMP, resolver=self.resolver,
+                transport=lambda *args: page_capture.PageResponse(
+                    200, {"Content-Type": "text/html"}, body))
+        self.assertEqual(outcome["state"], "timeout")
+        self.assertLess(len(calls), 4)
+
+    def test_AC2_13c_malformed_html_returns_stable_failure(self):
+        body = b"<html><body>" + b"</" * 20000
+        outcome = page_capture.capture_one(
+            URL, at=STAMP, resolver=self.resolver,
+            transport=lambda *args: page_capture.PageResponse(
+                200, {"Content-Type": "text/html"}, body))
+        self.assertEqual(outcome["state"], "invalid_response")
+        self.assertIsNone(outcome["excerpt"])
+
+    def test_AC2_13d_redirect_fragment_is_not_a_network_target(self):
+        observed = []
+        def transport(url, ips, deadline):
+            observed.append(url)
+            if len(observed) == 1:
+                return page_capture.PageResponse(302, {"Location": "/final#section"}, b"")
+            return page_capture.PageResponse(200, {"Content-Type": "text/html"}, SAMPLE)
+        output = page_capture.capture_one(
+            URL + "#anchor", at=STAMP, resolver=self.resolver, transport=transport)
+        self.assertEqual(output["state"], "captured")
+        self.assertEqual(observed, [URL, "https://example.org/final"])
+        self.assertEqual(output["requested_url"], URL + "#anchor")
+
+    def test_AC2_13e_nat64_address_not_eligible_for_connection(self):
+        for address in ("64:ff9b::7f00:1", "64:ff9b::a00:1"):
+            with self.subTest(ip=address):
+                output = page_capture.capture_one(
+                    URL, at=STAMP, resolver=lambda *args: (address,),
+                    transport=lambda *args: self.fail("No NAT64 transport"))
+                self.assertEqual(output["state"], "blocked_target")
 
     def test_AC2_14_body_text_has_fixed_char_limit(self):
         large = b"<html><body>" + b"x" * (page_capture.MAX_PAGE_TEXT+123) + b"</body></html>"
