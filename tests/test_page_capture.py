@@ -404,6 +404,8 @@ class PageCaptureTests(unittest.TestCase):
             with self.subTest(name=name):
                 body = head + element + tail
                 self.assertLess(len(body), page_capture.MAX_HTML_BYTES)
+                self.assertEqual(page_capture._extract_html(body),
+                                 ("Synthetic title", "Synthetic description", "Article text"))
                 result = page_capture.capture_one(
                     URL, at=STAMP, resolver=self.resolver,
                     transport=lambda *args, payload=body: page_capture.PageResponse(
