@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 import http.client
+import io
 import ipaddress
 import json
 import os
@@ -124,6 +125,51 @@ def _resolver(host: str, port: int) -> tuple[str, ...]:
         host, port, type=socket.SOCK_STREAM)}))
 
 
+class _DeadlineSocket:
+    """Socket file-adapter enforcing one absolute budget on every TCP/TLS read.
+
+    http.client reads headers and chunk metadata via buffered readline(), which
+    may perform many socket reads inside a single getresponse/read1 call. Set
+    remaining time before *each* low-level recv, not merely per HTTP operation.
+    Keep the socket alive while HTTPResponse's makefile reference is open.
+    """
+    def __init__(self, sock: socket.socket, deadline: float):
+        self._sock = sock
+        self._deadline = deadline
+        self._files = 0
+        self._closed = False
+
+    def settimeout(self, seconds: float):
+        self._sock.settimeout(min(seconds, _remaining(self._deadline)))
+
+    def recv_into(self, buffer):
+        self._sock.settimeout(_remaining(self._deadline))
+        return self._sock.recv_into(buffer)
+
+    def sendall(self, data):
+        self._sock.settimeout(_remaining(self._deadline))
+        return self._sock.sendall(data)
+
+    def makefile(self, mode="rb"):
+        if mode != "rb":
+            raise ValueError("unexpected socket file mode")
+        self._files += 1
+        return io.BufferedReader(socket.SocketIO(self, "rb"))
+
+    def fileno(self):
+        return self._sock.fileno()
+
+    def _decref_socketios(self):
+        self._files -= 1
+        if self._closed and self._files == 0:
+            self._sock.close()
+
+    def close(self):
+        self._closed = True
+        if self._files == 0:
+            self._sock.close()
+
+
 class _PinnedHTTP(http.client.HTTPConnection):
     def __init__(self, host: str, port: int, ip: str, *, secure: bool,
                  deadline: float):
@@ -148,7 +194,7 @@ class _PinnedHTTP(http.client.HTTPConnection):
         except BaseException:
             sock.close()
             raise
-        self.sock = sock
+        self.sock = _DeadlineSocket(sock, self._deadline)
 
 
 def _transport(url: str, vetted_ips: tuple[str, ...],
