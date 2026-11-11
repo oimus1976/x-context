@@ -298,16 +298,11 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
         page.feed(decoded[start:start + 1024])
         if deadline is not None:
             _remaining(deadline)
-    # Only inspect the pending buffer at EOF. A large valid script, style,
-    # comment or attribute has already been consumed once its closing token
-    # arrives. An unclosed adversarial token (e.g. repeated "</" / "<?")
-    # instead remains in rawdata, where HTMLParser.close() can rescan it
-    # for many seconds without a chance to check the deadline.
-    # Never impose this cap in the incremental feed loop.
-    if len(page.rawdata) > 16384:
-        raise ValueError("oversized unclosed HTML token at EOF")
-    _remaining(deadline) if deadline is not None else None
-    page.close()
+    # Do not force HTMLParser.close() on untrusted input. On Python 3.12
+    # its EOF recovery can rescan a malformed unfinished token quadratically,
+    # without returning control to check the shared time budget.
+    # feed() processes completed markup incrementally; trailing incomplete
+    # markup is intentionally ignored instead of synthesized or recovered.
     if deadline is not None:
         _remaining(deadline)
     return (_normalize_text(" ".join(page.title), 512),
