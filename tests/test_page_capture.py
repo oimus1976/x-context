@@ -423,9 +423,9 @@ class PageCaptureTests(unittest.TestCase):
                 self.assertEqual((self.main.read_bytes(), self.extras.read_bytes()), original)
 
     def test_AC2_13c_tolerant_malformed_html_is_bounded(self):
-        # HTMLParser tolerates malformed content. It may return partial text,
-        # which must still be bounded and must never consume an unbounded body.
-        body = b"<html><body>Visible text" + b"</" * 20000
+        # Small malformed tails can be handled as partial extracted text.
+        # Large unclosed tails are rejected before the expensive close().
+        body = b"<html><body>Visible text" + b"</" * 1000
         outcome = page_capture.capture_one(
             URL, at=STAMP, resolver=self.resolver,
             transport=lambda *args: page_capture.PageResponse(
@@ -433,6 +433,51 @@ class PageCaptureTests(unittest.TestCase):
         self.assertEqual(outcome["state"], "captured")
         self.assertTrue(outcome["excerpt"].startswith("Visible text"))
         self.assertLessEqual(len(outcome["excerpt"]), page_capture.MAX_PAGE_TEXT)
+
+    def test_AC2_13c1_full_size_unclosed_tokens_stop_before_slow_close(self):
+        # Reproduce the independent L2 report: each <=512 KiB body previously
+        # took 10-31 seconds inside HTMLParser.close() despite an 8s budget.
+        prefix = b"<html><body>"
+        for token in (b"</", b"<?", b"<!"):
+            with self.subTest(token=token):
+                body = prefix + token * ((page_capture.MAX_HTML_BYTES-len(prefix))//2)
+                self.assertLessEqual(len(body), page_capture.MAX_HTML_BYTES)
+                start = time.monotonic()
+                outcome = page_capture.capture_one(
+                    URL, at=STAMP, resolver=self.resolver,
+                    transport=lambda *args, payload=body: page_capture.PageResponse(
+                        200, {"Content-Type": "text/html"}, payload))
+                elapsed = time.monotonic() - start
+                self.assertEqual(outcome["state"], "invalid_response")
+                self.assertIsNone(outcome["excerpt"])
+                self.assertLess(elapsed, page_capture.TIMEOUT_SECONDS)
+
+    def test_AC2_13c2_large_valid_tokens_near_body_cap_are_not_rejected(self):
+        # An EOF-only guard must not recreate the earlier 16 KiB regression:
+        # valid script/style/comments/attributes are consumed by end-of-input.
+        prefix = b'<html><head><title>T</title></head>'
+        suffix = b'<body><p>Article text</p></body></html>'
+        n = page_capture.MAX_HTML_BYTES - len(prefix) - len(suffix) - 180
+        elements = (
+            b'<script>' + b'x' * n + b'</script>',
+            b'<style>' + b'x' * n + b'</style>',
+            b'<!--' + b'x' * n + b'-->',
+            b'<meta name="synthetic" content="' + b'x' * n + b'">',
+        )
+        for element in elements:
+            with self.subTest(prefix=element[:18]):
+                body = prefix + element + suffix
+                self.assertLessEqual(len(body), page_capture.MAX_HTML_BYTES)
+                start = time.monotonic()
+                outcome = page_capture.capture_one(
+                    URL, at=STAMP, resolver=self.resolver,
+                    transport=lambda *args, payload=body: page_capture.PageResponse(
+                        200, {"Content-Type": "text/html"}, payload))
+                elapsed = time.monotonic() - start
+                self.assertEqual(outcome["state"], "captured")
+                self.assertEqual(outcome["title"], "T")
+                self.assertEqual(outcome["excerpt"], "Article text")
+                self.assertLess(elapsed, page_capture.TIMEOUT_SECONDS)
 
     def test_AC2_13ca_html_parser_error_returns_stable_failure(self):
         body = b"<html><body>synthetic input</body></html>"
