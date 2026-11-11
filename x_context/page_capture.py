@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 import http.client
 import io
 import ipaddress
@@ -19,6 +18,8 @@ import re
 import socket
 import ssl
 import tempfile
+import subprocess
+import sys
 import time
 from typing import Callable, Mapping
 from urllib.parse import urljoin, urlsplit
@@ -242,72 +243,47 @@ def _transport(url: str, vetted_ips: tuple[str, ...],
         conn.close()
 
 
-class _PageHTML(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.skip = 0
-        self.in_title = False
-        self.title = []
-        self.description = None
-        self.body = []
-        self.in_body = False
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag in ("script", "style", "noscript", "svg", "nav", "footer", "header"):
-            self.skip += 1
-        if tag == "title":
-            self.in_title = True
-        if tag == "body":
-            self.in_body = True
-        if tag == "meta" and self.description is None:
-            key = (attrs.get("name") or attrs.get("property") or "").lower()
-            if key in ("description", "og:description") and isinstance(attrs.get("content"), str):
-                self.description = attrs["content"]
-
-    def handle_endtag(self, tag):
-        if tag in ("script", "style", "noscript", "svg", "nav", "footer", "header") and self.skip:
-            self.skip -= 1
-        if tag == "title":
-            self.in_title = False
-        if tag == "body":
-            self.in_body = False
-
-    def handle_data(self, data):
-        if self.skip:
-            return
-        if self.in_title:
-            self.title.append(data)
-        if self.in_body:
-            self.body.append(data)
-
-
-def _normalize_text(value: str, limit: int) -> str | None:
-    result = re.sub(r"\s+", " ", value).strip()
-    return result[:limit] if result else None
-
-
 def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | None, str | None, str | None]:
-    # Incremental feed avoids a single long, non-interruptible malformed-HTML
-    # parse. Check the same monotonic deadline between small parse slices.
-    page = _PageHTML()
-    decoded = body.decode("utf-8", errors="replace")
-    for start in range(0, len(decoded), 1024):
-        if deadline is not None:
-            _remaining(deadline)
-        page.feed(decoded[start:start + 1024])
-        if deadline is not None:
-            _remaining(deadline)
-    # Do not force HTMLParser.close() on untrusted input. On Python 3.12
-    # its EOF recovery can rescan a malformed unfinished token quadratically,
-    # without returning control to check the shared time budget.
-    # feed() processes completed markup incrementally; trailing incomplete
-    # markup is intentionally ignored instead of synthesized or recovered.
-    if deadline is not None:
-        _remaining(deadline)
-    return (_normalize_text(" ".join(page.title), 512),
-            _normalize_text(page.description or "", 1024),
-            _normalize_text(" ".join(page.body), MAX_PAGE_TEXT))
+    """Run the trusted stdlib HTML parser in one killable, short-lived child.
+
+    Python HTMLParser.close() is not interruptible; a malicious 512-KiB tail
+    can consume ~30s of CPU. Never run that EOF recovery on this caller.
+    """
+    if not isinstance(body, bytes) or len(body) > MAX_HTML_BYTES:
+        raise ValueError("invalid HTML body")
+    if deadline is None:
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+    _remaining(deadline)
+    worker_path = Path(__file__).with_name("_html_extract_worker.py")
+    # Allow Windows Python DLL discovery, but never forward user credentials,
+    # OAuth configuration, proxies or arbitrary PYTHON* environment variables.
+    env = {name: os.environ[name] for name in ("SystemRoot", "WINDIR")
+           if name in os.environ}
+    worker = subprocess.Popen(
+        [sys.executable, "-I", str(worker_path)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        env=env, close_fds=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    try:
+        try:
+            output, _ = worker.communicate(input=body, timeout=_remaining(deadline))
+        except subprocess.TimeoutExpired:
+            raise PageTimeout() from None
+    finally:
+        # Hard stop also covers deadline expiration between Popen/communicate.
+        if worker.poll() is None:
+            worker.kill()
+            worker.communicate()
+    _remaining(deadline)
+    if worker.returncode != 0 or len(output) > 32768:
+        raise ValueError("HTML worker failed")
+    value = json.loads(output.decode("utf-8"))
+    if (not isinstance(value, list) or len(value) != 3 or
+        any(v is not None and not isinstance(v, str) for v in value) or
+        any(v is not None and len(v) > limit for v, limit in zip(value, (512, 1024, MAX_PAGE_TEXT)))):
+        raise ValueError("invalid worker result")
+    return tuple(value)
 
 
 def _get_header(headers: Mapping[str, str], name: str) -> str | None:
