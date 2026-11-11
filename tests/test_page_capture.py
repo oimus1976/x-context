@@ -363,10 +363,10 @@ class PageCaptureTests(unittest.TestCase):
         # Genuine isolated subprocess, synthetic sleeping script, not a real
         # network host. A worker that never returns must not block capture.
         slow = self.root / "slow_worker.py"
-        slow.write_text("import time\\ntime.sleep(60)\\n", encoding="utf-8")
+        slow.write_text("import time\ntime.sleep(60)\n", encoding="utf-8")
         body = b"<html><body>synthetic</body></html>"
         start = time.monotonic()
-        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \\
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25), \
              patch.object(page_capture, "_HTML_WORKER_PATH", slow):
             outcome = page_capture.capture_one(
                 URL, at=STAMP, resolver=self.resolver,
