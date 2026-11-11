@@ -298,9 +298,15 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
         page.feed(decoded[start:start + 1024])
         if deadline is not None:
             _remaining(deadline)
-    # HTMLParser is tolerant of incomplete HTML and may defer valid long
-    # elements until close(); its rawdata is NOT an EOF-validity signal.
-    # Trust only the bounded input and the shared monotonic deadline.
+    # Only inspect the pending buffer at EOF. A large valid script, style,
+    # comment or attribute has already been consumed once its closing token
+    # arrives. An unclosed adversarial token (e.g. repeated "</" / "<?")
+    # instead remains in rawdata, where HTMLParser.close() can rescan it
+    # for many seconds without a chance to check the deadline.
+    # Never impose this cap in the incremental feed loop.
+    if len(page.rawdata) > 16384:
+        raise ValueError("oversized unclosed HTML token at EOF")
+    _remaining(deadline) if deadline is not None else None
     page.close()
     if deadline is not None:
         _remaining(deadline)
