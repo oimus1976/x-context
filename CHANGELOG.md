@@ -2,6 +2,8 @@
 
 ## Issue #64 AC-2 — one selected external HTML page (2026-11-10; Draft)
 
+- After independent L2 found uninterruptible HTMLParser EOF parsing (26–31 s on 512 KiB malformed input), extract HTML in a short-lived isolated Python subprocess. The parent kills it at the shared monotonic deadline and validates bounded JSON output; no new dependency, external request, or credential inheritance. Real Windows qualification remains NOT_RUN.
+
 - Add explicit, bounded `page capture` route selecting one stored URL by Post ID/index, with no X or Google access. No actual network use in development.
 - Enforce public DNS/IP pinning through connection, capped redirects/body with a shared monotonic deadline (OS DNS lookup caveat), and deterministic HTML title, description and excerpt extraction. Save success or stable failure state in an independent versioned local sidecar.
 - Add synthetic HTTP and local-store tests including blocked IP, private redirect, HTTP errors, oversized data, race/corruption boundaries and unchanged original bookmark bytes.
