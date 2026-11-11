@@ -448,7 +448,9 @@ class PageCaptureTests(unittest.TestCase):
                     transport=lambda *args, payload=body: page_capture.PageResponse(
                         200, {"Content-Type": "text/html"}, payload))
                 elapsed = time.monotonic() - start
-                self.assertEqual(outcome["state"], "invalid_response")
+                # No complete text node exists in the hostile unfinished
+                # tail; do not run quadratic EOF recovery or invent text.
+                self.assertEqual(outcome["state"], "no_extractable_text")
                 self.assertIsNone(outcome["excerpt"])
                 self.assertLess(elapsed, page_capture.TIMEOUT_SECONDS)
 
