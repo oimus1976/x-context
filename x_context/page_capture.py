@@ -33,6 +33,7 @@ MAX_REDIRECTS = 2
 MAX_URL_CHARS = 4096
 TIMEOUT_SECONDS = 8
 MAX_STORE_BYTES = 16 * 1024 * 1024
+_HTML_WORKER_PATH = Path(__file__).with_name("_html_extract_worker.py")
 
 _STATES = frozenset({
     "captured", "blocked_target", "connection_error", "http_error",
@@ -254,7 +255,7 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
     if deadline is None:
         deadline = time.monotonic() + TIMEOUT_SECONDS
     _remaining(deadline)
-    worker_path = Path(__file__).with_name("_html_extract_worker.py")
+    worker_path = _HTML_WORKER_PATH
     # Allow Windows Python DLL discovery, but never forward user credentials,
     # OAuth configuration, proxies or arbitrary PYTHON* environment variables.
     env = {name: os.environ[name] for name in ("SystemRoot", "WINDIR")
