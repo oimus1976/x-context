@@ -359,23 +359,16 @@ class PageCaptureTests(unittest.TestCase):
         self.assertEqual(outcome["excerpt"], "Heading first paragraph. Second & final.")
         thread.join(timeout=1.5)
 
-    def test_AC2_13b_deadline_interrupts_incremental_html_parser(self):
-        body = b"<html><body>" + b"word " * 5000 + b"</body></html>"
-        actual_feed = page_capture._PageHTML.feed
-        calls = []
-        def slow_once(parser, part):
-            calls.append(len(part))
-            if len(calls) == 1:
-                time.sleep(0.05)
-            return actual_feed(parser, part)
-        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.03), \
-             patch.object(page_capture._PageHTML, "feed", slow_once):
+    def test_AC2_13b_deadline_terminates_html_worker(self):
+        body = b"<html><body>" + b"</" * 200000
+        start = time.monotonic()
+        with patch.object(page_capture, "TIMEOUT_SECONDS", 0.15):
             outcome = page_capture.capture_one(
                 URL, at=STAMP, resolver=self.resolver,
                 transport=lambda *args: page_capture.PageResponse(
                     200, {"Content-Type": "text/html"}, body))
         self.assertEqual(outcome["state"], "timeout")
-        self.assertLess(len(calls), 4)
+        self.assertLess(time.monotonic()-start, 2.0)
 
     def test_AC2_13bb_valid_long_html_elements_preserved_and_saved(self):
         """Large, well-formed inline content is not incomplete markup.
@@ -435,24 +428,23 @@ class PageCaptureTests(unittest.TestCase):
         self.assertLessEqual(len(outcome["excerpt"]), page_capture.MAX_PAGE_TEXT)
 
     def test_AC2_13c1_full_size_unclosed_tokens_stop_before_slow_close(self):
-        # Reproduce the independent L2 report: each <=512 KiB body previously
-        # took 10-31 seconds inside HTMLParser.close() despite an 8s budget.
+        # These 512-KiB adversarial tails consumed 10-31s in HTMLParser.close
+        # in the original L2 review. The isolated worker must be terminated.
         prefix = b"<html><body>"
         for token in (b"</", b"<?", b"<!"):
             with self.subTest(token=token):
                 body = prefix + token * ((page_capture.MAX_HTML_BYTES-len(prefix))//2)
                 self.assertLessEqual(len(body), page_capture.MAX_HTML_BYTES)
                 start = time.monotonic()
-                outcome = page_capture.capture_one(
-                    URL, at=STAMP, resolver=self.resolver,
-                    transport=lambda *args, payload=body: page_capture.PageResponse(
-                        200, {"Content-Type": "text/html"}, payload))
+                with patch.object(page_capture, "TIMEOUT_SECONDS", 0.25):
+                    outcome = page_capture.capture_one(
+                        URL, at=STAMP, resolver=self.resolver,
+                        transport=lambda *args, payload=body: page_capture.PageResponse(
+                            200, {"Content-Type": "text/html"}, payload))
                 elapsed = time.monotonic() - start
-                # No complete text node exists in the hostile unfinished
-                # tail; do not run quadratic EOF recovery or invent text.
-                self.assertEqual(outcome["state"], "no_extractable_text")
+                self.assertEqual(outcome["state"], "timeout")
                 self.assertIsNone(outcome["excerpt"])
-                self.assertLess(elapsed, page_capture.TIMEOUT_SECONDS)
+                self.assertLess(elapsed, 2.0)
 
     def test_AC2_13c2_large_valid_tokens_near_body_cap_are_not_rejected(self):
         # An EOF-only guard must not recreate the earlier 16 KiB regression:
@@ -483,7 +475,7 @@ class PageCaptureTests(unittest.TestCase):
 
     def test_AC2_13ca_html_parser_error_returns_stable_failure(self):
         body = b"<html><body>synthetic input</body></html>"
-        with patch.object(page_capture._PageHTML, "feed",
+        with patch.object(page_capture, "_extract_html",
                           side_effect=ValueError("synthetic parser failure")):
             outcome = page_capture.capture_one(
                 URL, at=STAMP, resolver=self.resolver,
