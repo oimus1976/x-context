@@ -200,7 +200,7 @@ class _PinnedHTTP(http.client.HTTPConnection):
 
 
 def _transport(url: str, vetted_ips: tuple[str, ...],
-               deadline: float) -> PageResponse:
+               deadline: float, *, accept: str = "text/html") -> PageResponse:
     p, host, port = _url_parts(url)
     if not vetted_ips or not all(_valid_public_ip(ip) for ip in vetted_ips):
         raise OSError("no public addresses")
@@ -213,7 +213,7 @@ def _transport(url: str, vetted_ips: tuple[str, ...],
             path += "?" + p.query
         _remaining(deadline)
         conn.request("GET", path, headers={
-            "Host": p.netloc, "Accept": "text/html", "Accept-Encoding": "identity",
+            "Host": p.netloc, "Accept": accept, "Accept-Encoding": "identity",
             "User-Agent": "x-context/AC2", "Connection": "close",
         })
         # Connection: close may disown conn.sock after getresponse(). Retain

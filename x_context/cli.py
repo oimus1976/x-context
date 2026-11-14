@@ -12,6 +12,7 @@ from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight,
 from .bookmark_enrichment import EnrichmentError, preflight as enrichment_preflight, save as save_enrichment
 from .local_context import ContextViewError, render as render_local_context
 from . import page_capture
+from . import image_capture
 from . import bookmark_enrichment
 
 from .credential_lifecycle import (
@@ -66,6 +67,12 @@ def _build_parser() -> argparse.ArgumentParser:
     page_command.add_argument("--post-id", required=True)
     page_command.add_argument("--url-index", type=int, default=0)
     page_command.add_argument("--confirm-network-request", action="store_true")
+    image_parser = subparsers.add_parser("image", add_help=True, allow_abbrev=False)
+    image_commands = image_parser.add_subparsers(dest="image_action", required=True)
+    image_command = image_commands.add_parser("capture", allow_abbrev=False)
+    image_command.add_argument("--post-id", required=True)
+    image_command.add_argument("--media-index", type=int, default=0)
+    image_command.add_argument("--confirm-network-request", action="store_true")
     context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
     context_parser.add_argument("--max-items", type=int, default=10)
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
@@ -307,6 +314,49 @@ def main(
         _write_json_line(selected_stderr, {
             "diagnostic": "error", "operation": "page", "error_category": category,
             "external_requests_attempted": attempted,
+        })
+        return 2
+
+    if args.command == "image":
+        # One explicitly selected X-included-media URL; never resolve X tokens.
+        if (args.image_action != "capture" or not args.confirm_network_request
+                or not isinstance(args.post_id, str) or not args.post_id.isascii()
+                or not args.post_id.isdigit() or not 1 <= len(args.post_id) <= 19
+                or type(args.media_index) is not int
+                or not 0 <= args.media_index <= image_capture.MAX_MEDIA_INDEX):
+            category = "invalid_input"
+            attempted = 0
+        else:
+            attempted = 0
+            try:
+                store = bookmark_preflight(selected_environ)
+                extras = bookmark_enrichment.preflight(store)
+                subject, url, field = image_capture.select_image(
+                    store, extras, args.post_id, args.media_index)
+                snapshot = image_capture.preflight(store, extras)
+                result, content = image_capture.capture_one(
+                    url, at=page_capture.utcnow())
+                attempted = 0 if result["state"] in ("not_available", "blocked_target") else None
+                image_capture.save(
+                    snapshot, subject_id=subject, post_id=args.post_id,
+                    media_index=args.media_index, source_field=field,
+                    result=result, image=content)
+            except (BookmarkStoreError, EnrichmentError, image_capture.ImageCaptureError) as exc:
+                category = exc.category
+            except Exception:
+                category = "storage_error"
+            else:
+                _write_json_line(selected_stdout, {
+                    "operation": "image", "post_id": args.post_id,
+                    "media_index": args.media_index,
+                    "state": result["state"],
+                    "http_status": result["http_status"],
+                    "persistence_succeeded": True,
+                })
+                return 0
+        _write_json_line(selected_stderr, {
+            "diagnostic": "error", "operation": "image",
+            "error_category": category, "external_requests_attempted": attempted,
         })
         return 2
 
