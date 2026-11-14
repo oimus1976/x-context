@@ -227,7 +227,7 @@ def inspect_local(state_store, journal):
         projected['documents'] = {role: receipt['id'] for role, receipt in manifest.items()}
         projected['pending'] = []
         pub.validate_state(projected)
-        if state_store.path.read_bytes() != raw or journal.path.read_bytes() != sidecar:
+        if _read_bounded(state_store.path, 65536) != raw or _read_bounded(journal.path, recovery.Journal.LIMIT) != sidecar:
             raise ValueError
         return LocalEvidence(raw, sidecar, old, manifest, projected, bodies, fixture_digest)
     except Exception:
@@ -305,8 +305,8 @@ def plan_reconciliation(transport, state_store, journal, *, reviewed_code):
         second = _snapshot(transport, evidence)
         if first != second:
             raise ValueError
-        if (state_store.path.read_bytes() != evidence.original_bytes
-                or journal.path.read_bytes() != evidence.sidecar_bytes):
+        if (_read_bounded(state_store.path, 65536) != evidence.original_bytes
+                or _read_bounded(journal.path, recovery.Journal.LIMIT) != evidence.sidecar_bytes):
             raise ValueError
         binding = dict(original_raw_sha256=core.digest(evidence.original_bytes),
                        original_state_sha256=core.digest(core.encode(evidence.original)),
