@@ -1,5 +1,12 @@
 # Changelog
 
+## Issue #64 AC-3 — one selected saved-Post thumbnail (Draft; synthetic-only)
+
+- Reuse AC-1 included-media provenance to select exactly one image, and AC-2's public-IP, pinned TLS, redirects and shared network deadline. No implicit image/HTML traversal or authenticated X/Google API request.
+- Accept PNG/JPEG/WebP with matching signatures up to 512 KiB. Save content-addressed image bytes and an independently versioned local manifest with relative path, MIME, SHA-256, byte size, source URL/field, final URL and stable result state.
+- Emit an AC-3-only relative Markdown image link after local hash/size/signature readback, or a status without an image link when missing or mismatched. Full combined Markdown remains AC-5.
+- Synthetic-only test coverage includes source selection, failures, storage immutability, failed-write cleanup, stale manifest, symlinks and asset verification. Real HTTP, actual X bookmarks and owner-machine live writes are NOT_RUN and separately gated.
+
 ## Issue #64 AC-2 — one selected external HTML page (2026-11-10; Draft)
 
 - After independent L2 found uninterruptible HTMLParser EOF parsing (26–31 s on 512 KiB malformed input), extract HTML in a short-lived isolated Python subprocess. The parent kills it at the shared monotonic deadline and validates bounded JSON output; no new dependency, external request, or credential inheritance. Real Windows qualification remains NOT_RUN.
