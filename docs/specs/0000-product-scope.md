@@ -7,7 +7,7 @@
 
 ## 1. Product intent
 
-x-context is intended to become a read-only personal X context reader: a narrow, inspectable layer that obtains X data through supported interfaces, normalizes it, and makes it usable by local tools and AI-assisted analysis without granting product-level mutation authority.
+x-context's long-term goal is to help AI continuously discover, collect, organize, update, and reuse source-grounded knowledge from SNS and other permitted information sources, including both followed topics and previously unknown useful information. The current implementation is a narrow, inspectable, read-only personal X context reader: it obtains X data through supported interfaces, normalizes it, and makes it usable by local tools and AI-assisted analysis without granting product-level mutation authority.
 
 The product is broader than SPEC-0001. SPEC-0001 is the first implementation slice, not the full target capability set.
 
@@ -82,6 +82,20 @@ Candidate consumers/features after deterministic acquisition and normalization a
 
 AI features do not inherit authority to mutate X. Any agent action outside read/analysis requires a separate product and authority decision rather than implicit scope expansion.
 
+### P4 — Continuous discovery and knowledge renewal (future candidate)
+
+The initial value milestone is a **small, observable loop**: acquire bounded source material, preserve provenance, provide it to an existing AI consumer, identify what was newly learned or remains uncertain, and use that feedback to inform the next discovery. Prefer demonstrating this loop over completing every optional enrichment or publishing feature first.
+
+Future candidates, promoted only through separate accepted requirements and owner gates:
+
+- repeatable, budget-bounded discovery of both known topics and new candidates using officially supported public-data interfaces;
+- deduplication, cursors or observation checkpoints, and provenance-aware change detection;
+- differentiation of source claims, AI interpretations, and user decisions, including disagreement and supersession without overwriting original evidence;
+- feedback from review/use to subsequent discovery, with no presumption that AI-generated claims are verified;
+- additional providers (such as Threads or YouTube) only after current access, terms, scope, costs, and privacy boundaries are verified.
+
+Begin with the existing canonical model, local persistence, deterministic collection, and external AI tools. Do not require a bespoke crawler, always-on agent, vector database, cross-provider abstraction, or new publishing layer to demonstrate the first loop. Scheduled invocation can be assessed separately after one bounded batch is useful. No live data access, unattended execution, new platform permission, external sharing, or implementation is authorized by this capability map.
+
 ## 4. Explicit non-goals
 
 The following are not part of the intended x-context product direction unless a future product decision explicitly supersedes this document:
@@ -98,7 +112,7 @@ DM **reading** is not part of the current capability map and must not be inferre
 
 When deciding which capability moves from the map into an implementation spec, prefer:
 
-1. direct usefulness to the user's stated context-reading goal;
+1. measurable progress toward the smallest end-to-end discovery → knowledge → AI reuse loop;
 2. low additional authority and privacy risk;
 3. ability to reuse the canonical model rather than create endpoint-specific output;
 4. observable and bounded API cost;
@@ -120,4 +134,4 @@ Therefore:
 
 ## 7. Current evidence and uncertainty
 
-The capability candidates above reflect the discovery performed for Issue #1 and the user's stated goal of broad read-only access to their X context. This document intentionally does not freeze current X API endpoint names, prices, or entitlement rules as durable product facts. Those external facts must be re-verified when each capability is selected for implementation.
+The initial capability candidates reflect the discovery performed for Issue #1. The broader discovery and knowledge-renewal goal was reaffirmed by the owner on 2026-11-17, following the 2026-10-12 autonomous research discussion. The current X reader and Issue #64 remain bounded implementation slices, not a claim that the broader loop is implemented. This document intentionally does not freeze current X API endpoint names, prices, or entitlement rules as durable product facts. Those external facts must be re-verified when each capability is selected for implementation.
