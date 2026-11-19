@@ -11,6 +11,7 @@ from typing import Callable, Mapping, TextIO
 from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
 from .bookmark_enrichment import EnrichmentError, preflight as enrichment_preflight, save as save_enrichment
 from .local_context import ContextViewError, render as render_local_context
+from .combined_context import render as render_combined_context
 from . import page_capture
 from . import image_capture
 from . import bookmark_enrichment
@@ -75,6 +76,8 @@ def _build_parser() -> argparse.ArgumentParser:
     image_command.add_argument("--confirm-network-request", action="store_true")
     context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
     context_parser.add_argument("--max-items", type=int, default=10)
+    context_parser.add_argument("--include-saved-details", action="store_true",
+                                help="offline join with saved X metadata, page captures and verified images")
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", required=True)
     auth_subparsers.add_parser("login", add_help=True, allow_abbrev=False)
@@ -369,8 +372,26 @@ def main(
                 snapshot = bookmark_preflight(selected_environ)
                 if snapshot.value is None:
                     raise BookmarkStoreError("storage_error")
-                view = render_local_context(snapshot.value, max_items=args.max_items)
-            except (BookmarkStoreError, ContextViewError) as exc:
+                if args.include_saved_details:
+                    metadata = enrichment_preflight(snapshot)
+                    if metadata.value is None:
+                        # Orphan page/image manifests cannot be treated as
+                        # belonging to an unspecified enrichment record.
+                        page_path = snapshot.path.with_name("bookmark-pages-v1.json")
+                        image_path = snapshot.path.with_name("bookmark-images-v1.json")
+                        if any(p.exists() or p.is_symlink() for p in (page_path, image_path)):
+                            raise ContextViewError("storage_error")
+                        pages = page_capture.PageSnapshot(page_path, None, None)
+                        images = image_capture.ImageSnapshot(image_path, None, None)
+                    else:
+                        pages = page_capture.preflight(snapshot, metadata)
+                        images = image_capture.preflight(snapshot, metadata)
+                    view = render_combined_context(
+                        snapshot, metadata, pages, images, max_items=args.max_items)
+                else:
+                    view = render_local_context(snapshot.value, max_items=args.max_items)
+            except (BookmarkStoreError, EnrichmentError, page_capture.PageCaptureError,
+                    image_capture.ImageCaptureError, ContextViewError) as exc:
                 category = exc.category
             except Exception:
                 category = "storage_error"

@@ -1,5 +1,20 @@
 # Project Status
 
+## Current: Issue #64 AC-5 — combined saved Markdown (2026-11-19, Draft implementation)
+
+GitHub `main` at task start: `03cd32bb73054a6bf942fe91e459c8026df65781`.
+PRs #72 / #73 / #74 (AC-1/2/3) and PR #75 (SPEC-0000 direction) are merged.
+This workstream targets `issue-64-ac5-combined-markdown`, an isolated Draft candidate.
+AC-5 adds only opt-in local rendering of already-saved, subject-bound X metadata,
+page capture and verified image assets. Plain `context` and existing data stores
+are unchanged. No live X/Web/Drive communication, model transfer, or autonomously
+scheduled collection is authorized. Synthetic CI and independent exact-head review
+remain separate evidence gates; Windows local closeout for PR #75 is NOT_RUN.
+AC-4/AC-6 and owner-device UAT must not be inferred PASS from this renderer.
+This section supersedes older issue-specific checkpoints below without rewriting
+their historical evidence. Ready/merge remain human-final.
+
+
 ## Issue #67 — pending-state explicit authentication repair (2026-10-23)
 
 Branch `issue-67-pending-reauth` starts at merged canonical main
