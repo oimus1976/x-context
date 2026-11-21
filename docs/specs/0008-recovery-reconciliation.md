@@ -155,3 +155,41 @@ Do not call normal `publish` automatically; user must separately authorize its *
 3. Obtain a new independent Claude Code L2 of the entire base-to-new-head high-impact diff. Codex implementation/testing is not that review.
 4. Resolve PR #63's human Ready/merge independently; after it is merged, rebase/retarget Issue #65 against actual main without taking a human gate.
 5. Only then request separate owner Gate R (live read-only) and later W (one-time local registry write). After proven reconciliation, request distinct authorizations for normal dry-run and publisher scenario qualification.
+
+## Issue #65 Gate R caller (fake-only development)
+
+`google_gate_r` adds a two-step local prepare/read caller under the R-CALL-01..08
+contract in `docs/verification/issue-65-gate-r-caller-ac.md`. Prepare reads
+only explicit bounded local incident evidence and returns an opaque digest;
+that digest is not authorization. A future owner must independently approve an
+exact plan before the read step. The caller never invokes Gate W or publication.
+
+The read step checks the same Windows SID. Each selected file and its immediate
+private parent must be owned by that SID and allow only that SID, SYSTEM and
+Administrators. Higher ancestors through the profile may also be owned by SYSTEM
+or Administrators and may grant other principals read/traverse rights only;
+mutating or unsupported ACEs fail closed, including inherit-only mutating ACEs.
+This trusts those privileged owners and admits ancestor reads without granting
+access to the strictly protected leaves and private parents. Provision private
+parents separately if they do not meet the strict rule; the caller never changes ACLs. Its named mutex excludes cooperating local callers only: it does not
+lock other programs, arbitrary local writers, Google, or an ABA change. The
+operator must arrange a single-writer window. No protection against a malicious
+process running with the same Windows identity or an administrator is claimed.
+The helper verifies `about.user.permissionId` under the same unexpired access
+token used for all document reads, never refreshes or saves, and dispatches only
+incident-bound GETs. Requests run in deadline-limited child processes, without
+redirects, proxies, retries, token command-line arguments, or provider writes.
+
+The pre-read binding covers explicit path identities, selected SID, raw local
+hashes, fixture, incident owner/folder/documents, limits, the nonsecret approval
+reference, project Python source and the selected Python runtime/standard library
+and native extension files. It does not authenticate an owner approval, attest
+loaded process memory, secure the OS or guarantee an absence of concurrent ABA.
+Only a status, safe STOP category or opaque digest is printed. APP_VISIBLE means
+only the set visible to the drive.file app; it is not global inventory.
+
+Synthetic normal trace: one about GET plus 80 Drive GET and 24 Docs GET. Limits
+are one about, 90 other Drive, 28 Docs, and 120 seconds; extra pages count. Tests
+use invented data and mocked HTTP; Windows ACL and mutex tests use synthetic temp
+objects. Actual credential, local incident evidence, Google and live Gate R are
+not exercised. Independent L2 and human Ready/merge remain separate gates.
