@@ -1,5 +1,14 @@
 # Changelog
 
+## Issue #64 AC-5 — opt-in combined, source-grounded Markdown (synthetic-only Draft)
+
+- Add `context --include-saved-details` to read and join existing local bookmark, X-metadata, captured-page and image manifests; preserve plain `context` and `bookmarks-v1.json` unchanged.
+- Label original Post quotations, X-supplied short/expanded URLs, captured page source/URL/status/time and locally SHA-256-verified image paths distinctly; absent, failed or stale source links do not become verified facts.
+- Keep owner notes and AI annotations explicitly unrecorded/ungenerated. No new storage, retrieval, external communication, model service or implicit write is added.
+- Golden, immutability, missing/corrupt asset, stale-reference and no-network/credential tests are synthetic only. Actual X/site access, real-data AI transfer and Windows UAT require separate approval.
+- Prior PR #75 merged SPEC-0000 product-direction realignment as documentation only; that merge did not deliver autonomous research or actual use.
+
+
 ## Issue #64 AC-3 — one selected saved-Post thumbnail (Draft; synthetic-only)
 
 - Reuse AC-1 included-media provenance to select exactly one image, and AC-2's public-IP, pinned TLS, redirects and shared network deadline. No implicit image/HTML traversal or authenticated X/Google API request.
