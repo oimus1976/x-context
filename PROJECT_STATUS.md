@@ -1,5 +1,19 @@
 # Project Status
 
+## Current: Issue #77 stage 1 — saved referenced X Post Markdown (2026-11-23, Draft)
+
+Working branch: `issue-77-local-reference-display`, based on GitHub main
+`eaa8de1d361ff127975e24f48b42c65440311ded`.
+Opt-in `context --include-saved-details` now renders already-saved reference
+type, ID-derived URL and `included_posts` text with separate provenance
+and missing-text states. Existing source/sidecar schema, default context, local
+stored files and collection/API behavior remain unchanged. No real data, X/Web
+network or owner Windows access is part of this implementation. Independent
+review, exact-head CI and owner-device read-only display are distinct evidence
+steps; Ready and merge remain human-final. The Issue #64 historical checkpoint
+below is retained; its outstanding AC-4/AC-6 have not been closed.
+
+
 ## Current: Issue #64 AC-5 — combined saved Markdown (2026-11-19, Draft implementation)
 
 GitHub `main` at task start: `03cd32bb73054a6bf942fe91e459c8026df65781`.
