@@ -138,6 +138,27 @@ def render(
                     _quoted(lines, "Page description (untrusted website content)", page_row["description"])
                     _quoted(lines, "Page text excerpt (untrusted website quotation)", page_row["excerpt"])
 
+            if extra is not None:
+                references = extra["fields"]["referenced_posts"]
+                if references["state"] == "present":
+                    lines.extend([
+                        "",
+                        "### Referenced X posts (X-provided, not independently verified)",
+                        f"Referenced posts state: present ({len(references['value'])})",
+                    ])
+                    included_by_id = {row["id"]: row for row in extra["included_posts"]}
+                    for reference in references["value"]:
+                        included_post = included_by_id.get(reference["id"])
+                        lines.extend([
+                            "",
+                            f"#### Referenced post {reference['id']}",
+                            f"Relation to bookmarked post (X-provided): {reference.get('type', 'not_returned')}",
+                            f"Referenced Post URL (ID-derived, not live-verified): https://x.com/i/web/status/{reference['id']}",
+                            f"Referenced Post text state: {'recorded' if included_post is not None else 'not_returned'}",
+                        ])
+                        _quoted(lines, "Referenced Post text (X-included; untrusted quotation)",
+                                included_post["text"] if included_post is not None else None)
+
             lines.extend(["", "### Saved images (verify local file before linking)"])
             media = extra["included_media"] if extra is not None else []
             max_image = min(image_capture.MAX_MEDIA_INDEX + 1, max(
