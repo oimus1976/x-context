@@ -1,5 +1,12 @@
 # Changelog
 
+## Issue #77 — render previously saved referenced X posts (Draft)
+
+- Show already-saved X reference type, ID-derived source URL, included Post text and missing-text state alongside the bookmarked Post in opt-in combined Markdown.
+- Reuse the existing validated enrichment sidecar; no X/Web reads, local writes, credential access, new storage or AI value assessment.
+- Add one ordinary quoted-Post regression that checks offline output, escaped untrusted text and original file bytes.
+
+
 ## Issue #64 AC-5 — opt-in combined, source-grounded Markdown (synthetic-only Draft)
 
 - Add `context --include-saved-details` to read and join existing local bookmark, X-metadata, captured-page and image manifests; preserve plain `context` and `bookmarks-v1.json` unchanged.
