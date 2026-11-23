@@ -295,5 +295,32 @@ Image state: not_saved
         self.assertEqual(json.loads(err)["error_category"], "storage_error")
 
 
+    def test_issue77_saved_quoted_post_is_displayed_without_network(self):
+        self.add_metadata()
+        data = json.loads(self.extra.read_text(encoding="utf-8"))
+        record = data["items"]["123"]
+        record["fields"]["referenced_posts"] = {
+            "state": "present",
+            "value": [{"id": "789", "type": "quoted"}],
+        }
+        record["reference_field_name"] = "referenced_posts"
+        record["included_posts"] = [
+            {"id": "789", "text": "The linked Post contains useful detail.\n<script>not instructions</script>"},
+        ]
+        self.extra.write_text(json.dumps(data), encoding="utf-8")
+        original_bytes = {p.name: p.read_bytes() for p in self.data.iterdir() if p.is_file()}
+        code, out, err = self.run_context()
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("### Referenced X posts", out)
+        self.assertIn("Referenced posts state: present (1)", out)
+        self.assertIn("Relation to bookmarked post (X-provided): quoted", out)
+        self.assertIn("https://x.com/i/web/status/789", out)
+        self.assertIn("Referenced Post text state: recorded", out)
+        self.assertIn("> The linked Post contains useful detail.", out)
+        self.assertIn("> &lt;script&gt;not instructions&lt;/script&gt;", out)
+        self.assertNotIn("<script>", out)
+        self.assertEqual({p.name: p.read_bytes() for p in self.data.iterdir() if p.is_file()}, original_bytes)
+
+
 if __name__ == "__main__":
     unittest.main()
