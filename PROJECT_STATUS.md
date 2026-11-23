@@ -1,6 +1,23 @@
 # Project Status
 
-## Current: Issue #77 stage 1 — saved referenced X Post Markdown (2026-11-23, Draft)
+## Current: Issue #77 stage 2 — bookmark-anchored same-author thread collection (2026-11-24, Draft)
+
+Working branch: `issue-77-bookmark-thread-collection`, based on GitHub `main`
+`1c15c1047a8da7b7d3d509941750365fb2e10201` (PR #78 merged).
+Adds explicit `thread capture --post-id <id> --confirm-network-request [--max-results 10..100]`
+reusing `x_context/x_api.py` with `X_CONTEXT_BEARER_TOKEN`, official `GET /2/tweets/{id}`
+and at most one 1-page `GET /2/tweets/search/all` (`conversation_id:<id> from:<username> -is:retweet`,
+explicit `start_time`), strict same-author `replied_to` chain reconstruction, separate
+versioned `bookmark-threads-v1.json` persistence, and opt-in `context --include-saved-details [--post-id <id>]`
+offline Markdown display. Existing `bookmarks-v1.json`, `bookmark-enrichment-v1.json`,
+default `context`, and prior AC-1..AC-5 behaviors remain unchanged. Risk facets/level:
+`PRIVATE_DATA`, `CREDENTIALS`, `PLATFORM_DEPENDENT` (`HIGH_IMPACT`).
+Only synthetic fake-transport tests were run locally; real X API access, billing,
+writes to owner `%LOCALAPPDATA%\x-context\data`, Stage 3 external-article fetch,
+independent L2 review, Ready, and merge are NOT_RUN and remain human-final gates.
+
+
+## Historical: Issue #77 stage 1 — saved referenced X Post Markdown (2026-11-23, merged PR #78)
 
 Working branch: `issue-77-local-reference-display`, based on GitHub main
 `eaa8de1d361ff127975e24f48b42c65440311ded`.

@@ -1,5 +1,14 @@
 # Changelog
 
+## Issue #77 stage 2 — bookmark-anchored same-author thread collection (Draft)
+
+- Add `thread capture --post-id <id> --confirm-network-request [--max-results 10..100]` reusing existing official X API transport/error handling and `X_CONTEXT_BEARER_TOKEN` (App-Only) authentication.
+- For one explicitly selected local bookmark (following a saved `quoted` reference when present in `bookmark-enrichment-v1.json`, otherwise anchoring directly on the bookmarked Post), run at most one `GET /2/tweets/{id}` detail lookup (`post.fields=conversation_id,created_at,entities`, `expansions=author_id,referenced_posts`, `user.fields=username`) and at most one page of `GET /2/tweets/search/all` (`query=conversation_id:<id> from:<username> -is:retweet`, default `max_results=20`, explicit `start_time` to avoid the 30-day default window).
+- Reconstruct the connected same-author `replied_to` ancestor/continuation chain, keeping quoted/external-replied-to Posts separated with explicit provenance, and persist atomically to `bookmark-threads-v1.json` without modifying `bookmarks-v1.json` or `bookmark-enrichment-v1.json`.
+- Extend opt-in `context --include-saved-details [--post-id <id>]` to display saved same-author threads, URLs, truncation/missing-parent/root/no-results states, and escaped untrusted quotations while leaving plain `context` and AC-5 sidecar outputs unchanged when no thread record exists.
+- Add synthetic fake-transport normal-case tests covering quoted seeds, mid-thread seeds, zero-result searches, truncated pagination/missing parents, external references, local fail-closed guards, search API errors, and corrupt/mismatched sidecar isolation. Real X API calls, billing, and real local data writes remain NOT_RUN.
+
+
 ## Issue #77 — render previously saved referenced X posts (Draft)
 
 - Show already-saved X reference type, ID-derived source URL, included Post text and missing-text state alongside the bookmarked Post in opt-in combined Markdown.
