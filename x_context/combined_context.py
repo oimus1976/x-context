@@ -60,12 +60,21 @@ def _render_thread(lines: list[str], thread: dict) -> None:
         f"Search state: {search_state}",
         f"Search truncated (more pages exist): {'true' if thread['search_truncated'] else 'false'}",
         f"Excluded unlinked same-author posts in conversation: {thread['excluded_unlinked_count']}",
+        f"Unverified unlinked same-author posts (missing parent; connection not confirmed): {thread['unverified_unlinked_count']}",
         f"Thread completeness: {thread['completeness']}",
         f"Conversation root state: {thread['root_state']}",
     ])
     if thread["missing_parent_id"] is not None:
         missing = thread["missing_parent_id"]
         lines.append(f"Missing parent Post ID: {missing} (https://x.com/i/web/status/{missing})")
+    if thread["unverified_missing_parent_ids"]:
+        missing_list = ", ".join(
+            f"{mid} (https://x.com/i/web/status/{mid})"
+            for mid in thread["unverified_missing_parent_ids"]
+        )
+        lines.append(
+            f"Unverified missing parent Post IDs (unlinked posts; continuation not confirmed): {missing_list}"
+        )
     lines.append(f"Thread post count: {len(thread['thread_posts'])}")
 
     thread_ids = {post["id"] for post in thread["thread_posts"]}

@@ -157,7 +157,8 @@ def _valid_record(record: object) -> bool:
         "bookmark_post_id", "seed_role", "bookmark_relation_to_target", "target_post_id",
         "retrieved_at", "conversation_id", "author_id", "author_username",
         "search_query", "search_max_results", "search_state", "search_truncated",
-        "excluded_unlinked_count", "completeness", "root_state", "missing_parent_id",
+        "excluded_unlinked_count", "unverified_unlinked_count", "unverified_missing_parent_ids",
+        "completeness", "root_state", "missing_parent_id",
         "thread_posts", "referenced_posts",
     }
     if not isinstance(record, dict) or set(record) != keys:
@@ -192,10 +193,34 @@ def _valid_record(record: object) -> bool:
             return False
     if type(record["excluded_unlinked_count"]) is not int or record["excluded_unlinked_count"] < 0:
         return False
+    if type(record["unverified_unlinked_count"]) is not int or record["unverified_unlinked_count"] < 0:
+        return False
+    unverified_missing = record["unverified_missing_parent_ids"]
+    if not isinstance(unverified_missing, list) or len(unverified_missing) > 200:
+        return False
+    if not all(_is_id(mid) for mid in unverified_missing) or len(set(unverified_missing)) != len(unverified_missing):
+        return False
+    if (record["unverified_unlinked_count"] == 0) != (len(unverified_missing) == 0):
+        return False
     if record["completeness"] not in _COMPLETENESS_STATES or record["root_state"] not in _ROOT_STATES:
         return False
     if record["missing_parent_id"] is not None and not _is_id(record["missing_parent_id"]):
         return False
+    if record["search_state"] == "skipped_missing_author_or_conversation":
+        if record["unverified_unlinked_count"] != 0 or record["completeness"] != "lookup_only_missing_search_key":
+            return False
+    else:
+        has_missing_parent = (record["missing_parent_id"] is not None) or bool(unverified_missing)
+        if record["search_truncated"] and has_missing_parent:
+            expected_completeness = "partial_truncated_and_missing_parent"
+        elif record["search_truncated"]:
+            expected_completeness = "partial_truncated"
+        elif has_missing_parent:
+            expected_completeness = "partial_missing_parent"
+        else:
+            expected_completeness = "unverified_single_page"
+        if record["completeness"] != expected_completeness:
+            return False
     thread_posts = record["thread_posts"]
     referenced_posts = record["referenced_posts"]
     if not isinstance(thread_posts, list) or not 1 <= len(thread_posts) <= 200:
@@ -268,6 +293,25 @@ def _safe_username(users_by_id: dict[str, str], author_id: str | None) -> str | 
     return uname if _valid_username(uname) else None
 
 
+def _is_proven_non_thread_parent(
+    external: dict | None,
+    target_author_id: str | None,
+    target_conversation_id: str | None,
+) -> bool:
+    """Return True only when fetched metadata proves parent is outside this same-author thread."""
+    if external is None:
+        return False
+    if _is_retweet(external):
+        return True
+    ext_author = external.get("author_id")
+    if ext_author is not None and target_author_id is not None and ext_author != target_author_id:
+        return True
+    ext_conv = external.get("conversation_id")
+    if ext_conv is not None and target_conversation_id is not None and ext_conv != target_conversation_id:
+        return True
+    return False
+
+
 def reconstruct_same_author_thread(
     *,
     bookmark_post_id: str,
@@ -295,20 +339,23 @@ def reconstruct_same_author_thread(
         if inc["id"] not in included_by_id:
             included_by_id[inc["id"]] = inc
 
+    known_posts_by_id: dict[str, dict] = {target_id: target_post}
+    for post in (*lookup_included_posts, *search_posts, *search_included_posts):
+        if post["id"] not in known_posts_by_id:
+            known_posts_by_id[post["id"]] = post
+
     same_author_pool: dict[str, tuple[dict, str]] = {target_id: (target_post, "post_lookup")}
     if target_author_id is not None and target_conversation_id is not None:
-        for post in lookup_included_posts:
+        for post, source in (
+            *((p, "post_lookup") for p in lookup_included_posts),
+            *((p, "full_archive_search") for p in search_posts),
+            *((p, "full_archive_search") for p in search_included_posts),
+        ):
             if (post["id"] not in same_author_pool
                     and post.get("author_id") == target_author_id
                     and post.get("conversation_id") == target_conversation_id
                     and not _is_retweet(post)):
-                same_author_pool[post["id"]] = (post, "post_lookup")
-        for post in search_posts:
-            if (post["id"] not in same_author_pool
-                    and post.get("author_id") == target_author_id
-                    and post.get("conversation_id") == target_conversation_id
-                    and not _is_retweet(post)):
-                same_author_pool[post["id"]] = (post, "full_archive_search")
+                same_author_pool[post["id"]] = (post, source)
 
     ancestors: list[str] = []
     visited_up = {target_id}
@@ -320,10 +367,8 @@ def reconstruct_same_author_thread(
         if parent_id is None or parent_id in visited_up:
             break
         if parent_id not in same_author_pool:
-            external = included_by_id.get(parent_id)
-            if (external is None
-                    or external.get("author_id") is None
-                    or external.get("author_id") == target_author_id):
+            external = known_posts_by_id.get(parent_id)
+            if not _is_proven_non_thread_parent(external, target_author_id, target_conversation_id):
                 missing_parent_id = parent_id
             break
         visited_up.add(parent_id)
@@ -353,7 +398,44 @@ def reconstruct_same_author_thread(
     _walk_down(target_id)
     ordered_ids = ancestors + [target_id] + descendants
     connected_set = set(ordered_ids)
-    excluded_unlinked_count = sum(1 for post in search_posts if post["id"] not in connected_set)
+
+    excluded_unlinked_count = 0
+    unverified_unlinked_count = 0
+    unverified_missing_parents: set[str] = set()
+    seen_unlinked: set[str] = set()
+    for post in search_posts:
+        pid = post["id"]
+        if pid in connected_set or pid in seen_unlinked:
+            continue
+        seen_unlinked.add(pid)
+        if pid not in same_author_pool:
+            excluded_unlinked_count += 1
+            continue
+        missing_for_post: str | None = None
+        walk_id = pid
+        walk_seen = {pid}
+        while True:
+            walk_post = same_author_pool[walk_id][0]
+            parent_id = _first_ref(walk_post, "replied_to")
+            if parent_id is None or parent_id in connected_set or parent_id in walk_seen:
+                break
+            if parent_id in same_author_pool:
+                walk_seen.add(parent_id)
+                walk_id = parent_id
+                continue
+            external = known_posts_by_id.get(parent_id)
+            if not _is_proven_non_thread_parent(external, target_author_id, target_conversation_id):
+                missing_for_post = parent_id
+            break
+        if missing_for_post is not None:
+            unverified_unlinked_count += 1
+            unverified_missing_parents.add(missing_for_post)
+        else:
+            excluded_unlinked_count += 1
+    unverified_missing_parent_ids = sorted(
+        unverified_missing_parents,
+        key=lambda mid: (int(mid) if mid.isdigit() else -1, mid),
+    )
 
     thread_posts: list[dict] = []
     referenced_posts: list[dict] = []
@@ -430,13 +512,14 @@ def reconstruct_same_author_thread(
     else:
         root_state = "not_returned"
 
+    has_missing_parent = missing_parent_id is not None or bool(unverified_missing_parent_ids)
     if search_state == "skipped_missing_author_or_conversation":
         completeness = "lookup_only_missing_search_key"
-    elif search_truncated and missing_parent_id is not None:
+    elif search_truncated and has_missing_parent:
         completeness = "partial_truncated_and_missing_parent"
     elif search_truncated:
         completeness = "partial_truncated"
-    elif missing_parent_id is not None:
+    elif has_missing_parent:
         completeness = "partial_missing_parent"
     else:
         completeness = "unverified_single_page"
@@ -455,6 +538,8 @@ def reconstruct_same_author_thread(
         "search_state": search_state,
         "search_truncated": search_truncated,
         "excluded_unlinked_count": excluded_unlinked_count,
+        "unverified_unlinked_count": unverified_unlinked_count,
+        "unverified_missing_parent_ids": unverified_missing_parent_ids,
         "completeness": completeness,
         "root_state": root_state,
         "missing_parent_id": missing_parent_id,

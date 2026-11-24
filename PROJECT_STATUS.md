@@ -12,9 +12,21 @@ versioned `bookmark-threads-v1.json` persistence, and opt-in `context --include-
 offline Markdown display. Existing `bookmarks-v1.json`, `bookmark-enrichment-v1.json`,
 default `context`, and prior AC-1..AC-5 behaviors remain unchanged. Risk facets/level:
 `PRIVATE_DATA`, `CREDENTIALS`, `PLATFORM_DEPENDENT` (`HIGH_IMPACT`).
-Only synthetic fake-transport tests were run locally; real X API access, billing,
-writes to owner `%LOCALAPPDATA%\x-context\data`, Stage 3 external-article fetch,
-independent L2 review, Ready, and merge are NOT_RUN and remain human-final gates.
+Remediation after independent L2 review (`#issuecomment-7116281903` at
+`20ba850715d3414e4c1675715ff2fe27a2cfedd4`): fixed MAJOR M-1 so descendant-direction
+missing parents are resolved against already-fetched search results/`includes` with zero
+extra API requests, separated from proven non-thread exclusions via `unverified_unlinked_count`
+and `unverified_missing_parent_ids`, reflected as partial `completeness`, and preserved
+across save, reload, and combined Markdown display; corrected MINOR-1 cost estimate in
+Draft PR #79 body without claiming an unverified guaranteed cap; documented MINOR-6
+`start_time` assumptions (`2006-03-21T00:00:00Z` fallback and omitted-window behavior)
+as live-smoke verification items. MINOR-2..5 remain intentionally deferred outside this
+remediation (quoted-post seed priority in `select_target` is retained; dual-side
+collection of both bookmarked and quoted threads is a future candidate).
+Only synthetic fake-transport tests were run locally; exact-head CI and independent
+L2 re-review on the new HEAD are pending; real X API access, billing, writes to owner
+`%LOCALAPPDATA%\x-context\data`, Stage 3 external-article fetch, Ready, and merge are
+NOT_RUN and remain human-final gates.
 
 
 ## Historical: Issue #77 stage 1 — saved referenced X Post Markdown (2026-11-23, merged PR #78)
