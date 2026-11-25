@@ -1,12 +1,12 @@
 # Project Status
 
-## Current: Issue #77 stage 2 — bookmark-anchored same-author thread collection (2026-11-24, Draft)
+## Current: Issue #77 stage 2 — bookmark-anchored same-author thread collection (2026-11-25, Draft)
 
 Working branch: `issue-77-bookmark-thread-collection`, based on GitHub `main`
 `1c15c1047a8da7b7d3d509941750365fb2e10201` (PR #78 merged).
 Adds explicit `thread capture --post-id <id> --confirm-network-request [--max-results 10..100]`
 reusing `x_context/x_api.py` with `X_CONTEXT_BEARER_TOKEN`, official `GET /2/tweets/{id}`
-and at most one 1-page `GET /2/tweets/search/all` (`conversation_id:<id> from:<username> -is:retweet`,
+and at most one 1-page `GET /2/tweets/search/all` (`conversation_id:<id> from:<username> to:<username> -is:retweet`,
 explicit `start_time`), strict same-author `replied_to` chain reconstruction, separate
 versioned `bookmark-threads-v1.json` persistence, and opt-in `context --include-saved-details [--post-id <id>]`
 offline Markdown display. Existing `bookmarks-v1.json`, `bookmark-enrichment-v1.json`,
@@ -23,6 +23,14 @@ Draft PR #79 body without claiming an unverified guaranteed cap; documented MINO
 as live-smoke verification items. MINOR-2..5 remain intentionally deferred outside this
 remediation (quoted-post seed priority in `select_target` is retained; dual-side
 collection of both bookmarked and quoted threads is a future candidate).
+Second owner-device live UAT (2026-11-25, PR head `32d3f8d`) returned only the thread
+root (expected 3 Posts) with `partial_truncated_and_missing_parent`: the single 20-result
+page was filled by the author's later replies to third parties, and the long-form root text
+was truncated. Remediation (synthetic only): search adds `to:<username>`; Post Lookup/Search
+request `note_post` and prefer a valid long-form note, merging its URL entities and recording
+per-Post `text_source`; legacy thread records stay readable. Request bounds are unchanged.
+Live `note_post` acceptance and `to:` self-reply matching are next-UAT verification items;
+the next UAT reuses the already saved bookmark without a new bookmark fetch.
 Only synthetic fake-transport tests were run locally; exact-head CI and independent
 L2 re-review on the new HEAD are pending; real X API access, billing, writes to owner
 `%LOCALAPPDATA%\x-context\data`, Stage 3 external-article fetch, Ready, and merge are

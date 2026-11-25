@@ -18,11 +18,17 @@ OFFICIAL_X_API_ORIGIN = "https://api.x.com"
 _SINGLE_POST_PATH = "/2/tweets/{post_id}"
 _SEARCH_ALL_PATH = "/2/tweets/search/all"
 _AUTHENTICATED_USER_PATH = "/2/users/me"
-_POST_DETAIL_FIELDS = "conversation_id,created_at,entities"
+_POST_DETAIL_FIELDS = "conversation_id,created_at,entities,note_post"
+# OpenAPI v2.175 names the long-form field `note_post`; the data dictionary still says
+# `note_tweet`. Only `note_post` is requested; either response key is accepted.
+_NOTE_RESPONSE_KEYS = ("note_post", "note_tweet")
 _POST_DETAIL_EXPANSIONS = "author_id,referenced_posts"
 _POST_URL_KEYS = ("url", "expanded_url", "unwound_url", "display_url", "title", "description")
 _REFERENCE_TYPES = frozenset(("retweeted", "quoted", "replied_to"))
 _MAX_POST_TEXT_BYTES = 32768
+# Long-form Posts allow up to 25,000 characters (<= 4 UTF-8 bytes each).
+_MAX_NOTE_TEXT_BYTES = 102400
+TEXT_SOURCES = ("note_post", "post_text", "post_text_note_invalid")
 _MAX_SEARCH_QUERY_CHARS = 1024
 
 
@@ -694,15 +700,67 @@ def _parse_detail_post(obj: object) -> dict:
     created_at = obj.get("created_at")
     if created_at is not None and not _timestamp(created_at):
         raise XApiError("provider_error")
+    urls = _parse_post_urls(obj.get("entities"))
+    text_source = "post_text"
+    note = _parse_note(obj)
+    if note is _INVALID_NOTE:
+        text_source = "post_text_note_invalid"
+    elif note is not None:
+        note_text, note_urls = note
+        text = note_text
+        text_source = "note_post"
+        urls = _merge_urls(urls, note_urls)
     return {
         "id": post_id,
         "text": text,
+        "text_source": text_source,
         "author_id": author_id,
         "conversation_id": conversation_id,
         "created_at": created_at,
         "referenced_posts": _parse_post_references(obj),
-        "urls": _parse_post_urls(obj.get("entities")),
+        "urls": urls,
     }
+
+
+_INVALID_NOTE = object()
+
+
+def _parse_note(obj: dict) -> object:
+    """Return (text, urls) for a usable long-form note, None if absent, or _INVALID_NOTE.
+
+    A malformed optional note never replaces the always-present ``text``; the
+    fallback is recorded as ``post_text_note_invalid`` instead of failing the Post.
+    """
+    present = [key for key in _NOTE_RESPONSE_KEYS if key in obj and obj[key] is not None]
+    if not present:
+        return None
+    if len(present) > 1:
+        return _INVALID_NOTE
+    note = obj[present[0]]
+    if not isinstance(note, dict):
+        return _INVALID_NOTE
+    note_text = note.get("text")
+    if (not isinstance(note_text, str) or not note_text.strip()
+            or len(note_text.encode("utf-8")) > _MAX_NOTE_TEXT_BYTES):
+        return _INVALID_NOTE
+    try:
+        note_urls = _parse_post_urls(note.get("entities"))
+    except XApiError:
+        return _INVALID_NOTE
+    return note_text, note_urls
+
+
+def _merge_urls(base: list[dict], extra: list[dict]) -> list[dict]:
+    """Keep normal-entity URLs (richer fields) and append note-only URLs once."""
+    merged = list(base)
+    seen = {(entry.get("url"), entry.get("expanded_url")) for entry in base}
+    for entry in extra:
+        key = (entry.get("url"), entry.get("expanded_url"))
+        if key in seen or len(merged) >= 50:
+            continue
+        seen.add(key)
+        merged.append(entry)
+    return merged
 
 
 def _parse_included_users(includes: dict) -> dict[str, str]:

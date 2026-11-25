@@ -44,6 +44,20 @@ def _format_author(author_id: str | None, author_username: str | None) -> str:
     return "not_returned"
 
 
+_TEXT_SOURCE_LABELS = {
+    "note_post": "note_post (full long-form text returned by X)",
+    "post_text": "post_text (no long-form note returned; may be truncated if the Post is long-form)",
+    "post_text_note_invalid": "post_text (long-form note returned but unusable; text may be truncated)",
+}
+
+
+def _text_source_label(item: dict) -> str:
+    source = item.get("text_source")
+    if source is None:
+        return "legacy_not_recorded (saved before long-form support; text may be truncated)"
+    return _TEXT_SOURCE_LABELS[source]
+
+
 def _render_thread(lines: list[str], thread: dict) -> None:
     search_state = thread["search_state"]
     if search_state == "no_results":
@@ -98,6 +112,7 @@ def _render_thread(lines: list[str], thread: dict) -> None:
             qid = post["quoted_post_id"]
             lines.append(f"Quoted Post ID (X-provided): {qid} (https://x.com/i/web/status/{qid})")
         lines.append(f"Acquisition source: {post['source']}")
+        lines.append(f"Text source: {_text_source_label(post)}")
         _quoted(lines, "Thread Post text (X-provided; untrusted quotation)", post["text"])
         for link_index, link in enumerate(post["urls"]):
             url_val = _url_source(link)
@@ -115,6 +130,8 @@ def _render_thread(lines: list[str], thread: dict) -> None:
                 f"Author (X-provided): {_format_author(ref['author_id'], ref['author_username'])}",
                 f"Referenced Post text state: {ref['text_state']}",
             ])
+            if ref["text_state"] == "recorded":
+                lines.append(f"Text source: {_text_source_label(ref)}")
             _quoted(lines, "Referenced Post text (X-included; untrusted quotation)",
                     ref["text"] if ref["text_state"] == "recorded" else None)
             for link_index, link in enumerate(ref["urls"]):

@@ -43,6 +43,16 @@ _COMPLETENESS_STATES = frozenset((
 _ROOT_STATES = frozenset(("in_thread", "external_referenced", "not_returned", "unknown"))
 _POST_SOURCES = frozenset(("post_lookup", "full_archive_search"))
 _URL_KEYS = frozenset(("url", "expanded_url", "unwound_url", "display_url", "title", "description"))
+# Records saved before long-form support have no ``text_source`` key; they stay
+# readable and are displayed as "legacy_not_recorded" (long-form field not requested).
+_TEXT_SOURCES = frozenset(x_api.TEXT_SOURCES)
+
+
+def _valid_text(item: dict, text: object) -> bool:
+    if "text_source" in item and item["text_source"] not in _TEXT_SOURCES:
+        return False
+    limit = x_api._MAX_NOTE_TEXT_BYTES if item.get("text_source") == "note_post" else x_api._MAX_POST_TEXT_BYTES
+    return isinstance(text, str) and len(text.encode("utf-8")) <= limit
 
 
 class ThreadStoreError(RuntimeError):
@@ -103,11 +113,11 @@ def _valid_thread_post(item: object) -> bool:
         "id", "text", "author_id", "author_username", "conversation_id",
         "created_at", "replied_to_id", "quoted_post_id", "source", "urls",
     }
-    if not isinstance(item, dict) or set(item) != keys:
+    if not isinstance(item, dict) or set(item) not in (keys, keys | {"text_source"}):
         return False
     if not _is_id(item["id"]):
         return False
-    if not isinstance(item["text"], str) or len(item["text"].encode("utf-8")) > x_api._MAX_POST_TEXT_BYTES:
+    if not _valid_text(item, item["text"]):
         return False
     if item["author_id"] is not None and not _is_digits(item["author_id"]):
         return False
@@ -128,7 +138,7 @@ def _valid_referenced_post(item: object) -> bool:
         "id", "relation", "from_post_id", "text", "text_state",
         "author_id", "author_username", "conversation_id", "created_at", "urls",
     }
-    if not isinstance(item, dict) or set(item) != keys:
+    if not isinstance(item, dict) or set(item) not in (keys, keys | {"text_source"}):
         return False
     if not _is_id(item["id"]) or not _is_id(item["from_post_id"]):
         return False
@@ -137,9 +147,9 @@ def _valid_referenced_post(item: object) -> bool:
     if item["text_state"] not in ("recorded", "not_returned"):
         return False
     if item["text_state"] == "recorded":
-        if not isinstance(item["text"], str) or len(item["text"].encode("utf-8")) > x_api._MAX_POST_TEXT_BYTES:
+        if not _valid_text(item, item["text"]):
             return False
-    elif item["text"] is not None:
+    elif item["text"] is not None or "text_source" in item:
         return False
     if item["author_id"] is not None and not _is_digits(item["author_id"]):
         return False
@@ -265,10 +275,16 @@ def select_target(
 
 
 def build_thread_query(conversation_id: str, author_username: str) -> str:
-    """Build a bounded single-author conversation query for Full-Archive Search."""
+    """Build a bounded single-author conversation query for Full-Archive Search.
+
+    ``to:<author>`` limits results to the author's replies to their own Posts, so the
+    author's replies to third parties no longer fill the one bounded page. The
+    non-reply conversation root is still kept via Post Lookup or search ``includes``.
+    """
     if not _is_id(conversation_id) or not _valid_username(author_username):
         raise ValueError("invalid query parameters")
-    return f"conversation_id:{conversation_id} from:{author_username} -is:retweet"
+    return (f"conversation_id:{conversation_id} from:{author_username} "
+            f"to:{author_username} -is:retweet")
 
 
 def _first_ref(post: dict, ref_type: str) -> str | None:
@@ -450,6 +466,7 @@ def reconstruct_same_author_thread(
         thread_posts.append({
             "id": post["id"],
             "text": post["text"],
+            "text_source": post.get("text_source", "post_text"),
             "author_id": author_id,
             "author_username": author_username,
             "conversation_id": post.get("conversation_id"),
@@ -480,6 +497,7 @@ def reconstruct_same_author_thread(
                     "from_post_id": post["id"],
                     "text": inc["text"],
                     "text_state": "recorded",
+                    "text_source": inc.get("text_source", "post_text"),
                     "author_id": inc_author_id,
                     "author_username": inc_username,
                     "conversation_id": inc.get("conversation_id"),

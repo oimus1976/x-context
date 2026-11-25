@@ -180,7 +180,7 @@ class BookmarkThreadTests(unittest.TestCase):
         req1 = urlsplit(transport.requests[0].url)
         self.assertEqual(req1.path, "/2/tweets/789")
         self.assertEqual(parse_qs(req1.query), {
-            "post.fields": ["conversation_id,created_at,entities"],
+            "post.fields": ["conversation_id,created_at,entities,note_post"],
             "expansions": ["author_id,referenced_posts"],
             "user.fields": ["username"],
         })
@@ -189,9 +189,9 @@ class BookmarkThreadTests(unittest.TestCase):
         req2 = urlsplit(transport.requests[1].url)
         self.assertEqual(req2.path, "/2/tweets/search/all")
         self.assertEqual(parse_qs(req2.query), {
-            "query": ["conversation_id:789 from:alice -is:retweet"],
+            "query": ["conversation_id:789 from:alice to:alice -is:retweet"],
             "max_results": ["20"],
-            "post.fields": ["conversation_id,created_at,entities"],
+            "post.fields": ["conversation_id,created_at,entities,note_post"],
             "expansions": ["author_id,referenced_posts"],
             "start_time": [STAMP],
         })
@@ -950,6 +950,210 @@ class BookmarkThreadTests(unittest.TestCase):
             self.assertEqual(rec_c["completeness"], "partial_missing_parent")
             self.assertEqual(rec_c["root_state"], "not_returned")
 
+    # ---- Issue #77 stage 2, second live UAT regressions (synthetic only) ----
+
+    def _bob(self, pid: str, text: str, conv: str, minute: int, parent: str | None = None, **extra) -> dict:
+        post = {
+            "id": pid,
+            "text": text,
+            "author_id": "1002",
+            "conversation_id": conv,
+            "created_at": f"2026-10-02T10:{minute:02d}:00Z",
+        }
+        if parent is not None:
+            post["referenced_posts"] = [{"type": "replied_to", "id": parent}]
+        post.update(extra)
+        return post
+
+    def test_uat2_root_seed_long_form_thread_collected_with_self_reply_query(self) -> None:
+        """UAT2: root seed, long-form root text, continuations fetched via to:<author>."""
+        long_root = "Root long-form start. " + ("body " * 200) + "see https://t.co/gist end."
+        transport = FakeThreadTransport([
+            json_reply(200, {
+                "data": self._bob(
+                    "202", "Root long-form start. body body (truncated) https://t.co/pic", "202", 0,
+                    entities={"urls": [{"url": "https://t.co/pic", "expanded_url": "https://x.com/bob/status/202/photo/1",
+                                        "display_url": "pic.x.com/pic"}]},
+                    note_post={"text": long_root, "entities": {"urls": [
+                        {"start": 1, "end": 2, "url": "https://t.co/gist",
+                         "expanded_url": "https://gist.example.org/bob/abc", "display_url": "gist.example.org/bob/abc"},
+                    ]}},
+                ),
+                "includes": {"users": [{"id": "1002", "username": "bob"}]},
+            }),
+            json_reply(200, {
+                # Newest first; with to:bob the provider omits bob's replies to third parties.
+                "data": [
+                    self._bob("204", "Part 3/3 short", "202", 2, "203"),
+                    self._bob("203", "Part 2/3 head", "202", 1, "202",
+                              note_tweet={"text": "Part 2/3 full long-form text https://t.co/doc",
+                                          "entities": {"urls": [{"url": "https://t.co/doc",
+                                                                 "expanded_url": "https://example.org/doc"}]}}),
+                ],
+                "includes": {"users": [{"id": "1002", "username": "bob"}],
+                             "posts": [self._bob("202", "Root head", "202", 0)]},
+                "meta": {"result_count": 2},
+            }),
+        ])
+        rc, out, err = self.run_cli(
+            ["thread", "capture", "--post-id", "202", "--confirm-network-request"], transport=transport)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(transport.requests), 2)
+        lookup_q = parse_qs(urlsplit(transport.requests[0].url).query)
+        self.assertEqual(lookup_q["post.fields"], ["conversation_id,created_at,entities,note_post"])
+        search_q = parse_qs(urlsplit(transport.requests[1].url).query)
+        self.assertEqual(search_q["query"], ["conversation_id:202 from:bob to:bob -is:retweet"])
+        self.assertEqual(search_q["max_results"], ["20"])
+        self.assertEqual(search_q["post.fields"], ["conversation_id,created_at,entities,note_post"])
+        self.assertNotIn("next_token", search_q)
+        self.assertEqual(json.loads(out)["thread_post_count"], 3)
+
+        record = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]["202"]
+        posts = record["thread_posts"]
+        self.assertEqual([p["id"] for p in posts], ["202", "203", "204"])
+        self.assertEqual([p["replied_to_id"] for p in posts], [None, "202", "203"])
+        self.assertEqual([p["text_source"] for p in posts], ["note_post", "note_post", "post_text"])
+        self.assertEqual(posts[0]["text"], long_root)
+        self.assertEqual(posts[1]["text"], "Part 2/3 full long-form text https://t.co/doc")
+        self.assertEqual([u["expanded_url"] for u in posts[0]["urls"]],
+                         ["https://x.com/bob/status/202/photo/1", "https://gist.example.org/bob/abc"])
+        self.assertEqual([u["expanded_url"] for u in posts[1]["urls"]], ["https://example.org/doc"])
+        self.assertEqual(record["completeness"], "unverified_single_page")
+        self.assertEqual(record["root_state"], "in_thread")
+        self.assertEqual((record["excluded_unlinked_count"], record["unverified_unlinked_count"]), (0, 0))
+
+        rc_md, md, _ = self.run_cli(["context", "--include-saved-details", "--post-id", "202"])
+        self.assertEqual(rc_md, 0)
+        self.assertIn("> " + long_root, md)
+        self.assertIn("> https://gist.example.org/bob/abc", md)
+        self.assertIn("Text source: note_post (full long-form text returned by X)", md)
+        self.assertIn("Text source: post_text (no long-form note returned", md)
+        self.assertIn("Search query used: conversation_id:202 from:bob to:bob -is:retweet", md)
+
+    def test_uat2_mid_thread_seed_restores_non_reply_root_from_search_includes(self) -> None:
+        """to:<author> excludes the non-reply root from search data; includes must restore it."""
+        transport = FakeThreadTransport([
+            json_reply(200, {
+                "data": self._bob("202", "Part 3/4", "200", 2, "201"),
+                "includes": {"users": [{"id": "1002", "username": "bob"}],
+                             "posts": [self._bob("201", "Part 2/4", "200", 1, "200")]},
+            }),
+            json_reply(200, {
+                "data": [
+                    self._bob("203", "Part 4/4", "200", 3, "202"),
+                    self._bob("201", "Part 2/4", "200", 1, "200"),
+                ],
+                "includes": {"users": [{"id": "1002", "username": "bob"}],
+                             "posts": [self._bob("200", "Part 1/4 root", "200", 0),
+                                       self._bob("202", "Part 3/4", "200", 2, "201")]},
+                "meta": {"result_count": 2},
+            }),
+        ])
+        rc, _, err = self.run_cli(
+            ["thread", "capture", "--post-id", "202", "--confirm-network-request"], transport=transport)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(transport.requests), 2)
+        record = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]["202"]
+        self.assertEqual([p["id"] for p in record["thread_posts"]], ["200", "201", "202", "203"])
+        self.assertEqual(record["thread_posts"][0]["source"], "full_archive_search")
+        self.assertEqual(record["root_state"], "in_thread")
+        self.assertIsNone(record["missing_parent_id"])
+        self.assertEqual(record["completeness"], "unverified_single_page")
+
+    def test_uat2_missing_and_truncated_states_survive_self_reply_query(self) -> None:
+        """M-1 regression: a missing middle post and a further page stay partial, never complete."""
+        transport = FakeThreadTransport([
+            json_reply(200, {
+                "data": self._bob("202", "Root", "202", 0),
+                "includes": {"users": [{"id": "1002", "username": "bob"}]},
+            }),
+            json_reply(200, {
+                "data": [
+                    self._bob("205", "Part 4 (parent 204 missing)", "202", 4, "204"),
+                    self._bob("203", "Part 2", "202", 1, "202"),
+                ],
+                "includes": {"users": [{"id": "1002", "username": "bob"}]},
+                "meta": {"result_count": 2, "next_token": "FICTIONAL-NEXT"},
+            }),
+        ])
+        rc, _, err = self.run_cli(
+            ["thread", "capture", "--post-id", "202", "--confirm-network-request"], transport=transport)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(transport.requests), 2)
+        record = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]["202"]
+        self.assertEqual([p["id"] for p in record["thread_posts"]], ["202", "203"])
+        self.assertEqual(record["unverified_missing_parent_ids"], ["204"])
+        self.assertEqual(record["completeness"], "partial_truncated_and_missing_parent")
+        rc_md, md, _ = self.run_cli(["context", "--include-saved-details", "--post-id", "202"])
+        self.assertEqual(rc_md, 0)
+        self.assertIn("Thread completeness: partial_truncated_and_missing_parent", md)
+        self.assertNotIn("FICTIONAL-NEXT", md + self.thread_store.read_text(encoding="utf-8"))
+
+    def test_uat2_long_form_note_parsing_fallbacks(self) -> None:
+        base = {"id": "9", "text": "head", "author_id": "1", "conversation_id": "9"}
+        self.assertEqual(x_api._parse_detail_post(dict(base))["text_source"], "post_text")
+        jp_long = "長" * 30000  # 90,000 UTF-8 bytes: over the normal limit, within long-form limit
+        parsed = x_api._parse_detail_post(dict(base, note_post={"text": jp_long}))
+        self.assertEqual((parsed["text"], parsed["text_source"]), (jp_long, "note_post"))
+        for bad_note in (
+            "not-an-object",
+            {"text": ""},
+            {"text": "   "},
+            {"text": 5},
+            {"text": "長" * 40000},
+            {"text": "ok", "entities": {"urls": "not-a-list"}},
+        ):
+            with self.subTest(note=str(bad_note)[:30]):
+                parsed = x_api._parse_detail_post(dict(base, note_post=bad_note))
+                self.assertEqual((parsed["text"], parsed["text_source"]), ("head", "post_text_note_invalid"))
+        both = x_api._parse_detail_post(dict(base, note_post={"text": "a"}, note_tweet={"text": "b"}))
+        self.assertEqual((both["text"], both["text_source"]), ("head", "post_text_note_invalid"))
+
+    def test_uat2_legacy_record_without_text_source_stays_readable_alongside_new_record(self) -> None:
+        legacy = {
+            "bookmark_post_id": "123", "seed_role": "bookmarked_post", "bookmark_relation_to_target": "self",
+            "target_post_id": "123", "retrieved_at": STAMP, "conversation_id": "123",
+            "author_id": "1001", "author_username": "alice",
+            "search_query": "conversation_id:123 from:alice -is:retweet", "search_max_results": 20,
+            "search_state": "no_results", "search_truncated": False,
+            "excluded_unlinked_count": 0, "unverified_unlinked_count": 0, "unverified_missing_parent_ids": [],
+            "completeness": "unverified_single_page", "root_state": "in_thread", "missing_parent_id": None,
+            "thread_posts": [{
+                "id": "123", "text": "Legacy saved text", "author_id": "1001", "author_username": "alice",
+                "conversation_id": "123", "created_at": STAMP, "replied_to_id": None, "quoted_post_id": None,
+                "source": "post_lookup", "urls": [],
+            }],
+            "referenced_posts": [{
+                "id": "777", "relation": "quoted", "from_post_id": "123", "text": "Legacy quoted text",
+                "text_state": "recorded", "author_id": None, "author_username": None,
+                "conversation_id": None, "created_at": None, "urls": [],
+            }],
+        }
+        self.thread_store.write_text(json.dumps(
+            {"schema_version": "1", "subject_id": "42", "items": {"123": legacy}}), encoding="utf-8")
+        transport = FakeThreadTransport([
+            json_reply(200, {"data": self._bob("202", "Root", "202", 0, note_post={"text": "Root full"}),
+                             "includes": {"users": [{"id": "1002", "username": "bob"}]}}),
+            json_reply(200, {"meta": {"result_count": 0}}),
+        ])
+        rc, _, err = self.run_cli(
+            ["thread", "capture", "--post-id", "202", "--confirm-network-request"], transport=transport)
+        self.assertEqual(rc, 0, err)
+        items = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]
+        self.assertEqual(items["123"], legacy)
+        self.assertEqual(items["202"]["thread_posts"][0]["text_source"], "note_post")
+        rc_md, md, _ = self.run_cli(["context", "--include-saved-details"])
+        self.assertEqual(rc_md, 0)
+        self.assertIn("Text source: legacy_not_recorded (saved before long-form support", md)
+        self.assertIn("> Root full", md)
+
+        bad = json.loads(json.dumps(legacy))
+        bad["thread_posts"][0]["text_source"] = "guessed"
+        self.thread_store.write_text(json.dumps(
+            {"schema_version": "1", "subject_id": "42", "items": {"123": bad}}), encoding="utf-8")
+        rc_bad, out_bad, err_bad = self.run_cli(["context", "--include-saved-details"])
+        self.assertEqual((rc_bad, out_bad), (2, ""))
+        self.assertEqual(json.loads(err_bad)["error_category"], "storage_error")
 
 if __name__ == "__main__":
     unittest.main()
