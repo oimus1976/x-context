@@ -104,6 +104,7 @@ class _TechnicalHTML(HTMLParser):
         self.in_body = False
         self.main_depth = 0
         self.pre_stack = []
+        self.data_count = 0
         self.body_runs = []
         self.main_runs = []
 
@@ -131,7 +132,10 @@ class _TechnicalHTML(HTMLParser):
             self.main_depth += 1
         if tag not in _VOID_TAGS:
             classes = set((attrs.get("class") or "").split())
-            self.pre_stack.append((tag, tag == "pre" or bool(classes & _PRE_CLASSES)))
+            own_pre = tag == "pre" or bool(classes & _PRE_CLASSES)
+            # (tag, preformatted, body-data count at start): an empty code
+            # cell/pre still stands for one (blank) source line.
+            self.pre_stack.append((tag, own_pre, self.data_count))
             # Bound the open-element stack for malformed input.
             del self.pre_stack[:-256]
 
@@ -144,7 +148,10 @@ class _TechnicalHTML(HTMLParser):
             self.in_body = False
         for index in range(len(self.pre_stack) - 1, -1, -1):
             if self.pre_stack[index][0] == tag:
+                _, own_pre, started_at = self.pre_stack[index]
                 del self.pre_stack[index:]
+                if own_pre and started_at == self.data_count and self.in_body and not self.skip:
+                    self._append((True, ""))
                 break
         if tag in _BLOCK_TAGS:
             self._break()
@@ -158,7 +165,10 @@ class _TechnicalHTML(HTMLParser):
             self.title.append(data)
         if not self.in_body:
             return
-        run = (any(pre for _, pre in self.pre_stack), data)
+        self.data_count += 1
+        self._append((any(pre for _, pre, _ in self.pre_stack), data))
+
+    def _append(self, run):
         self.body_runs.append(run)
         if self.main_depth:
             self.main_runs.append(run)
@@ -185,8 +195,9 @@ def _layout(runs) -> str:
             text = re.sub(r"\s+", " ", "".join(data for _, data in block)).strip()
             if text:
                 lines.append(text)
-    text = "\n".join(lines).strip("\n")
-    return re.sub(r"\n{3,}", "\n\n", text)
+    # Ordinary blocks never yield blank lines; blank lines that remain are
+    # source lines of preformatted code and are kept as-is (review M-1).
+    return "\n".join(lines).strip("\n")
 
 
 def _extract_technical(body: bytes):

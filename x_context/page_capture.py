@@ -385,6 +385,12 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
                 if not location:
                     state = "invalid_response"
                     break
+                if deny_x_hosts and is_x_url(urljoin(current, location)):
+                    # Decided locally, before the redirect-count limit, so a
+                    # redirect to X is blocked_target even on the last allowed
+                    # GET (review m-1). No further request is made.
+                    state = "blocked_target"
+                    break
                 if redirect == MAX_REDIRECTS:
                     state = "redirect_limit"
                     break

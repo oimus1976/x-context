@@ -6,6 +6,8 @@ preflights each versioned sidecar before passing it to this renderer.
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 
 from . import image_capture
 from .bookmark_enrichment import Snapshot as EnrichmentSnapshot
@@ -165,12 +167,44 @@ def _render_thread(lines: list[str], thread: dict) -> None:
                     _quoted(lines, f"Referenced Post URL {link_index} (X-provided; unverified)", url_val)
 
 
+# Thread-page fields are emitted as fenced code (see _literal): escaping can
+# expand a byte up to 6x as above, and the two fence lines per field are each at
+# most (longest backtick run + 1) + 5 bytes, i.e. bounded by 2x the field bytes
+# plus a constant covered by the per-entry label allowance.
+_FENCED_EXPANSION = _ESCAPE_EXPANSION + 2
+
+
 def _thread_pages_section_limit(records: list[dict]) -> int:
     """Upper bound for the thread-page section, derived from its saved records."""
     record_bytes = sum(len(json.dumps(
         record, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8"))
         for record in records)
-    return _ESCAPE_EXPANSION * record_bytes + _THREAD_LABEL_BYTES_PER_ENTRY * (1 + len(records))
+    return _FENCED_EXPANSION * record_bytes + _THREAD_LABEL_BYTES_PER_ENTRY * (1 + len(records))
+
+
+def _literal_line(line: str) -> str:
+    """Make one source line inert for a terminal: tabs stay tabs (indentation),
+    other control/format characters (incl. bidi marks) become ``\\uXXXX``."""
+    return "".join(ch if ch == "\t" or not unicodedata.category(ch).startswith("C")
+                   else f"\\u{ord(ch):04x}" for ch in line)
+
+
+def _literal(lines: list[str], label: str, value: str | None) -> None:
+    """Show untrusted text verbatim inside a backtick fence (review M-2).
+
+    CommonMark does not parse emphasis, links, images or HTML inside fenced
+    code; the fence is longer than any backtick run in the value, so the value
+    cannot close it. Blank lines and tab indentation are preserved (review M-1).
+    """
+    lines.append(label + ":")
+    if value is None:
+        lines.append("not_returned")
+        return
+    longest = max((len(run) for run in re.findall(r"`+", value)), default=0)
+    fence = "`" * max(3, longest + 1)
+    lines.append(fence + "text")
+    lines.extend(_literal_line(part) for part in value.split("\n"))
+    lines.append(fence)
 
 
 def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | None) -> None:
@@ -199,12 +233,14 @@ def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | N
             f"Page HTTP status: {record['http_status'] if record['http_status'] is not None else 'not_returned'}",
             f"Excerpt truncated: {'true' if record['excerpt_truncated'] else 'false'}",
         ])
-        _quoted(lines, "Requested page URL (from saved thread record)", record["requested_url"])
-        _quoted(lines, "Network-observed final URL (only verified for captured state)",
-                record["final_url"] if record["state"] == "captured" else None)
-        _quoted(lines, "Page title (untrusted website content)", record["title"])
-        _quoted(lines, "Page description (untrusted website content)", record["description"])
-        _quoted(lines, "Page text excerpt (untrusted website quotation; layout preserved)", record["excerpt"])
+        _literal(lines, "Requested page URL (from saved thread record)", record["requested_url"])
+        # The URL of the last HTTP response, also for http_error etc. (review
+        # m-2); whether content was obtained is told by the state line above.
+        _literal(lines, "Network-observed final URL (last HTTP response; content only when captured)",
+                 record["final_url"])
+        _literal(lines, "Page title (untrusted website content)", record["title"])
+        _literal(lines, "Page description (untrusted website content)", record["description"])
+        _literal(lines, "Page text excerpt (untrusted website quotation; layout preserved)", record["excerpt"])
 
 
 def render(
