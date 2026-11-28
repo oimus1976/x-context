@@ -32,6 +32,44 @@ GIST_HTML = b'''<!DOCTYPE html><html><head><title>Synthetic gist</title>
 </main><footer>skip footer</footer></body></html>'''
 
 SIMPLE_HTML = b'''<html><head><title>Ref</title></head><body><p>Reference body.</p></body></html>'''
+EXCERPT_LABEL = "Page text excerpt (untrusted website quotation; layout preserved)"
+FINAL_LABEL = "Network-observed final URL (last HTTP response; content only when captured)"
+
+
+def _fences(view):
+    """Minimal CommonMark backtick-fence scan: (label line before, content, span)."""
+    lines = view.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        ticks = len(line) - len(line.lstrip("`"))
+        if ticks >= 3 and "`" not in line[ticks:]:
+            start = i
+            j = i + 1
+            while j < len(lines):
+                close = lines[j]
+                n = len(close) - len(close.lstrip("`"))
+                if n >= ticks and not close[n:].strip():
+                    break
+                j += 1
+            yield lines[start - 1], "\n".join(lines[start + 1:j]), (start, j)
+            i = j + 1
+        else:
+            i += 1
+
+
+def literal_fields(view):
+    """Map ``Label:`` -> fenced literal content of the thread-page section."""
+    section = view.split("### Saved thread reference pages", 1)[1]
+    return {label.rstrip(":"): content for label, content, _ in _fences(section)}
+
+
+def outside_fences(view):
+    lines = view.split("\n")
+    inside = set()
+    for _, _, (start, end) in _fences(view):
+        inside.update(range(start, end + 1))
+    return "\n".join(line for n, line in enumerate(lines) if n not in inside)
 
 
 def _post(post_id, *, replied_to=None, urls=(), source="full_archive_search"):
@@ -350,8 +388,9 @@ class ThreadPageCaptureTests(unittest.TestCase):
                 self.assertIn("Source Post relation: thread_post", view)
                 self.assertIn("Page capture state: captured", view)
                 self.assertIn("Excerpt truncated: false", view)
-                self.assertIn(f"> {GIST}", view)
-                self.assertIn(">     if ready:", view)
+                fields = literal_fields(view)
+                self.assertEqual(fields["Requested page URL (from saved thread record)"], GIST)
+                self.assertIn("\n    if ready:\n", fields[EXCERPT_LABEL])
         self.assertEqual(self.snapshot_bytes(), before)
 
     def test_AC4_02_changed_url_or_missing_thread_is_stale_without_old_text(self):
@@ -379,8 +418,114 @@ class ThreadPageCaptureTests(unittest.TestCase):
         self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, hostile)]
         self.run_cmd("--source-post-id", "101", "--url-index", "0")
         _, view, _ = self.context("--post-id", "100")
-        self.assertIn("> # injected heading", view)
-        self.assertNotIn("\n# injected heading", view)
+        # Only inside a fenced code block, where CommonMark does not parse headings.
+        self.assertEqual(literal_fields(view)[EXCERPT_LABEL], "# injected heading\n## more")
+        self.assertEqual(view.count("\n# injected heading"), 1)
+
+    # ---- L2 review remediation (PR #81 review 6096552383) ---------------
+    def test_M1_blank_lines_and_tabs_survive_save_and_markdown(self):
+        body = (b"<html><body><main><pre>first\n\n\n\tsecond</pre>"
+                b"<table><tr><td class=\"blob-num\" data-line-number=\"1\"></td>"
+                b"<td class=\"blob-code blob-code-inner\">alpha</td></tr>"
+                b"<tr><td class=\"blob-num\" data-line-number=\"2\"></td>"
+                b"<td class=\"blob-code blob-code-inner\"></td></tr>"
+                b"<tr><td class=\"blob-num\" data-line-number=\"3\"></td>"
+                b"<td class=\"blob-code blob-code-inner\">\tomega</td></tr></table>"
+                b"<p>after   text</p></main></body></html>")
+        self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, body)]
+        self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        expected = "first\n\n\n\tsecond\nalpha\n\n\tomega\nafter text"
+        self.assertEqual(self.stored()["items"]["100:101:0"]["excerpt"], expected)
+        _, view, _ = self.context("--post-id", "100")
+        self.assertEqual(literal_fields(view)[EXCERPT_LABEL], expected)
+        self.assertNotIn("\\u0009", view)
+
+    def test_M2_untrusted_markdown_is_literal_and_cannot_close_fence(self):
+        hostile = ("**literal** [link](https://evil.example/) ![img](https://evil.example/i.png)\n"
+                   "<b>html</b> _em_ `code`\n````\n```text\n> quote")
+        body = ("<html><head><title>**t** [x](https://evil.example/)</title></head><body><main><pre>"
+                + hostile.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                + "</pre></main></body></html>").encode()
+        self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, body)]
+        self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        rc, view, _ = self.context("--post-id", "100")
+        self.assertEqual(rc, 0)
+        fields = literal_fields(view)
+        self.assertEqual(fields[EXCERPT_LABEL], hostile)
+        self.assertEqual(fields["Page title (untrusted website content)"], "**t** [x](https://evil.example/)")
+        # Nothing of the hostile text leaks outside a fence.
+        outside = outside_fences(view)
+        for token in ("**literal**", "](https://evil.example", "<b>", "> quote"):
+            self.assertNotIn(token, outside)
+
+    def test_M2_fenced_output_bound_with_backtick_heavy_excerpt(self):
+        heavy = "<html><body><main><pre>" + "`" * 4096 + "</pre></main></body></html>"
+        self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, heavy.encode())]
+        self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        rc, view, _ = self.context("--post-id", "100")
+        self.assertEqual(rc, 0)
+        self.assertEqual(literal_fields(view)[EXCERPT_LABEL], "`" * 4096)
+
+    def test_M2_output_bounds_with_50_worst_case_records(self):
+        urls = [{"expanded_url": f"https://example.org/p{i}"} for i in range(50)]
+        record = _thread_record()
+        record["thread_posts"][1]["urls"] = urls
+        self.write_threads({"100": record})
+        # Escape-heavy text: backtick runs, controls, bidi marks, HTML specials.
+        excerpt = ("`" * 7 + "\x01‮&<>\t") * 300
+        excerpt = excerpt[:page_capture.MAX_PAGE_TEXT]
+        items = {}
+        for i in range(50):
+            items[f"100:101:{i}"] = {
+                "bookmark_post_id": "100", "source_post_id": "101", "url_index": i,
+                "requested_url": f"https://example.org/p{i}", "final_url": f"https://example.org/p{i}",
+                "http_status": 200, "retrieved_at": STAMP, "state": "captured",
+                "title": "`" * 512, "description": "\x02" * 1024, "excerpt": excerpt,
+                "excerpt_truncated": True,
+            }
+        self.store.write_text(json.dumps({"schema_version": "1", "subject_id": "42", "items": items}),
+                              encoding="utf-8")
+        rc, view, stderr = self.context("--post-id", "100")
+        self.assertEqual((rc, stderr), (0, ""))
+        self.assertEqual(view.count("#### Thread page: Post 101 URL"), 50)
+        self.assertNotIn("\x01", view)
+        self.assertNotIn("‮", view)
+        self.assertGreater(len(view.encode("utf-8")), 256 * 1024)
+        # Without --post-id the existing 256 KiB combined cap still fails closed.
+        rc, view, stderr = self.context()
+        self.assertEqual((rc, view, json.loads(stderr)["error_category"]), (2, "", "storage_error"))
+
+    def test_m1_redirect_to_x_on_last_allowed_get_is_blocked_target(self):
+        self.replies = [
+            page_capture.PageResponse(302, {"Location": "/one"}, b""),
+            page_capture.PageResponse(302, {"Location": "/two"}, b""),
+            page_capture.PageResponse(302, {"Location": "https://t.co/synthetic"}, b""),
+        ]
+        rc, stdout, _ = self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        self.assertEqual(rc, 0)
+        self.assertEqual(self.requests, [GIST, "https://gist.github.com/one", "https://gist.github.com/two"])
+        self.assertEqual(self.dns, ["gist.github.com"] * 3)
+        record = self.stored()["items"]["100:101:0"]
+        self.assertEqual((record["state"], record["final_url"], record["http_status"]),
+                         ("blocked_target", "https://gist.github.com/two", 302))
+
+    def test_m1_legacy_capture_keeps_redirect_limit(self):
+        replies = [page_capture.PageResponse(302, {"Location": loc}, b"")
+                   for loc in ("/one", "/two", "https://t.co/synthetic")]
+        result = page_capture.capture_one(GIST, at=STAMP, resolver=self.resolver,
+                                          transport=lambda u, i, d: replies.pop(0))
+        self.assertEqual(result["state"], "redirect_limit")
+
+    def test_m2_http_error_shows_observed_final_url(self):
+        self.replies = [
+            page_capture.PageResponse(301, {"Location": "/other"}, b""),
+            page_capture.PageResponse(404, {"Content-Type": "text/html"}, b"<p>missing</p>"),
+        ]
+        self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        _, view, _ = self.context("--post-id", "100")
+        self.assertIn("Page capture state: http_error", view)
+        self.assertEqual(literal_fields(view)[FINAL_LABEL], "https://gist.github.com/other")
+        self.assertNotIn(EXCERPT_LABEL, literal_fields(view))
 
 
 if __name__ == "__main__":
