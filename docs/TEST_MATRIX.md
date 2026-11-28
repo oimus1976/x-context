@@ -421,3 +421,17 @@ trailing blank `pre` lines with tab indentation; leading, inner and trailing
 empty Gist code cells; saved excerpt equal to the Markdown fence content; and
 4095/4096/4097-character inputs with leading blank lines for the excerpt and
 `excerpt_truncated`.
+
+Capture-quality topic (`tests/test_reference_capture_quality.py`, 17 tests,
+SPEC-0009 Q-1..Q-4): Gist-like file names/bodies in document order without
+page UI, line numbers or comments, UI words inside bodies kept, `main`/body
+fallbacks and `no_extractable_text`; 20,000-character mixed text saved to its
+end marker, 65,535/65,536/65,537 boundaries, worst-case JSON escaping within
+the worker/parent bound, worker/parent constant equality, near-16-MiB store
+failing closed with unchanged bytes, legacy 4096 limits; default 4096-character
+view vs `--full-page-text` from one record with unchanged store hash, option
+scope errors, capture truncation vs display shortening, 262,144-character
+multi-page budget, unchanged thread section, 256 KiB without `--post-id`;
+stage-3 record compatibility and technical-limit rejection. The stage-3
+truncation tests (AC2_04, M1r boundary) now use the technical limit and also
+check the full view. Real Gist re-capture (Q-6) is NOT_RUN.

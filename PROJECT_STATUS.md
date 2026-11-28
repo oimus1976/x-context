@@ -1,6 +1,46 @@
 # Project Status
 
-## Current: Issue #77 stage 3 — one saved thread reference page (2026-11-28, Draft)
+## Current: Issue #77 — reference page capture quality (2026-11-28, Draft)
+
+Working branch: `issue-77-reference-capture-quality`, based on GitHub `main`
+`8bd7505249203eded1f04b1c6f8a4b58eccffd9f` (PR #81 merged). Design and AC:
+Issue #77 comment 7236934301; requirement and Q-1..Q-6 in
+`docs/specs/0009-thread-page-capture.md` ("Capture-quality topic"). Risk
+facets/level: `PRIVATE_DATA`, `CREDENTIALS`, `PLATFORM_DEPENDENT`,
+`SECURITY_BOUNDARY` (`HIGH_IMPACT`).
+Motivation (real Gist UAT, PR #81 comment 7236789348): 1,203 of 4,096 saved
+characters were page UI inside `main`, and the 4096-character limit cut the
+body; 512 KiB was not binding. Changes, technical (thread-page) path only:
+(1) the worker prefers Gist-like file names and bodies (`file` →
+`gist-blob-name`, `blob-wrapper`/`markdown-body`), excludes line-number cells,
+keeps code layout, and falls back to `main`/`article` → body (class names are
+a hypothesis; the real DOM was not compared); (2) saved-text limit 4096 →
+65,536 characters, worker output bound 32,768 → 402,496 bytes (6 JSON bytes
+per character), same v1 sidecar and fields, 16 MiB store and atomic replace
+unchanged; (3) display separated from storage: the default view shows at most
+4096 characters per page with an explicit `Excerpt display: shortened` line,
+and `context --include-saved-details --post-id <id> --full-page-text` shows
+saved text in full up to 262,144 characters in total (then 4096 per page),
+offline and read-only. Legacy page capture (4096 characters, 32,768 bytes),
+the capture boundary and the thread output contract are unchanged. An older
+build fails closed (`storage_error`) on a store holding an excerpt above 4096
+characters.
+Evidence: RED 13/17 new tests failed before implementation, GREEN 17/17; two
+stage-3 truncation tests moved their boundary to the technical limit; product
+suite 582 tests OK (skipped 1); `verify_repo` PASS; `git diff --check` PASS.
+Synthetic fakes only. Exact-head CI and independent L2 review on the published
+head are pending; Q-6 (re-capture of the real Gist), real sites, owner data,
+Ready and merge are NOT_RUN and need separate approval.
+
+## Historical: Issue #77 stage 3 — one saved thread reference page (merged PR #81)
+
+Merged 2026-11-28 (merge commit `8bd7505`, PR head `a77ba9b`). Real Gist UAT
+at `a77ba9b` PASS with an extraction-volume constraint (PR #81 comment
+7236789348: 1 DNS / 1 GET / X API 0, 150,354 bytes, 4096-character excerpt
+full, 1,203 characters of page UI; original-text comparison and real tab
+preservation not observed). Post-merge LOCAL CLOSEOUT PASS; the plan-only
+SAFE CLEANUP was BLOCKED by unrelated legacy worktrees and is deferred as a
+separate maintenance item. The Draft text below is kept as history.
 
 Working branch: `issue-77-thread-page-capture`, based on GitHub `main`
 `7c8878c3c83bb765de07a1b84006b3d82a6e1bd6` (PR #79 merged; LOCAL CLOSEOUT PASS).

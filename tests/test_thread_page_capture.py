@@ -320,13 +320,15 @@ class ThreadPageCaptureTests(unittest.TestCase):
             self.assertNotIn(skipped, excerpt)
 
     def test_AC2_04_truncation_is_recorded_not_silent(self):
-        long_body = ("<html><body><main><pre>" + "x = 1\n" * 2000 + "</pre></main></body></html>").encode()
+        # The technical saved-text limit is separate from the legacy 4096
+        # characters since the Issue #77 quality topic (SPEC-0009 Q-2).
+        long_body = ("<html><body><main><pre>" + "x = 1\n" * 12000 + "</pre></main></body></html>").encode()
         self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, long_body)]
         rc, stdout, _ = self.run_cmd("--source-post-id", "101", "--url-index", "0")
         self.assertEqual(rc, 0)
         self.assertTrue(json.loads(stdout)["excerpt_truncated"])
         record = self.stored()["items"]["100:101:0"]
-        self.assertEqual(len(record["excerpt"]), page_capture.MAX_PAGE_TEXT)
+        self.assertEqual(len(record["excerpt"]), page_capture.TECHNICAL_MAX_PAGE_TEXT)
         self.assertTrue(record["excerpt_truncated"])
 
     def test_AC2_05_legacy_extraction_unchanged(self):
@@ -470,18 +472,23 @@ class ThreadPageCaptureTests(unittest.TestCase):
         self.assertEqual(shown, expected)
 
     def test_M1r_truncation_boundary_counts_code_blank_lines(self):
-        for total in (4095, 4096, 4097):
+        # Saved limit: TECHNICAL_MAX_PAGE_TEXT (Q-2); the default view shows the
+        # first 4096 characters, the --full-page-text view all saved text (Q-3).
+        limit = page_capture.TECHNICAL_MAX_PAGE_TEXT
+        for total in (limit - 1, limit, limit + 1):
             with self.subTest(total=total):
                 if self.store.exists():
                     self.store.unlink()
                 code = "\n\n" + "y" * (total - 2)
                 out, record, shown = self.capture_and_view(
                     ("<html><body><main><pre>" + code + "</pre></main></body></html>").encode())
-                expected = code[:page_capture.MAX_PAGE_TEXT]
+                expected = code[:limit]
                 self.assertEqual(record["excerpt"], expected)
-                self.assertEqual(shown, expected)
-                self.assertEqual(record["excerpt_truncated"], total > page_capture.MAX_PAGE_TEXT)
-                self.assertEqual(out["excerpt_truncated"], total > page_capture.MAX_PAGE_TEXT)
+                self.assertEqual(shown, expected[:4096])
+                _, full, _ = self.context("--post-id", "100", "--full-page-text")
+                self.assertEqual(literal_fields(full)[EXCERPT_LABEL], expected)
+                self.assertEqual(record["excerpt_truncated"], total > limit)
+                self.assertEqual(out["excerpt_truncated"], total > limit)
 
     def test_M2_untrusted_markdown_is_literal_and_cannot_close_fence(self):
         hostile = ("**literal** [link](https://evil.example/) ![img](https://evil.example/i.png)\n"

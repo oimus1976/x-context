@@ -1,6 +1,14 @@
 # Changelog
 
-## Issue #77 stage 3 — one saved thread reference page (Draft)
+## Issue #77 — reference page capture quality (Draft)
+
+- Technical (thread-page) extraction prefers GitHub-Gist-like file text: inside a `file` container, the file name (`gist-blob-name`) and the body region (`blob-wrapper` / `markdown-body`) in document order, each on its own line; line-number cells are excluded. Page/file actions and comments outside those regions are not collected; no UI word is deleted from text. Without a file region with text, the `main`/`article` → body fallback is unchanged. The class names are a hypothesis from public markup; the real Gist DOM was not compared.
+- Separate the technical saved-text limit from the legacy one: 4096 → 65,536 characters (`page_capture.TECHNICAL_MAX_PAGE_TEXT`), worker output bound 32,768 → 402,496 bytes (6 JSON bytes per character for title + description + excerpt), checked in the worker, the parent and the `bookmark-thread-pages-v1.json` record validator. Same v1 sidecar and fields; stage-3 records stay valid. A build from before this change fails closed (`storage_error`) on a store holding an excerpt longer than 4096 characters. 16 MiB store cap and atomic replace unchanged.
+- Separate display from storage: `context --include-saved-details` shows at most 4096 characters per thread page and adds an `Excerpt display: shortened (…)` line when the saved text continues. New `--full-page-text` (only with `--include-saved-details --post-id`) shows saved text in full up to 262,144 characters in total, then 4096 per page, offline and read-only. `Excerpt truncated` still means capture-time truncation. The thread section and legacy views are unchanged.
+- Legacy `page capture`, the capture boundary (1 URL, 3 GETs, 8 s, 512 KiB, X API 0, X/`t.co` refusal) and other stores are unchanged.
+- Add 17 synthetic tests (`tests/test_reference_capture_quality.py`); two stage-3 truncation tests move their boundary to the technical limit and also check the full view. Re-capturing the real Gist (Q-6), real sites and owner data are NOT_RUN.
+
+## Issue #77 stage 3 — one saved thread reference page (merged in PR #81)
 
 - Add `page capture --post-id <bookmark> --source-post-id <saved Post> --url-index <0..49> --confirm-network-request` (SPEC-0009). It selects one URL already saved in that bookmark's `bookmark-threads-v1.json` record (thread Post or thread-related referenced Post). No arbitrary URL input, no X request, at most 1 URL / 3 HTTP GETs, no retry.
 - Reuse `page_capture.capture_one` unchanged in its network boundary. Two new opt-in parameters, both off for the legacy path: `deny_x_hosts` refuses X/Twitter/`t.co` before DNS on the initial URL and every redirect hop, and `technical` selects a layout-preserving worker mode (keeps `pre`/Gist code line breaks and indentation, prefers `main`/`article`, reports `excerpt_truncated`). Size, time and character limits are unchanged.

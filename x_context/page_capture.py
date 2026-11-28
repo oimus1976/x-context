@@ -29,6 +29,14 @@ from .bookmark_store import StoreSnapshot, _timestamp
 
 MAX_HTML_BYTES = 512 * 1024
 MAX_PAGE_TEXT = 4096
+MAX_WORKER_BYTES = 32768
+# Issue #77 thread reference pages ("technical" worker mode) keep their own,
+# larger saved-text limit; the legacy AC-2 path keeps MAX_PAGE_TEXT. The worker
+# output bound allows 6 JSON bytes per character (a control character becomes
+# a 6-byte \u00XX escape) for title + description + excerpt. Mirrored in
+# _html_extract_worker, which imports nothing from the product.
+TECHNICAL_MAX_PAGE_TEXT = 65536
+TECHNICAL_MAX_WORKER_BYTES = 6 * (512 + 1024 + TECHNICAL_MAX_PAGE_TEXT) + 64
 MAX_REDIRECTS = 2
 MAX_URL_CHARS = 4096
 TIMEOUT_SECONDS = 8
@@ -294,7 +302,8 @@ def _extract_html(body: bytes, *, deadline: float | None = None,
             worker.kill()
             worker.communicate()
     _remaining(deadline)
-    if worker.returncode != 0 or len(output) > 32768:
+    if worker.returncode != 0 or len(output) > (
+            TECHNICAL_MAX_WORKER_BYTES if technical else MAX_WORKER_BYTES):
         raise ValueError("HTML worker failed")
     value = json.loads(output.decode("utf-8"))
     if not isinstance(value, list) or len(value) != (4 if technical else 3):
@@ -304,7 +313,8 @@ def _extract_html(body: bytes, *, deadline: float | None = None,
         if type(truncated) is not bool or (truncated and value[2] is None):
             raise ValueError("invalid worker result")
     if (any(v is not None and not isinstance(v, str) for v in value) or
-        any(v is not None and len(v) > limit for v, limit in zip(value, (512, 1024, MAX_PAGE_TEXT)))):
+        any(v is not None and len(v) > limit for v, limit in zip(
+            value, (512, 1024, TECHNICAL_MAX_PAGE_TEXT if technical else MAX_PAGE_TEXT)))):
         raise ValueError("invalid worker result")
     return tuple(value) + ((truncated,) if technical else ())
 
