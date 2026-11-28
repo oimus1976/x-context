@@ -392,3 +392,18 @@ REC-07 L2 remediation: guard-only regression rejects Windows ADS, device names
 (including superscript aliases), controls, normalization aliases and unsupported
 UNC/extended/device namespaces without opening any such path; normal local
 Unicode/interior-space filenames remain supported.
+
+
+Issue #77 stage 3 / SPEC-0009: `tests/test_thread_page_capture.py` (19 tests)
+covers AC-1 selection of a saved thread/referenced Post URL (unwound > expanded >
+url), rejection before DNS/transport and writes for missing confirmation, missing
+or out-of-range `--url-index`, unknown bookmark/source/index, bookmark without a
+thread record, X/`t.co` URLs, ambiguous duplicate source URLs and mixed subjects;
+AC-2 fake-transport capture with redirect re-validation, redirect to X as
+`blocked_target`, distinct HTTP failure state, technical extraction of `pre` and
+Gist-style code layout with `main` preference, recorded truncation, and unchanged
+legacy extraction; AC-3 separate sidecar persistence preserving other records and
+files, and corrupt/inconsistent/X-target/mixed-subject stores stopping before
+network; AC-4 offline Markdown (with and without `--post-id`), `stale_reference` for
+changed URLs or missing thread records without old text, no new section without
+the sidecar, and quoted untrusted excerpts. Real Gist/site access is NOT_RUN.

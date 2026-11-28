@@ -1,6 +1,43 @@
 # Project Status
 
-## Current: Issue #77 stage 2 — bookmark-anchored same-author thread collection (2026-11-25, Draft)
+## Current: Issue #77 stage 3 — one saved thread reference page (2026-11-28, Draft)
+
+Working branch: `issue-77-thread-page-capture`, based on GitHub `main`
+`7c8878c3c83bb765de07a1b84006b3d82a6e1bd6` (PR #79 merged; LOCAL CLOSEOUT PASS).
+Design: Issue #77 comment 7232454206; requirement and AC in
+`docs/specs/0009-thread-page-capture.md`. Adds `page capture --source-post-id
+<saved Post> --url-index <0..49>` for one URL already saved in a bookmark's
+thread record, reusing `page_capture.capture_one` with opt-in `deny_x_hosts`
+(X/Twitter/t.co refused initially and on every redirect) and a `technical`
+worker mode (code layout kept, `main`/`article` preferred, `excerpt_truncated`).
+Results go to a separate `bookmark-thread-pages-v1.json` via the shared
+`page_capture.atomic_replace`. `context --include-saved-details` shows them, or
+`stale_reference` when the current thread URL differs. The legacy page path,
+other stores and the request bounds are unchanged. Risk facets/level:
+`PRIVATE_DATA`, `CREDENTIALS`, `PLATFORM_DEPENDENT`, `SECURITY_BOUNDARY`
+(`HIGH_IMPACT`).
+Design decisions recorded during implementation: (1) the thread-page Markdown is
+its own section after the thread section instead of inline under each thread
+URL, so the stage-2 thread-section bound stays valid; it has its own
+record-derived bound for `--post-id`; (2) the atomic write was factored out of
+`page_capture.save` so both sidecars share one tested path; (3) a duplicate
+source Post is one source only if every occurrence has the same URL at the
+index; (4) the CLI `--url-index` default became `None`, mapped back to 0 for the
+legacy path.
+Evidence: RED 14/19 new tests failed before implementation, GREEN 19/19;
+`python -m unittest discover -s tests` 555 tests OK (skipped 1); `verify_repo`
+PASS; `git diff --check` PASS. Synthetic fakes only. Exact-head CI and
+independent L2 review are pending; a real Gist UAT, real sites, owner data,
+Ready and merge are NOT_RUN and remain human-final.
+
+## Historical: Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged PR #79)
+
+Merged 2026-11-28 (`7c8878c`). Third owner-device live UAT at `8ca4460` PASS
+(2 GETs; 3 Posts with parent-child links; `note_post` full text; Gist URL
+saved; other records unchanged). Post-merge LOCAL CLOSEOUT PASS. The plan-only
+SAFE CLEANUP was BLOCKED by unrelated legacy worktrees (Git dubious ownership)
+and is deferred as a separate maintenance item. The Draft text below is kept as
+history.
 
 Working branch: `issue-77-bookmark-thread-collection`, based on GitHub `main`
 `1c15c1047a8da7b7d3d509941750365fb2e10201` (PR #78 merged).

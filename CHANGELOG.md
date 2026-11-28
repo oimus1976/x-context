@@ -1,6 +1,15 @@
 # Changelog
 
-## Issue #77 stage 2 — bookmark-anchored same-author thread collection (Draft)
+## Issue #77 stage 3 — one saved thread reference page (Draft)
+
+- Add `page capture --post-id <bookmark> --source-post-id <saved Post> --url-index <0..49> --confirm-network-request` (SPEC-0009). It selects one URL already saved in that bookmark's `bookmark-threads-v1.json` record (thread Post or thread-related referenced Post). No arbitrary URL input, no X request, at most 1 URL / 3 HTTP GETs, no retry.
+- Reuse `page_capture.capture_one` unchanged in its network boundary. Two new opt-in parameters, both off for the legacy path: `deny_x_hosts` refuses X/Twitter/`t.co` before DNS on the initial URL and every redirect hop, and `technical` selects a layout-preserving worker mode (keeps `pre`/Gist code line breaks and indentation, prefers `main`/`article`, reports `excerpt_truncated`). Size, time and character limits are unchanged.
+- Persist results to a separate subject-bound `bookmark-thread-pages-v1.json` (key `<bookmark>:<source post>:<url index>`). It reuses the existing atomic replace, now factored as `page_capture.atomic_replace`; the legacy `page_capture.save` behavior is unchanged. No other store is modified.
+- Show saved thread pages in `context --include-saved-details`. When the current thread record no longer has the same URL (or no thread record exists), only `stale_reference` is shown. With `--post-id` the section is bounded by its saved records; without `--post-id` the 256 KiB cap is unchanged.
+- Legacy `page capture` keeps URL index 0..19 with default 0 and its outputs. Duplicate occurrences of a source Post with different URLs are rejected as ambiguous before any network access.
+- Add 19 synthetic tests (`tests/test_thread_page_capture.py`). A real Gist capture, real sites, owner data and Windows qualification are NOT_RUN.
+
+## Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged in PR #79)
 
 - Add `thread capture --post-id <id> --confirm-network-request [--max-results 10..100]` reusing existing official X API transport/error handling and `X_CONTEXT_BEARER_TOKEN` (App-Only) authentication.
 - For one explicitly selected local bookmark (following a saved `quoted` reference when present in `bookmark-enrichment-v1.json`, otherwise anchoring directly on the bookmarked Post), run at most one `GET /2/tweets/{id}` detail lookup (`post.fields=conversation_id,created_at,entities`, `expansions=author_id,referenced_posts`, `user.fields=username`) and at most one page of `GET /2/tweets/search/all` (`query=conversation_id:<id> from:<username> -is:retweet`, default `max_results=20`, explicit `start_time` set to root `created_at` when known, else fallback `2006-03-21T00:00:00Z`; whether omitting `start_time` defaults to 30 days and whether `2006-03-21T00:00:00Z` is accepted by the live API are unconfirmed live-smoke verification items).
