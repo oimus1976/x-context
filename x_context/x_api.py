@@ -12,10 +12,24 @@ from urllib.parse import urlencode
 
 from .canonical import CanonicalEnvelope, CanonicalPost, Page, make_read_envelope
 from .bookmark_enrichment import capture as capture_bookmark_metadata
+from .bookmark_store import _timestamp
 
 OFFICIAL_X_API_ORIGIN = "https://api.x.com"
 _SINGLE_POST_PATH = "/2/tweets/{post_id}"
+_SEARCH_ALL_PATH = "/2/tweets/search/all"
 _AUTHENTICATED_USER_PATH = "/2/users/me"
+_POST_DETAIL_FIELDS = "conversation_id,created_at,entities,note_post"
+# OpenAPI v2.175 names the long-form field `note_post`; the data dictionary still says
+# `note_tweet`. Only `note_post` is requested; either response key is accepted.
+_NOTE_RESPONSE_KEYS = ("note_post", "note_tweet")
+_POST_DETAIL_EXPANSIONS = "author_id,referenced_posts"
+_POST_URL_KEYS = ("url", "expanded_url", "unwound_url", "display_url", "title", "description")
+_REFERENCE_TYPES = frozenset(("retweeted", "quoted", "replied_to"))
+_MAX_POST_TEXT_BYTES = 32768
+# Long-form Posts allow up to 25,000 characters (<= 4 UTF-8 bytes each).
+_MAX_NOTE_TEXT_BYTES = 102400
+TEXT_SOURCES = ("note_post", "post_text", "post_text_note_invalid")
+_MAX_SEARCH_QUERY_CHARS = 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -589,3 +603,359 @@ def _lookup_collection(
         return BookmarksLookupResult(envelope, resolution.rate_limit, rate, attempted, max_results,
                                      enrichment=tuple(enrichments))
     return result_type(envelope, resolution.rate_limit, rate, attempted, max_results)
+
+
+@dataclass(frozen=True, slots=True)
+class PostDetailResult:
+    """Single detailed Post lookup plus non-canonical safe diagnostics."""
+
+    post: dict = field(repr=False)
+    included_posts: tuple[dict, ...] = field(repr=False)
+    included_users: Mapping[str, str] = field(repr=False)
+    rate_limit: RateLimitMetadata
+    requests_attempted: int
+
+
+@dataclass(frozen=True, slots=True)
+class PostSearchResult:
+    """One-page Full-Archive Search result plus non-canonical safe diagnostics."""
+
+    posts: tuple[dict, ...] = field(repr=False)
+    included_posts: tuple[dict, ...] = field(repr=False)
+    included_users: Mapping[str, str] = field(repr=False)
+    truncated: bool
+    rate_limit: RateLimitMetadata
+    requests_attempted: int
+
+
+def _has_control_chars(value: str) -> bool:
+    return any(ord(c) < 32 or ord(c) == 127 for c in value)
+
+
+def _parse_post_urls(entities: object) -> list[dict]:
+    if entities is None:
+        return []
+    if not isinstance(entities, dict):
+        raise XApiError("provider_error")
+    raw_urls = entities.get("urls")
+    if raw_urls is None:
+        return []
+    if not isinstance(raw_urls, list) or len(raw_urls) > 50:
+        raise XApiError("provider_error")
+    urls: list[dict] = []
+    for entry in raw_urls:
+        if not isinstance(entry, dict):
+            raise XApiError("provider_error")
+        item: dict[str, str] = {}
+        for key in _POST_URL_KEYS:
+            if key in entry and entry[key] is not None:
+                val = entry[key]
+                if not isinstance(val, str) or len(val.encode("utf-8")) > 4096:
+                    raise XApiError("provider_error")
+                item[key] = val
+        urls.append(item)
+    return urls
+
+
+def _parse_post_references(post: dict) -> list[dict]:
+    ref_field = "referenced_posts" if "referenced_posts" in post else "referenced_tweets"
+    if ref_field not in post or post[ref_field] is None:
+        return []
+    raw_refs = post[ref_field]
+    if not isinstance(raw_refs, list) or len(raw_refs) > 20:
+        raise XApiError("provider_error")
+    refs: list[dict] = []
+    seen_ids: set[str] = set()
+    for item in raw_refs:
+        if not isinstance(item, dict) or not _is_provider_compatible_post_id(item.get("id")):
+            raise XApiError("provider_error")
+        ref_id = item["id"]
+        if ref_id in seen_ids:
+            raise XApiError("provider_error")
+        seen_ids.add(ref_id)
+        entry: dict[str, str] = {"id": ref_id}
+        if "type" in item and item["type"] is not None:
+            if item["type"] not in _REFERENCE_TYPES:
+                raise XApiError("provider_error")
+            entry["type"] = item["type"]
+        refs.append(entry)
+    return refs
+
+
+def _parse_detail_post(obj: object) -> dict:
+    if not isinstance(obj, dict):
+        raise XApiError("provider_error")
+    post_id = obj.get("id")
+    text = obj.get("text")
+    if not _is_provider_compatible_post_id(post_id):
+        raise XApiError("provider_error")
+    if not isinstance(text, str) or len(text.encode("utf-8")) > _MAX_POST_TEXT_BYTES:
+        raise XApiError("provider_error")
+    author_id = obj.get("author_id")
+    if author_id is not None and not _is_ascii_numeric_user_id(author_id):
+        raise XApiError("provider_error")
+    conversation_id = obj.get("conversation_id")
+    if conversation_id is not None and not _is_provider_compatible_post_id(conversation_id):
+        raise XApiError("provider_error")
+    created_at = obj.get("created_at")
+    if created_at is not None and not _timestamp(created_at):
+        raise XApiError("provider_error")
+    urls = _parse_post_urls(obj.get("entities"))
+    text_source = "post_text"
+    note = _parse_note(obj)
+    if note is _INVALID_NOTE:
+        text_source = "post_text_note_invalid"
+    elif note is not None:
+        note_text, note_urls = note
+        text = note_text
+        text_source = "note_post"
+        urls = _merge_urls(urls, note_urls)
+    return {
+        "id": post_id,
+        "text": text,
+        "text_source": text_source,
+        "author_id": author_id,
+        "conversation_id": conversation_id,
+        "created_at": created_at,
+        "referenced_posts": _parse_post_references(obj),
+        "urls": urls,
+    }
+
+
+_INVALID_NOTE = object()
+
+
+def _parse_note(obj: dict) -> object:
+    """Return (text, urls) for a usable long-form note, None if absent, or _INVALID_NOTE.
+
+    A malformed optional note never replaces the always-present ``text``; the
+    fallback is recorded as ``post_text_note_invalid`` instead of failing the Post.
+    """
+    present = [key for key in _NOTE_RESPONSE_KEYS if key in obj and obj[key] is not None]
+    if not present:
+        return None
+    if len(present) > 1:
+        return _INVALID_NOTE
+    note = obj[present[0]]
+    if not isinstance(note, dict):
+        return _INVALID_NOTE
+    note_text = note.get("text")
+    if (not isinstance(note_text, str) or not note_text.strip()
+            or len(note_text.encode("utf-8")) > _MAX_NOTE_TEXT_BYTES):
+        return _INVALID_NOTE
+    try:
+        note_urls = _parse_post_urls(note.get("entities"))
+    except XApiError:
+        return _INVALID_NOTE
+    return note_text, note_urls
+
+
+def _merge_urls(base: list[dict], extra: list[dict]) -> list[dict]:
+    """Keep normal-entity URLs (richer fields) and append note-only URLs once."""
+    merged = list(base)
+    seen = {(entry.get("url"), entry.get("expanded_url")) for entry in base}
+    for entry in extra:
+        key = (entry.get("url"), entry.get("expanded_url"))
+        if key in seen or len(merged) >= 50:
+            continue
+        seen.add(key)
+        merged.append(entry)
+    return merged
+
+
+def _parse_included_users(includes: dict) -> dict[str, str]:
+    raw_users = includes.get("users", [])
+    if raw_users is None:
+        return {}
+    if not isinstance(raw_users, list) or len(raw_users) > 500:
+        raise XApiError("provider_error")
+    users: dict[str, str] = {}
+    for user in raw_users:
+        if not isinstance(user, dict):
+            raise XApiError("provider_error")
+        uid = user.get("id")
+        username = user.get("username")
+        if not _is_ascii_numeric_user_id(uid):
+            raise XApiError("provider_error")
+        if not isinstance(username, str) or not username or len(username) > 50 or _has_control_chars(username):
+            raise XApiError("provider_error")
+        if uid in users:
+            raise XApiError("provider_error")
+        users[uid] = username
+    return users
+
+
+def _parse_included_posts(includes: dict) -> tuple[dict, ...]:
+    if "posts" in includes and includes["posts"] is not None:
+        raw_posts = includes["posts"]
+    elif "tweets" in includes and includes["tweets"] is not None:
+        raw_posts = includes["tweets"]
+    else:
+        return ()
+    if not isinstance(raw_posts, list) or len(raw_posts) > 500:
+        raise XApiError("provider_error")
+    posts: list[dict] = []
+    seen_ids: set[str] = set()
+    for obj in raw_posts:
+        parsed = _parse_detail_post(obj)
+        if parsed["id"] in seen_ids:
+            raise XApiError("provider_error")
+        seen_ids.add(parsed["id"])
+        posts.append(parsed)
+    return tuple(posts)
+
+
+def _parse_includes(payload: dict) -> tuple[tuple[dict, ...], dict[str, str]]:
+    includes = payload.get("includes", {})
+    if includes is None:
+        includes = {}
+    if not isinstance(includes, dict):
+        raise XApiError("provider_error")
+    return _parse_included_posts(includes), _parse_included_users(includes)
+
+
+def lookup_post_detail(
+    post_id: str,
+    *,
+    bearer_token: str | None,
+    transport: Transport | None = None,
+) -> PostDetailResult:
+    """Fetch one Post with author/conversation/reference metadata for thread collection."""
+    if not _is_provider_compatible_post_id(post_id):
+        raise XApiError("invalid_input")
+    if not _is_safe_bearer_token(bearer_token):
+        raise XApiError("configuration_error")
+    query = urlencode({
+        "post.fields": _POST_DETAIL_FIELDS,
+        "expansions": _POST_DETAIL_EXPANSIONS,
+        "user.fields": "username",
+    })
+    request = HttpRequest(
+        method="GET",
+        url=f"{OFFICIAL_X_API_ORIGIN}{_SINGLE_POST_PATH.format(post_id=post_id)}?{query}",
+        headers={
+            "Authorization": f"Bearer {bearer_token}",
+            "Accept": "application/json",
+        },
+    )
+    selected_transport = _bookmarks_transport if transport is None else transport
+    try:
+        reply = selected_transport(request)
+    except Exception:
+        raise XApiError("provider_error", requests_attempted=1) from None
+    if not isinstance(reply, HttpResponse):
+        raise XApiError("provider_error", requests_attempted=1)
+    rate = _rate_limit_metadata(reply.headers)
+    if reply.status != 200:
+        _raise_for_provider_failure(reply)
+    try:
+        payload = _json_object(reply.body)
+        if payload is None or not isinstance(payload.get("data"), dict):
+            raise XApiError("provider_error")
+        post = _parse_detail_post(payload["data"])
+        if post["id"] != post_id:
+            raise XApiError("provider_error")
+        included_posts, included_users = _parse_includes(payload)
+    except XApiError as exc:
+        raise XApiError(exc.category, status_code=reply.status, rate_limit=rate, requests_attempted=1) from None
+    return PostDetailResult(
+        post=post,
+        included_posts=included_posts,
+        included_users=included_users,
+        rate_limit=rate,
+        requests_attempted=1,
+    )
+
+
+def search_all_posts(
+    query: str,
+    *,
+    bearer_token: str | None,
+    max_results: int = 20,
+    start_time: str | None = None,
+    transport: Transport | None = None,
+) -> PostSearchResult:
+    """Run one bounded Full-Archive Search page without following pagination."""
+    if (not isinstance(query, str) or not query.strip()
+            or len(query) > _MAX_SEARCH_QUERY_CHARS or _has_control_chars(query)):
+        raise XApiError("invalid_input")
+    if type(max_results) is not int or not 10 <= max_results <= 100:
+        raise XApiError("invalid_input")
+    if start_time is not None and not _timestamp(start_time):
+        raise XApiError("invalid_input")
+    if not _is_safe_bearer_token(bearer_token):
+        raise XApiError("configuration_error")
+    params: dict[str, object] = {
+        "query": query,
+        "max_results": max_results,
+        "post.fields": _POST_DETAIL_FIELDS,
+        "expansions": _POST_DETAIL_EXPANSIONS,
+    }
+    if start_time is not None:
+        params["start_time"] = start_time
+    request = HttpRequest(
+        method="GET",
+        url=f"{OFFICIAL_X_API_ORIGIN}{_SEARCH_ALL_PATH}?{urlencode(params)}",
+        headers={
+            "Authorization": f"Bearer {bearer_token}",
+            "Accept": "application/json",
+        },
+    )
+    selected_transport = _bookmarks_transport if transport is None else transport
+    try:
+        reply = selected_transport(request)
+    except Exception:
+        raise XApiError("provider_error", requests_attempted=1) from None
+    if not isinstance(reply, HttpResponse):
+        raise XApiError("provider_error", requests_attempted=1)
+    rate = _rate_limit_metadata(reply.headers)
+    if reply.status != 200:
+        raise XApiError(
+            _provider_failure_category(reply, allow_resource_unavailable=False),
+            status_code=reply.status,
+            rate_limit=rate,
+            requests_attempted=1,
+        )
+    try:
+        payload = _json_object(reply.body)
+        if payload is None:
+            raise XApiError("provider_error")
+        meta = payload.get("meta", {})
+        if not isinstance(meta, dict):
+            raise XApiError("provider_error")
+        if "data" in payload and payload["data"] is not None:
+            data = payload["data"]
+        elif type(meta.get("result_count")) is int and meta["result_count"] == 0:
+            data = []
+        else:
+            raise XApiError("provider_error")
+        if not isinstance(data, list) or len(data) > max_results:
+            raise XApiError("provider_error")
+        if "result_count" in meta and (
+            type(meta["result_count"]) is not int or meta["result_count"] != len(data)
+        ):
+            raise XApiError("provider_error")
+        next_token = meta.get("next_token")
+        if next_token is not None and (
+            not isinstance(next_token, str) or not next_token or _has_control_chars(next_token)
+        ):
+            raise XApiError("provider_error")
+        posts: list[dict] = []
+        seen_ids: set[str] = set()
+        for obj in data:
+            parsed = _parse_detail_post(obj)
+            if parsed["id"] in seen_ids:
+                raise XApiError("provider_error")
+            seen_ids.add(parsed["id"])
+            posts.append(parsed)
+        included_posts, included_users = _parse_includes(payload)
+    except XApiError as exc:
+        raise XApiError(exc.category, status_code=reply.status, rate_limit=rate, requests_attempted=1) from None
+    return PostSearchResult(
+        posts=tuple(posts),
+        included_posts=included_posts,
+        included_users=included_users,
+        truncated=next_token is not None,
+        rate_limit=rate,
+        requests_attempted=1,
+    )

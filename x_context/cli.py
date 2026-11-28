@@ -10,11 +10,13 @@ from typing import Callable, Mapping, TextIO
 
 from .bookmark_store import BookmarkStoreError, preflight as bookmark_preflight, save as save_bookmarks
 from .bookmark_enrichment import EnrichmentError, preflight as enrichment_preflight, save as save_enrichment
+from .bookmark_threads import ThreadStoreError
 from .local_context import ContextViewError, render as render_local_context
 from .combined_context import render as render_combined_context
 from . import page_capture
 from . import image_capture
 from . import bookmark_enrichment
+from . import bookmark_threads
 
 from .credential_lifecycle import (
     Clock,
@@ -27,7 +29,17 @@ from .credential_lifecycle import (
 )
 from .oauth import OAuthConfig, OAuthError, OAuthTokenResult, acquire_user_token
 from .url_parser import InvalidStatusUrl, extract_post_id
-from .x_api import RateLimitMetadata, Transport, XApiError, lookup_post_with_diagnostics, lookup_bookmarks, lookup_likes, lookup_posts
+from .x_api import (
+    RateLimitMetadata,
+    Transport,
+    XApiError,
+    _is_provider_compatible_post_id,
+    _is_safe_bearer_token,
+    lookup_bookmarks,
+    lookup_likes,
+    lookup_post_with_diagnostics,
+    lookup_posts,
+)
 
 _BEARER_ENV = "X_CONTEXT_BEARER_TOKEN"
 _USER_TOKEN_ENV = "X_CONTEXT_USER_ACCESS_TOKEN"
@@ -74,10 +86,18 @@ def _build_parser() -> argparse.ArgumentParser:
     image_command.add_argument("--post-id", required=True)
     image_command.add_argument("--media-index", type=int, default=0)
     image_command.add_argument("--confirm-network-request", action="store_true")
+    thread_parser = subparsers.add_parser("thread", add_help=True, allow_abbrev=False)
+    thread_subparsers = thread_parser.add_subparsers(dest="thread_action", required=True)
+    thread_command = thread_subparsers.add_parser("capture", allow_abbrev=False)
+    thread_command.add_argument("--post-id", required=True)
+    thread_command.add_argument("--max-results", type=int, default=bookmark_threads.DEFAULT_SEARCH_RESULTS)
+    thread_command.add_argument("--confirm-network-request", action="store_true")
     context_parser = subparsers.add_parser("context", add_help=True, allow_abbrev=False)
     context_parser.add_argument("--max-items", type=int, default=10)
     context_parser.add_argument("--include-saved-details", action="store_true",
                                 help="offline join with saved X metadata, page captures and verified images")
+    context_parser.add_argument("--post-id", default=None,
+                                help="only with --include-saved-details: render one saved bookmark by Post ID")
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", required=True)
     auth_subparsers.add_parser("login", add_help=True, allow_abbrev=False)
@@ -238,6 +258,128 @@ def _run_auth_login(
     return 0
 
 
+def _run_thread_capture(
+    *,
+    args: argparse.Namespace,
+    environ: Mapping[str, str],
+    transport: Transport | None,
+    stdout: TextIO,
+    stderr: TextIO,
+) -> int:
+    empty_rates = {
+        "post_lookup": _rate_limit_dict(RateLimitMetadata()),
+        "search_all": _rate_limit_dict(RateLimitMetadata()),
+    }
+
+    def emit_error(
+        category: str,
+        *,
+        attempted: int = 0,
+        persistence_attempted: bool = False,
+        persistence_may_have_occurred: bool = False,
+        rates: dict[str, dict[str, int | None]] | None = None,
+    ) -> int:
+        _write_json_line(stderr, {
+            "diagnostic": "error",
+            "operation": "thread",
+            "error_category": category,
+            "provider_requests_attempted": attempted,
+            "persistence_attempted": persistence_attempted,
+            "persistence_succeeded": False,
+            "persistence_may_have_occurred": persistence_may_have_occurred,
+            "rate_limits": empty_rates if rates is None else rates,
+        })
+        return _exit_code_for_category(category)
+
+    if (args.thread_action != "capture"
+            or not args.confirm_network_request
+            or not _is_provider_compatible_post_id(args.post_id)
+            or type(args.max_results) is not int
+            or not bookmark_threads.MIN_SEARCH_RESULTS <= args.max_results <= bookmark_threads.MAX_SEARCH_RESULTS):
+        return emit_error("invalid_input")
+
+    try:
+        store = bookmark_preflight(environ)
+        if store.value is None:
+            raise BookmarkStoreError("storage_error")
+        extras = bookmark_enrichment.preflight(store)
+        subject, target_post_id, seed_role, bookmark_relation = bookmark_threads.select_target(
+            store, extras, args.post_id
+        )
+        thread_snapshot = bookmark_threads.preflight(store)
+    except (BookmarkStoreError, EnrichmentError, ThreadStoreError) as exc:
+        return emit_error(exc.category)
+    except Exception:
+        return emit_error("storage_error")
+
+    bearer_token = environ.get(_BEARER_ENV)
+    if not _is_safe_bearer_token(bearer_token):
+        return emit_error("configuration_error")
+
+    try:
+        result = bookmark_threads.collect_thread(
+            bookmark_post_id=args.post_id,
+            target_post_id=target_post_id,
+            seed_role=seed_role,
+            bookmark_relation_to_target=bookmark_relation,
+            bearer_token=bearer_token,
+            max_results=args.max_results,
+            transport=transport,
+        )
+    except XApiError as exc:
+        lookup_rate = exc.post_lookup_rate_limit if hasattr(exc, "post_lookup_rate_limit") else exc.rate_limit
+        search_rate = exc.rate_limit if hasattr(exc, "post_lookup_rate_limit") else RateLimitMetadata()
+        return emit_error(
+            exc.category,
+            attempted=exc.requests_attempted,
+            rates={
+                "post_lookup": _rate_limit_dict(lookup_rate),
+                "search_all": _rate_limit_dict(search_rate),
+            },
+        )
+
+    rates = {
+        "post_lookup": _rate_limit_dict(result.post_lookup_rate_limit),
+        "search_all": _rate_limit_dict(result.search_rate_limit),
+    }
+    try:
+        bookmark_threads.save(thread_snapshot, subject_id=subject, record=result.record)
+    except ThreadStoreError as exc:
+        return emit_error(
+            exc.category,
+            attempted=result.requests_attempted,
+            persistence_attempted=True,
+            persistence_may_have_occurred=exc.may_have_occurred,
+            rates=rates,
+        )
+
+    _write_json_line(stdout, {
+        "operation": "thread",
+        "bookmark_post_id": args.post_id,
+        "target_post_id": target_post_id,
+        "seed_role": seed_role,
+        "search_state": result.record["search_state"],
+        "search_truncated": result.record["search_truncated"],
+        "completeness": result.record["completeness"],
+        "thread_post_count": len(result.record["thread_posts"]),
+        "referenced_post_count": len(result.record["referenced_posts"]),
+        "persistence_succeeded": True,
+    })
+    _write_json_line(stderr, {
+        "diagnostic": "usage",
+        "operation": "thread",
+        "provider_requests_attempted": result.requests_attempted,
+        "returned_post_count": len(result.record["thread_posts"]),
+        "search_returned_count": result.search_returned_count,
+        "search_max_results": args.max_results,
+        "search_truncated": result.record["search_truncated"],
+        "rate_limits": rates,
+        "persistence_attempted": True,
+        "persistence_succeeded": True,
+    })
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -270,6 +412,12 @@ def main(
         if selected_argv and selected_argv[0] == "context":
             _write_json_line(selected_stderr, {
                 "diagnostic": "error", "operation": "context",
+                "error_category": "invalid_input", "provider_requests_attempted": 0,
+            })
+            return 2
+        if selected_argv and selected_argv[0] == "thread":
+            _write_json_line(selected_stderr, {
+                "diagnostic": "error", "operation": "thread",
                 "error_category": "invalid_input", "provider_requests_attempted": 0,
             })
             return 2
@@ -363,9 +511,21 @@ def main(
         })
         return 2
 
+    if args.command == "thread":
+        return _run_thread_capture(
+            args=args,
+            environ=selected_environ,
+            transport=transport,
+            stdout=selected_stdout,
+            stderr=selected_stderr,
+        )
+
     if args.command == "context":
         # Explicit local-only display: no credentials, provider request or write.
-        if type(args.max_items) is not int or not 1 <= args.max_items <= 10:
+        if (type(args.max_items) is not int or not 1 <= args.max_items <= 10
+                or (args.post_id is not None and (
+                    not args.include_saved_details or not _is_provider_compatible_post_id(args.post_id)
+                ))):
             category = "invalid_input"
         else:
             try:
@@ -386,12 +546,14 @@ def main(
                     else:
                         pages = page_capture.preflight(snapshot, metadata)
                         images = image_capture.preflight(snapshot, metadata)
+                    threads = bookmark_threads.preflight(snapshot)
                     view = render_combined_context(
-                        snapshot, metadata, pages, images, max_items=args.max_items)
+                        snapshot, metadata, pages, images,
+                        threads=threads, max_items=args.max_items, post_id=args.post_id)
                 else:
                     view = render_local_context(snapshot.value, max_items=args.max_items)
             except (BookmarkStoreError, EnrichmentError, page_capture.PageCaptureError,
-                    image_capture.ImageCaptureError, ContextViewError) as exc:
+                    image_capture.ImageCaptureError, ThreadStoreError, ContextViewError) as exc:
                 category = exc.category
             except Exception:
                 category = "storage_error"
