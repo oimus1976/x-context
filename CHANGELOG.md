@@ -14,6 +14,7 @@
   - m-1: a redirect to X/`t.co` returned by the last allowed GET is `blocked_target`, not `redirect_limit` (decided locally; no extra request).
   - m-2: the network-observed final URL is shown also for `http_error` and other non-captured states.
   - Add 7 synthetic tests (26 in total), including a 50-record worst-case output-bound check.
+- Remediate the remaining M-1 from independent L2 delta re-review 6096632061 (at `e6f5cd9`): the technical `_layout` no longer strips newlines in preformatted blocks or from the whole excerpt, so leading and trailing blank code lines (in `pre` and Gist-style empty code cells) are kept in the saved excerpt and the Markdown fence, and they count toward the 4096-character `excerpt_truncated` boundary. Ordinary text is still whitespace-normalized. Add 3 synthetic tests (29 in total).
 
 ## Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged in PR #79)
 

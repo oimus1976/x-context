@@ -35,8 +35,15 @@ longer than any backtick run; section bound 8x record bytes + labels with
 allowed GET recorded as `blocked_target` without an extra request; m-2 observed
 final URL shown for non-captured states. The review's reproductions were RED
 before (8 failing) and GREEN after; 26/26 thread-page tests, 80 related tests and
-562 product tests OK (skipped 1). Synthetic fakes only. Exact-head CI and
-independent L2 delta re-review on the new HEAD are pending; a real Gist UAT,
+562 product tests OK (skipped 1). Exact-head CI at `e6f5cd9` SUCCESS.
+Independent L2 delta re-review 6096632061 at `e6f5cd9`: M-2, m-1 and m-2
+resolved; M-1 still open because leading/trailing blank code lines were
+stripped. Remediation: the technical `_layout` keeps all newlines of
+preformatted blocks and of the joined excerpt (ordinary text stays
+normalized). Reproductions were RED before (3 tests; 5 failures counting each
+4095/4096/4097 case) and GREEN after; 29/29 thread-page tests, 83 related and 565
+product tests OK (skipped 1). Synthetic fakes only. Exact-head CI and the M-1
+L2 re-review on the new HEAD are pending; a real Gist UAT,
 real sites, owner data, Ready and merge are NOT_RUN and remain human-final.
 
 ## Historical: Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged PR #79)

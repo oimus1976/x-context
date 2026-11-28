@@ -415,3 +415,9 @@ escape/backtick worst case rendered with `--post-id` and failing closed at
 256 KiB without it; m-1 redirect to `t.co` on the last allowed GET recorded as
 `blocked_target` with 3 GETs while the legacy path stays `redirect_limit`;
 m-2 observed final URL shown for `http_error`.
+
+L2 delta re-review 6096632061 adds 3 tests (29 total): leading, inner and
+trailing blank `pre` lines with tab indentation; leading, inner and trailing
+empty Gist code cells; saved excerpt equal to the Markdown fence content; and
+4095/4096/4097-character inputs with leading blank lines for the excerpt and
+`excerpt_truncated`.

@@ -72,7 +72,10 @@ publishing, AI re-assessment, general crawling, real-site extraction tuning.
 Independent L2 review 6096552383 (at `2ea14a5`) remediation: M-1 blank lines and
 tabs in code kept from storage to Markdown; M-2 literal fenced display; m-1
 redirect to X on the last allowed GET is `blocked_target`; m-2 observed final URL
-shown for non-captured states.
+shown for non-captured states. Delta re-review 6096632061 (at `e6f5cd9`): M-1
+completed by also keeping leading and trailing blank code lines (no newline
+stripping of preformatted text or of the excerpt; they count toward the
+4096-character truncation boundary).
 
 ## Acceptance criteria
 
