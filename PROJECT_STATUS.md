@@ -1,6 +1,59 @@
 # Project Status
 
-## Current: Issue #77 stage 2 — bookmark-anchored same-author thread collection (2026-11-25, Draft)
+## Current: Issue #77 stage 3 — one saved thread reference page (2026-11-28, Draft)
+
+Working branch: `issue-77-thread-page-capture`, based on GitHub `main`
+`7c8878c3c83bb765de07a1b84006b3d82a6e1bd6` (PR #79 merged; LOCAL CLOSEOUT PASS).
+Design: Issue #77 comment 7232454206; requirement and AC in
+`docs/specs/0009-thread-page-capture.md`. Adds `page capture --source-post-id
+<saved Post> --url-index <0..49>` for one URL already saved in a bookmark's
+thread record, reusing `page_capture.capture_one` with opt-in `deny_x_hosts`
+(X/Twitter/t.co refused initially and on every redirect) and a `technical`
+worker mode (code layout kept, `main`/`article` preferred, `excerpt_truncated`).
+Results go to a separate `bookmark-thread-pages-v1.json` via the shared
+`page_capture.atomic_replace`. `context --include-saved-details` shows them, or
+`stale_reference` when the current thread URL differs. The legacy page path,
+other stores and the request bounds are unchanged. Risk facets/level:
+`PRIVATE_DATA`, `CREDENTIALS`, `PLATFORM_DEPENDENT`, `SECURITY_BOUNDARY`
+(`HIGH_IMPACT`).
+Design decisions recorded during implementation: (1) the thread-page Markdown is
+its own section after the thread section instead of inline under each thread
+URL, so the stage-2 thread-section bound stays valid; it has its own
+record-derived bound for `--post-id`; (2) the atomic write was factored out of
+`page_capture.save` so both sidecars share one tested path; (3) a duplicate
+source Post is one source only if every occurrence has the same URL at the
+index; (4) the CLI `--url-index` default became `None`, mapped back to 0 for the
+legacy path.
+Evidence: RED 14/19 new tests failed before implementation, GREEN 19/19;
+`python -m unittest discover -s tests` 555 tests OK (skipped 1); `verify_repo`
+PASS; `git diff --check` PASS. Exact-head CI at `2ea14a5` SUCCESS.
+Independent L2 review 6096552383 at `2ea14a5`: CHANGES_REQUIRED (MAJOR 2, MINOR 2).
+Remediation (new path only): M-1 blank lines/empty Gist cells/tabs preserved to
+Markdown; M-2 literal fenced display of untrusted thread-page fields (fence
+longer than any backtick run; section bound 8x record bytes + labels with
+`--post-id`, 256 KiB cap unchanged otherwise); m-1 redirect to X on the last
+allowed GET recorded as `blocked_target` without an extra request; m-2 observed
+final URL shown for non-captured states. The review's reproductions were RED
+before (8 failing) and GREEN after; 26/26 thread-page tests, 80 related tests and
+562 product tests OK (skipped 1). Exact-head CI at `e6f5cd9` SUCCESS.
+Independent L2 delta re-review 6096632061 at `e6f5cd9`: M-2, m-1 and m-2
+resolved; M-1 still open because leading/trailing blank code lines were
+stripped. Remediation: the technical `_layout` keeps all newlines of
+preformatted blocks and of the joined excerpt (ordinary text stays
+normalized). Reproductions were RED before (3 tests; 5 failures counting each
+4095/4096/4097 case) and GREEN after; 29/29 thread-page tests, 83 related and 565
+product tests OK (skipped 1). Synthetic fakes only. Exact-head CI and the M-1
+L2 re-review on the new HEAD are pending; a real Gist UAT,
+real sites, owner data, Ready and merge are NOT_RUN and remain human-final.
+
+## Historical: Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged PR #79)
+
+Merged 2026-11-28 (`7c8878c`). Third owner-device live UAT at `8ca4460` PASS
+(2 GETs; 3 Posts with parent-child links; `note_post` full text; Gist URL
+saved; other records unchanged). Post-merge LOCAL CLOSEOUT PASS. The plan-only
+SAFE CLEANUP was BLOCKED by unrelated legacy worktrees (Git dubious ownership)
+and is deferred as a separate maintenance item. The Draft text below is kept as
+history.
 
 Working branch: `issue-77-bookmark-thread-collection`, based on GitHub `main`
 `1c15c1047a8da7b7d3d509941750365fb2e10201` (PR #78 merged).

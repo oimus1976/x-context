@@ -14,6 +14,7 @@ from .bookmark_threads import ThreadStoreError
 from .local_context import ContextViewError, render as render_local_context
 from .combined_context import render as render_combined_context
 from . import page_capture
+from . import thread_pages
 from . import image_capture
 from . import bookmark_enrichment
 from . import bookmark_threads
@@ -78,7 +79,10 @@ def _build_parser() -> argparse.ArgumentParser:
     page_subparsers = page_parser.add_subparsers(dest="page_action", required=True)
     page_command = page_subparsers.add_parser("capture", allow_abbrev=False)
     page_command.add_argument("--post-id", required=True)
-    page_command.add_argument("--url-index", type=int, default=0)
+    # Legacy default 0 is applied in main(); a thread page requires it explicitly.
+    page_command.add_argument("--url-index", type=int, default=None)
+    page_command.add_argument("--source-post-id", default=None,
+                              help="saved thread Post ID (Issue #77): capture its saved URL")
     page_command.add_argument("--confirm-network-request", action="store_true")
     image_parser = subparsers.add_parser("image", add_help=True, allow_abbrev=False)
     image_commands = image_parser.add_subparsers(dest="image_action", required=True)
@@ -380,6 +384,50 @@ def _run_thread_capture(
     return 0
 
 
+def _run_thread_page_capture(*, args, environ: Mapping[str, str], stdout: TextIO,
+                             stderr: TextIO) -> int:
+    """Issue #77 stage 3: one URL saved in a thread record; no X request."""
+    attempted = 0
+    if (args.page_action != "capture" or not args.confirm_network_request
+            or not _is_provider_compatible_post_id(args.post_id)
+            or not _is_provider_compatible_post_id(args.source_post_id)
+            or type(args.url_index) is not int
+            or not 0 <= args.url_index <= thread_pages.MAX_URL_INDEX):
+        category = "invalid_input"
+    else:
+        try:
+            store = bookmark_preflight(environ)
+            threads = bookmark_threads.preflight(store)
+            subject, url = thread_pages.select_url(
+                store, threads, args.post_id, args.source_post_id, args.url_index)
+            snapshot = thread_pages.preflight(store)
+            result = page_capture.capture_one(
+                url, at=page_capture.utcnow(), deny_x_hosts=True, technical=True)
+            # A target blocked before connecting makes no external request.
+            attempted = 0 if result["state"] == "blocked_target" and result["final_url"] is None else None
+            thread_pages.save(snapshot, subject_id=subject, bookmark_post_id=args.post_id,
+                              source_post_id=args.source_post_id, url_index=args.url_index,
+                              result=result)
+        except (BookmarkStoreError, ThreadStoreError, page_capture.PageCaptureError) as exc:
+            category = exc.category
+        except Exception:
+            category = "storage_error"
+        else:
+            _write_json_line(stdout, {
+                "operation": "page", "post_id": args.post_id,
+                "source_post_id": args.source_post_id, "url_index": args.url_index,
+                "state": result["state"], "http_status": result["http_status"],
+                "excerpt_truncated": result["excerpt_truncated"],
+                "persistence_succeeded": True,
+            })
+            return 0
+    _write_json_line(stderr, {
+        "diagnostic": "error", "operation": "page", "error_category": category,
+        "external_requests_attempted": attempted,
+    })
+    return 2
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -431,7 +479,13 @@ def main(
         )
         return 2
 
+    if args.command == "page" and args.source_post_id is not None:
+        return _run_thread_page_capture(args=args, environ=selected_environ,
+                                        stdout=selected_stdout, stderr=selected_stderr)
+
     if args.command == "page":
+        if args.url_index is None:
+            args.url_index = 0
         # Explicit one-Post/one-URL operation, no X credentials or requests.
         if (args.page_action != "capture" or not args.confirm_network_request
                 or not isinstance(args.post_id, str) or not args.post_id.isascii()
@@ -547,9 +601,12 @@ def main(
                         pages = page_capture.preflight(snapshot, metadata)
                         images = image_capture.preflight(snapshot, metadata)
                     threads = bookmark_threads.preflight(snapshot)
+                    # Read independently of the enrichment/AC-2 page sidecars.
+                    saved_thread_pages = thread_pages.preflight(snapshot)
                     view = render_combined_context(
                         snapshot, metadata, pages, images,
-                        threads=threads, max_items=args.max_items, post_id=args.post_id)
+                        threads=threads, thread_pages=saved_thread_pages,
+                        max_items=args.max_items, post_id=args.post_id)
                 else:
                     view = render_local_context(snapshot.value, max_items=args.max_items)
             except (BookmarkStoreError, EnrichmentError, page_capture.PageCaptureError,

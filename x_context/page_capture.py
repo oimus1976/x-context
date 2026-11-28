@@ -244,7 +244,24 @@ def _transport(url: str, vetted_ips: tuple[str, ...],
         conn.close()
 
 
-def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | None, str | None, str | None]:
+_X_HOSTS = ("x.com", "twitter.com", "t.co")
+
+
+def is_x_host(host: str) -> bool:
+    """X/Twitter hosts (and subdomains) are never an external page target."""
+    host = host.lower().rstrip(".")
+    return any(host == name or host.endswith("." + name) for name in _X_HOSTS)
+
+
+def is_x_url(url: object) -> bool:
+    try:
+        return is_x_host(urlsplit(url).hostname or "")
+    except Exception:
+        return True
+
+
+def _extract_html(body: bytes, *, deadline: float | None = None,
+                  technical: bool = False) -> tuple:
     """Run the trusted stdlib HTML parser in one killable, short-lived child.
 
     Python HTMLParser.close() is not interruptible; a malicious 512-KiB tail
@@ -261,7 +278,7 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
     env = {name: os.environ[name] for name in ("SystemRoot", "WINDIR")
            if name in os.environ}
     worker = subprocess.Popen(
-        [sys.executable, "-I", str(worker_path)],
+        [sys.executable, "-I", str(worker_path)] + (["--technical"] if technical else []),
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         env=env, close_fds=True,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -280,11 +297,16 @@ def _extract_html(body: bytes, *, deadline: float | None = None) -> tuple[str | 
     if worker.returncode != 0 or len(output) > 32768:
         raise ValueError("HTML worker failed")
     value = json.loads(output.decode("utf-8"))
-    if (not isinstance(value, list) or len(value) != 3 or
-        any(v is not None and not isinstance(v, str) for v in value) or
+    if not isinstance(value, list) or len(value) != (4 if technical else 3):
+        raise ValueError("invalid worker result")
+    if technical:
+        truncated = value.pop()
+        if type(truncated) is not bool or (truncated and value[2] is None):
+            raise ValueError("invalid worker result")
+    if (any(v is not None and not isinstance(v, str) for v in value) or
         any(v is not None and len(v) > limit for v, limit in zip(value, (512, 1024, MAX_PAGE_TEXT)))):
         raise ValueError("invalid worker result")
-    return tuple(value)
+    return tuple(value) + ((truncated,) if technical else ())
 
 
 def _get_header(headers: Mapping[str, str], name: str) -> str | None:
@@ -295,8 +317,15 @@ def _get_header(headers: Mapping[str, str], name: str) -> str | None:
 
 
 def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
-                transport: Transport | None = None) -> dict:
-    """Returns a bounded result for a single explicitly selected HTTP(S) URL."""
+                transport: Transport | None = None, deny_x_hosts: bool = False,
+                technical: bool = False) -> dict:
+    """Returns a bounded result for a single explicitly selected HTTP(S) URL.
+
+    ``deny_x_hosts`` (thread pages) blocks X/Twitter/t.co on the initial URL
+    and on every redirect hop before DNS. ``technical`` selects the layout-
+    preserving worker mode and adds ``excerpt_truncated`` to the result. Both
+    default off, leaving the AC-2 legacy behavior and result shape unchanged.
+    """
     if not _timestamp(at):
         raise PageCaptureError("invalid_input")
     selected_resolver = _resolver if resolver is None else resolver
@@ -308,11 +337,14 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
     code = None
     state = "invalid_response"
     title = description = excerpt = None
+    truncated = False
     try:
         for redirect in range(MAX_REDIRECTS + 1):
             _remaining(deadline)
             try:
                 p, host, port = _url_parts(current)
+                if deny_x_hosts and is_x_host(host):
+                    raise ValueError("X host is not a page target")
                 # Fragments are client-side anchors, never HTTP request bytes.
                 current = p._replace(fragment="").geturl()
                 ips = selected_resolver(host, port)
@@ -353,6 +385,12 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
                 if not location:
                     state = "invalid_response"
                     break
+                if deny_x_hosts and is_x_url(urljoin(current, location)):
+                    # Decided locally, before the redirect-count limit, so a
+                    # redirect to X is blocked_target even on the last allowed
+                    # GET (review m-1). No further request is made.
+                    state = "blocked_target"
+                    break
                 if redirect == MAX_REDIRECTS:
                     state = "redirect_limit"
                     break
@@ -370,7 +408,10 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
                 state = "invalid_response"
             else:
                 try:
-                    title, description, excerpt = _extract_html(reply.body, deadline=deadline)
+                    extracted = _extract_html(reply.body, deadline=deadline, technical=technical)
+                    title, description, excerpt = extracted[:3]
+                    if technical:
+                        truncated = extracted[3]
                 except PageTimeout:
                     state = "timeout"
                     break
@@ -382,11 +423,16 @@ def capture_one(url: str, *, at: str, resolver: Resolver | None = None,
         state = "invalid_response"
     if state == "timeout":
         title = description = excerpt = None
-    return {
+    if state != "captured":
+        truncated = False
+    result = {
         "requested_url": original, "final_url": final_url,
         "http_status": code, "retrieved_at": at, "state": state,
         "title": title, "description": description, "excerpt": excerpt,
     }
+    if technical:
+        result["excerpt_truncated"] = truncated
+    return result
 
 
 def _valid_record(record: object) -> bool:
@@ -472,9 +518,6 @@ def preflight(bookmarks: StoreSnapshot, enrichment: EnrichmentSnapshot) -> PageS
 
 def save(snapshot: PageSnapshot, *, subject_id: str, post_id: str, url_index: int,
          result: dict) -> None:
-    tmp = None
-    fd = None
-    replaced = False
     try:
         record = {"post_id": post_id, "url_index": url_index, **result}
         if not _valid_record(record):
@@ -485,11 +528,25 @@ def save(snapshot: PageSnapshot, *, subject_id: str, post_id: str, url_index: in
         if data["subject_id"] != subject_id:
             raise ValueError("subject mismatch")
         data["items"][f"{post_id}:{url_index}"] = record
+    except Exception:
+        raise PageCaptureError() from None
+    atomic_replace(snapshot.path, snapshot.raw, data, prefix=".bookmark-pages-")
+
+
+def atomic_replace(path: Path, expected_raw: bytes | None, data: dict, *, prefix: str) -> None:
+    """Write canonical JSON via temp+fsync, compare-before-replace and read-back.
+
+    Shared by the AC-2 page sidecar and the Issue #77 thread-page sidecar.
+    """
+    tmp = None
+    fd = None
+    replaced = False
+    try:
         raw = (json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
         if len(raw) > MAX_STORE_BYTES:
             raise ValueError("store too large")
-        snapshot.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, name = tempfile.mkstemp(prefix=".bookmark-pages-", suffix=".tmp", dir=snapshot.path.parent)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=path.parent)
         tmp = Path(name)
         with os.fdopen(fd, "wb") as stream:
             fd = None
@@ -499,11 +556,11 @@ def save(snapshot: PageSnapshot, *, subject_id: str, post_id: str, url_index: in
             os.fsync(stream.fileno())
         if tmp.read_bytes() != raw:
             raise ValueError("temp mismatch")
-        if (snapshot.path.read_bytes() if snapshot.path.exists() else None) != snapshot.raw:
+        if (path.read_bytes() if path.exists() else None) != expected_raw:
             raise ValueError("changed store")
-        os.replace(tmp, snapshot.path)
+        os.replace(tmp, path)
         replaced = True
-        if snapshot.path.read_bytes() != raw:
+        if path.read_bytes() != raw:
             raise OSError("post-write mismatch")
     except Exception:
         raise PageCaptureError(may_have_occurred=replaced) from None

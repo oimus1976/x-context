@@ -392,3 +392,32 @@ REC-07 L2 remediation: guard-only regression rejects Windows ADS, device names
 (including superscript aliases), controls, normalization aliases and unsupported
 UNC/extended/device namespaces without opening any such path; normal local
 Unicode/interior-space filenames remain supported.
+
+
+Issue #77 stage 3 / SPEC-0009: `tests/test_thread_page_capture.py` (19 tests)
+covers AC-1 selection of a saved thread/referenced Post URL (unwound > expanded >
+url), rejection before DNS/transport and writes for missing confirmation, missing
+or out-of-range `--url-index`, unknown bookmark/source/index, bookmark without a
+thread record, X/`t.co` URLs, ambiguous duplicate source URLs and mixed subjects;
+AC-2 fake-transport capture with redirect re-validation, redirect to X as
+`blocked_target`, distinct HTTP failure state, technical extraction of `pre` and
+Gist-style code layout with `main` preference, recorded truncation, and unchanged
+legacy extraction; AC-3 separate sidecar persistence preserving other records and
+files, and corrupt/inconsistent/X-target/mixed-subject stores stopping before
+network; AC-4 offline Markdown (with and without `--post-id`), `stale_reference` for
+changed URLs or missing thread records without old text, no new section without
+the sidecar, and quoted untrusted excerpts. Real Gist/site access is NOT_RUN.
+
+L2 review 6096552383 remediation adds 7 tests (26 total): M-1 blank lines,
+empty Gist cells and tabs from storage to Markdown; M-2 literal fenced fields
+that Markdown/HTML and in-value fences cannot escape, plus a 50-record
+escape/backtick worst case rendered with `--post-id` and failing closed at
+256 KiB without it; m-1 redirect to `t.co` on the last allowed GET recorded as
+`blocked_target` with 3 GETs while the legacy path stays `redirect_limit`;
+m-2 observed final URL shown for `http_error`.
+
+L2 delta re-review 6096632061 adds 3 tests (29 total): leading, inner and
+trailing blank `pre` lines with tab indentation; leading, inner and trailing
+empty Gist code cells; saved excerpt equal to the Markdown fence content; and
+4095/4096/4097-character inputs with leading blank lines for the excerpt and
+`excerpt_truncated`.
