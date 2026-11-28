@@ -440,6 +440,49 @@ class ThreadPageCaptureTests(unittest.TestCase):
         self.assertEqual(literal_fields(view)[EXCERPT_LABEL], expected)
         self.assertNotIn("\\u0009", view)
 
+    def capture_and_view(self, body):
+        self.replies = [page_capture.PageResponse(200, {"Content-Type": "text/html"}, body)]
+        rc, stdout, _ = self.run_cmd("--source-post-id", "101", "--url-index", "0")
+        self.assertEqual(rc, 0)
+        record = self.stored()["items"]["100:101:0"]
+        _, view, _ = self.context("--post-id", "100")
+        return json.loads(stdout), record, literal_fields(view).get(EXCERPT_LABEL)
+
+    def test_M1r_pre_leading_inner_trailing_blank_lines_and_tabs_kept(self):
+        code = "\n\n\n\tfirst\n\n\n    last\n\n\n"
+        _, record, shown = self.capture_and_view(
+            ("<html><body><main><pre>" + code + "</pre></main></body></html>").encode())
+        self.assertEqual(record["excerpt"], code)
+        self.assertEqual(shown, code)
+        self.assertFalse(record["excerpt_truncated"])
+
+    def test_M1r_gist_table_leading_inner_trailing_empty_code_lines_kept(self):
+        def row(n, text):
+            return (f'<tr><td class="blob-num" data-line-number="{n}"></td>'
+                    f'<td class="blob-code blob-code-inner">{text}</td></tr>')
+        cells = ["", "", "alpha", "", "", "", "\tomega", "", ""]
+        body = ("<html><body><main><table>"
+                + "".join(row(n, text) for n, text in enumerate(cells, 1))
+                + "</table></main></body></html>").encode()
+        expected = "\n".join(cells)
+        _, record, shown = self.capture_and_view(body)
+        self.assertEqual(record["excerpt"], expected)
+        self.assertEqual(shown, expected)
+
+    def test_M1r_truncation_boundary_counts_code_blank_lines(self):
+        for total in (4095, 4096, 4097):
+            with self.subTest(total=total):
+                if self.store.exists():
+                    self.store.unlink()
+                code = "\n\n" + "y" * (total - 2)
+                out, record, shown = self.capture_and_view(
+                    ("<html><body><main><pre>" + code + "</pre></main></body></html>").encode())
+                expected = code[:page_capture.MAX_PAGE_TEXT]
+                self.assertEqual(record["excerpt"], expected)
+                self.assertEqual(shown, expected)
+                self.assertEqual(record["excerpt_truncated"], total > page_capture.MAX_PAGE_TEXT)
+                self.assertEqual(out["excerpt_truncated"], total > page_capture.MAX_PAGE_TEXT)
+
     def test_M2_untrusted_markdown_is_literal_and_cannot_close_fence(self):
         hostile = ("**literal** [link](https://evil.example/) ![img](https://evil.example/i.png)\n"
                    "<b>html</b> _em_ `code`\n````\n```text\n> quote")
