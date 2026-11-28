@@ -102,6 +102,9 @@ def _build_parser() -> argparse.ArgumentParser:
                                 help="offline join with saved X metadata, page captures and verified images")
     context_parser.add_argument("--post-id", default=None,
                                 help="only with --include-saved-details: render one saved bookmark by Post ID")
+    context_parser.add_argument("--full-page-text", action="store_true",
+                                help="only with --include-saved-details --post-id: show saved thread "
+                                     "page text in full (offline, read-only, bounded total)")
     auth_parser = subparsers.add_parser("auth", add_help=True, allow_abbrev=False)
     auth_subparsers = auth_parser.add_subparsers(dest="auth_command", required=True)
     auth_subparsers.add_parser("login", add_help=True, allow_abbrev=False)
@@ -579,7 +582,8 @@ def main(
         if (type(args.max_items) is not int or not 1 <= args.max_items <= 10
                 or (args.post_id is not None and (
                     not args.include_saved_details or not _is_provider_compatible_post_id(args.post_id)
-                ))):
+                ))
+                or (args.full_page_text and (not args.include_saved_details or args.post_id is None))):
             category = "invalid_input"
         else:
             try:
@@ -606,7 +610,8 @@ def main(
                     view = render_combined_context(
                         snapshot, metadata, pages, images,
                         threads=threads, thread_pages=saved_thread_pages,
-                        max_items=args.max_items, post_id=args.post_id)
+                        max_items=args.max_items, post_id=args.post_id,
+                        full_page_text=args.full_page_text)
                 else:
                     view = render_local_context(snapshot.value, max_items=args.max_items)
             except (BookmarkStoreError, EnrichmentError, page_capture.PageCaptureError,

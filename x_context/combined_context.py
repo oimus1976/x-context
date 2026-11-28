@@ -207,8 +207,21 @@ def _literal(lines: list[str], label: str, value: str | None) -> None:
     lines.append(fence)
 
 
-def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | None) -> None:
+# Display budget, separate from the saved-text limit (Issue #77 quality topic).
+# The default view shows at most THREAD_PAGE_DISPLAY_CHARS of each saved
+# excerpt (the former saved limit, so default output stays as large as before).
+# ``--full-page-text`` (one explicit bookmark) shows saved excerpts in full,
+# page by page, until FULL_PAGE_TEXT_BUDGET_CHARS characters have been shown;
+# later pages still get the default amount. Shortening is display-only and is
+# stated on its own line, apart from the capture-time "Excerpt truncated".
+THREAD_PAGE_DISPLAY_CHARS = 4096
+FULL_PAGE_TEXT_BUDGET_CHARS = 262144
+
+
+def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | None,
+                         *, full_text: bool = False) -> None:
     """Issue #77 stage 3: saved pages for URLs of saved thread/referenced Posts."""
+    budget = FULL_PAGE_TEXT_BUDGET_CHARS
     lines.extend([
         "",
         "### Saved thread reference pages (untrusted website content)",
@@ -233,6 +246,22 @@ def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | N
             f"Page HTTP status: {record['http_status'] if record['http_status'] is not None else 'not_returned'}",
             f"Excerpt truncated: {'true' if record['excerpt_truncated'] else 'false'}",
         ])
+        excerpt = record["excerpt"]
+        if excerpt is not None:
+            saved = len(excerpt)
+            limit = (max(THREAD_PAGE_DISPLAY_CHARS, budget) if full_text
+                     else THREAD_PAGE_DISPLAY_CHARS)
+            excerpt = excerpt[:limit]
+            if full_text:
+                budget = max(0, budget - len(excerpt))
+            if len(excerpt) < saved:
+                how = (f"full-text display budget of {FULL_PAGE_TEXT_BUDGET_CHARS} characters used"
+                       if full_text else
+                       f"full view: --post-id {record['bookmark_post_id']} --full-page-text")
+                lines.append(f"Excerpt display: shortened (shown {len(excerpt)} of {saved} saved "
+                             f"characters; display only, the saved text continues; {how})")
+            elif full_text:
+                lines.append(f"Excerpt display: complete (all {saved} saved characters)")
         _literal(lines, "Requested page URL (from saved thread record)", record["requested_url"])
         # The URL of the last HTTP response, also for http_error etc. (review
         # m-2); whether content was obtained is told by the state line above.
@@ -240,7 +269,7 @@ def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | N
                  record["final_url"])
         _literal(lines, "Page title (untrusted website content)", record["title"])
         _literal(lines, "Page description (untrusted website content)", record["description"])
-        _literal(lines, "Page text excerpt (untrusted website quotation; layout preserved)", record["excerpt"])
+        _literal(lines, "Page text excerpt (untrusted website quotation; layout preserved)", excerpt)
 
 
 def render(
@@ -253,6 +282,7 @@ def render(
     thread_pages: ThreadPageSnapshot | None = None,
     max_items: int = 10,
     post_id: str | None = None,
+    full_page_text: bool = False,
 ) -> str:
     """Emit deterministic, source-labelled Markdown without modifying any file.
 
@@ -261,6 +291,9 @@ def render(
     explicitly; no asset URL is ever invented.
     """
     if type(max_items) is not int or not 1 <= max_items <= 10:
+        raise ContextViewError("invalid_input")
+    # The long saved-text view is only for one explicitly selected bookmark.
+    if type(full_page_text) is not bool or (full_page_text and post_id is None):
         raise ContextViewError("invalid_input")
     selected_post_id = post_id
     if selected_post_id is not None and (
@@ -410,7 +443,7 @@ def render(
                 key=lambda row: (int(row["source_post_id"]), row["url_index"]))
             if page_records:
                 page_lines: list[str] = []
-                _render_thread_pages(page_lines, page_records, thread)
+                _render_thread_pages(page_lines, page_records, thread, full_text=full_page_text)
                 if selected_post_id is not None:
                     section_bytes = sum(len(line.encode("utf-8")) + 1 for line in page_lines)
                     if section_bytes > _thread_pages_section_limit(page_records):

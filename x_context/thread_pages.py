@@ -74,7 +74,11 @@ def _valid_record(record: object) -> bool:
         return False
     if not _timestamp(record["retrieved_at"]) or record["state"] not in page_capture._STATES:
         return False
-    for key, maximum in (("title", 512), ("description", 1024), ("excerpt", page_capture.MAX_PAGE_TEXT)):
+    # Technical-mode excerpt limit; records saved under the former 4096-
+    # character limit stay valid (schema "1" unchanged). An older x-context
+    # build rejects a store holding a longer excerpt (fails closed).
+    for key, maximum in (("title", 512), ("description", 1024),
+                         ("excerpt", page_capture.TECHNICAL_MAX_PAGE_TEXT)):
         if record[key] is not None and (not isinstance(record[key], str) or len(record[key]) > maximum):
             return False
     if type(record["excerpt_truncated"]) is not bool:
