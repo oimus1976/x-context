@@ -1155,5 +1155,94 @@ class BookmarkThreadTests(unittest.TestCase):
         self.assertEqual((rc_bad, out_bad), (2, ""))
         self.assertEqual(json.loads(err_bad)["error_category"], "storage_error")
 
+    def _capture_long_form_thread(self, note_text: str) -> None:
+        """202 -> 203 -> 204 -> 205 same-author self-replies, each with the given long-form note."""
+        transport = FakeThreadTransport([
+            json_reply(200, {
+                "data": self._bob("202", "short head", "202", 0, note_post={"text": note_text}),
+                "includes": {"users": [{"id": "1002", "username": "bob"}]},
+            }),
+            json_reply(200, {
+                "data": [
+                    self._bob("205", "short head", "202", 3, "204", note_post={"text": note_text}),
+                    self._bob("204", "short head", "202", 2, "203", note_post={"text": note_text}),
+                    self._bob("203", "short head", "202", 1, "202", note_post={"text": note_text}),
+                ],
+                "includes": {"users": [{"id": "1002", "username": "bob"}]},
+                "meta": {"result_count": 3},
+            }),
+        ])
+        rc, out, err = self.run_cli(
+            ["thread", "capture", "--post-id", "202", "--confirm-network-request"], transport=transport)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(transport.requests), 2)
+        self.assertEqual(json.loads(out)["thread_post_count"], 4)
+
+    def test_m2_long_form_thread_over_combined_cap_renders_fully_for_selected_bookmark(self) -> None:
+        """L2 M-2 reproduction: 4 x 24,000 Japanese chars (72,000 UTF-8 bytes each)."""
+        note = "長" * 24000
+        self._capture_long_form_thread(note)
+        record = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]["202"]
+        posts = record["thread_posts"]
+        self.assertEqual([p["id"] for p in posts], ["202", "203", "204", "205"])
+        self.assertEqual([p["replied_to_id"] for p in posts], [None, "202", "203", "204"])
+        self.assertEqual({p["text_source"] for p in posts}, {"note_post"})
+        self.assertTrue(all(p["text"] == note for p in posts))
+
+        stores = (self.main_store, self.thread_store)
+        before = [p.read_bytes() for p in stores]
+        rc, md, err = self.run_cli(
+            ["context", "--include-saved-details", "--post-id", "202", "--max-items", "1"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(err, "")
+        self.assertGreater(len(md.encode("utf-8")), 256 * 1024)
+        self.assertEqual([p.read_bytes() for p in stores], before)
+        # Full text, never silently truncated, once per thread post.
+        self.assertEqual(md.count("> " + note + "\n"), 4)
+        self.assertIn("Search query used: conversation_id:202 from:bob to:bob -is:retweet", md)
+        self.assertIn("Thread post count: 4", md)
+        self.assertIn("Thread completeness: unverified_single_page", md)
+        expected_relations = ["root", "replied_to 202 (in_thread)",
+                              "replied_to 203 (in_thread)", "replied_to 204 (in_thread)"]
+        for index, (pid, relation) in enumerate(zip(["202", "203", "204", "205"], expected_relations), 1):
+            section = md.split(f"#### Thread post {index} ({pid})\n", 1)[1]
+            section = section.split("\n#### ", 1)[0]
+            self.assertIn(f"Post URL (ID-derived, not live-verified): https://x.com/i/web/status/{pid}", section)
+            self.assertIn("Author (X-provided): @bob (id: 1002)", section)
+            self.assertIn(f"Relation in thread: {relation}", section)
+            self.assertIn("Text source: note_post (full long-form text returned by X)", section)
+            self.assertIn("> " + note, section)
+
+        # The existing 256 KiB combined bound still applies without an explicit selection.
+        rc_all, out_all, err_all = self.run_cli(["context", "--include-saved-details"])
+        self.assertEqual((rc_all, out_all), (2, ""))
+        self.assertEqual(json.loads(err_all)["error_category"], "storage_error")
+        rc_plain, plain, _ = self.run_cli(["context"])
+        self.assertEqual(rc_plain, 0)
+        self.assertNotIn("長長長", plain)
+        self.assertEqual([p.read_bytes() for p in stores], before)
+
+    def test_m2_escape_heavy_max_note_thread_stays_within_derived_bound(self) -> None:
+        """Worst-case Markdown escaping of max-size notes still renders and stays bounded."""
+        note = "&" * x_api._MAX_NOTE_TEXT_BYTES  # html.escape expands each byte 5x
+        self._capture_long_form_thread(note)
+        rc, md, err = self.run_cli(["context", "--include-saved-details", "--post-id", "202"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(md.count("> " + "&amp;" * len(note) + "\n"), 4)
+        self.assertNotIn("&&", md)
+
+        from x_context import combined_context
+        record = json.loads(self.thread_store.read_text(encoding="utf-8"))["items"]["202"]
+        limit = combined_context._thread_section_limit(record)
+        section = md.split("\n### Collected same-author X thread", 1)[1].split("\n### Saved images", 1)[0]
+        self.assertLessEqual(len(section.encode("utf-8")), limit)
+        # The derived bound is enforced fail-closed, not silently truncated.
+        with patch.object(combined_context, "_thread_section_limit", return_value=1024):
+            rc_cap, out_cap, err_cap = self.run_cli(
+                ["context", "--include-saved-details", "--post-id", "202"])
+        self.assertEqual((rc_cap, out_cap), (2, ""))
+        self.assertEqual(json.loads(err_cap)["error_category"], "storage_error")
+
+
 if __name__ == "__main__":
     unittest.main()

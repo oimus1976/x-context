@@ -31,6 +31,14 @@ request `note_post` and prefer a valid long-form note, merging its URL entities 
 per-Post `text_source`; legacy thread records stay readable. Request bounds are unchanged.
 Live `note_post` acceptance and `to:` self-reply matching are next-UAT verification items;
 the next UAT reuses the already saved bookmark without a new bookmark fetch.
+Independent L2 re-review (`#issuecomment-7161565558` at `ab5de36`) found MAJOR M-2:
+a correctly saved long-form thread could exceed the 256 KiB combined Markdown cap, so the
+selected `--post-id` view failed as `storage_error`. Remediation (display only): for an
+explicit `--post-id` selection the thread section is bounded by the saved record
+(6x canonical JSON bytes + fixed per-entry labels; record within the 16 MiB store) and
+rendered in full; the rest of the output keeps 256 KiB, and the no-`--post-id` view,
+plain `context`, storage format and request bounds are unchanged. The reviewer's
+4 x 24,000-character reproduction was RED before and GREEN after (synthetic only).
 Only synthetic fake-transport tests were run locally; exact-head CI and independent
 L2 re-review on the new HEAD are pending; real X API access, billing, writes to owner
 `%LOCALAPPDATA%\x-context\data`, Stage 3 external-article fetch, Ready, and merge are

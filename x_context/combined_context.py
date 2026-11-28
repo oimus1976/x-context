@@ -5,6 +5,8 @@ preflights each versioned sidecar before passing it to this renderer.
 """
 from __future__ import annotations
 
+import json
+
 from . import image_capture
 from .bookmark_enrichment import Snapshot as EnrichmentSnapshot
 from .bookmark_store import StoreSnapshot, _validate
@@ -15,6 +17,28 @@ from .page_capture import PageSnapshot
 
 _MAX_ITEM_BYTES = 8192
 _MAX_OUTPUT_BYTES = 256 * 1024
+# A saved same-author thread (Issue #77 stage 2) may legitimately exceed the
+# combined cap above: long-form notes are up to 102,400 UTF-8 bytes per Post.
+# For one explicitly selected bookmark (``post_id``) its thread section is
+# therefore bounded by the validated saved record itself rather than by
+# _MAX_OUTPUT_BYTES, so anything that could be saved can also be displayed in
+# full. Every variable byte rendered comes from the record; _visible_source_line
+# expands one canonical-JSON byte to at most 6 output bytes (a 1-byte control
+# character becomes ``\uXXXX``; ``&`` becomes ``&amp;``). Fixed labels are
+# bounded per rendered entry (at most 50 URL entries per Post). The record is
+# itself within bookmark_threads.MAX_STORE_BYTES (16 MiB) and at most 200 thread
+# and 200 referenced Posts, so the section stays finite without truncation.
+_ESCAPE_EXPANSION = 6
+_THREAD_LABEL_BYTES_PER_ENTRY = 4096
+
+
+def _thread_section_limit(thread: dict) -> int:
+    """Upper bound for the rendered thread section, derived from the saved record."""
+    record_bytes = len(json.dumps(
+        thread, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    entries = (1 + len(thread["thread_posts"]) + len(thread["referenced_posts"])
+               + len(thread["unverified_missing_parent_ids"]))
+    return _ESCAPE_EXPANSION * record_bytes + _THREAD_LABEL_BYTES_PER_ENTRY * entries
 
 
 def _quoted(lines: list[str], label: str, value: str | None) -> None:
@@ -202,6 +226,7 @@ def render(
             "Image paths are relative to the local x-context data directory; stdout is not an asset bundle.",
             "",
         ]
+        thread_section_bytes = 0
         for number, item in enumerate(items, 1):
             post_id, body = item["id"], item["text"]
             if len(post_id) > 32 or len(body.encode("utf-8")) > _MAX_ITEM_BYTES:
@@ -285,7 +310,15 @@ def render(
 
             thread = thread_rows.get(post_id)
             if thread is not None:
-                _render_thread(lines, thread)
+                thread_lines: list[str] = []
+                _render_thread(thread_lines, thread)
+                if selected_post_id is not None:
+                    # Joined with one "\n" per line when appended below.
+                    section_bytes = sum(len(line.encode("utf-8")) + 1 for line in thread_lines)
+                    if section_bytes > _thread_section_limit(thread):
+                        raise ValueError("oversized thread section")
+                    thread_section_bytes += section_bytes
+                lines.extend(thread_lines)
 
             lines.extend(["", "### Saved images (verify local file before linking)"])
             media = extra["included_media"] if extra is not None else []
@@ -337,7 +370,9 @@ def render(
                 "",
             ])
         result = "\n".join(lines)
-        if len(result.encode("utf-8")) > _MAX_OUTPUT_BYTES:
+        # thread_section_bytes is non-zero only for an explicit post_id selection;
+        # everything else keeps the existing combined bound.
+        if len(result.encode("utf-8")) - thread_section_bytes > _MAX_OUTPUT_BYTES:
             raise ValueError("oversized output")
         return result
     except ContextViewError:
