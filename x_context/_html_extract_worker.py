@@ -189,15 +189,17 @@ def _layout(runs) -> str:
     for block in blocks:
         if any(pre for pre, _ in block):
             text = "".join(data if pre else re.sub(r"\s+", " ", data) for pre, data in block)
-            text = text.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+            # No newline stripping: leading/inner/trailing blank lines are
+            # source lines of the code (L2 re-review M-1).
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
             lines.extend(line.rstrip() for line in text.split("\n"))
         else:
             text = re.sub(r"\s+", " ", "".join(data for _, data in block)).strip()
             if text:
                 lines.append(text)
-    # Ordinary blocks never yield blank lines; blank lines that remain are
-    # source lines of preformatted code and are kept as-is (review M-1).
-    return "\n".join(lines).strip("\n")
+    # Ordinary blocks never yield blank lines, so every blank line here comes
+    # from preformatted code and is kept, including at the edges (M-1).
+    return "\n".join(lines)
 
 
 def _extract_technical(body: bytes):
