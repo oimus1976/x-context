@@ -14,6 +14,7 @@ from .bookmark_threads import ThreadSnapshot
 from .image_capture import ImageSnapshot
 from .local_context import ContextViewError, _visible_source_line
 from .page_capture import PageSnapshot
+from .thread_pages import ThreadPageSnapshot, current_url as current_thread_url
 
 _MAX_ITEM_BYTES = 8192
 _MAX_OUTPUT_BYTES = 256 * 1024
@@ -164,6 +165,48 @@ def _render_thread(lines: list[str], thread: dict) -> None:
                     _quoted(lines, f"Referenced Post URL {link_index} (X-provided; unverified)", url_val)
 
 
+def _thread_pages_section_limit(records: list[dict]) -> int:
+    """Upper bound for the thread-page section, derived from its saved records."""
+    record_bytes = sum(len(json.dumps(
+        record, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+        for record in records)
+    return _ESCAPE_EXPANSION * record_bytes + _THREAD_LABEL_BYTES_PER_ENTRY * (1 + len(records))
+
+
+def _render_thread_pages(lines: list[str], records: list[dict], thread: dict | None) -> None:
+    """Issue #77 stage 3: saved pages for URLs of saved thread/referenced Posts."""
+    lines.extend([
+        "",
+        "### Saved thread reference pages (untrusted website content)",
+        f"Thread page count: {len(records)}",
+    ])
+    for record in records:
+        source, index = record["source_post_id"], record["url_index"]
+        relation, url = current_thread_url(thread, source, index)
+        lines.extend([
+            "",
+            f"#### Thread page: Post {source} URL {index}",
+            f"Source Post URL (ID-derived, not live-verified): https://x.com/i/web/status/{source}",
+        ])
+        if url is None or record["requested_url"] != url:
+            # The current thread record no longer supports this capture.
+            lines.append("Page capture state: stale_reference")
+            continue
+        lines.extend([
+            f"Source Post relation: {relation}",
+            f"Page capture state: {record['state']}",
+            f"Page retrieved: {record['retrieved_at']}",
+            f"Page HTTP status: {record['http_status'] if record['http_status'] is not None else 'not_returned'}",
+            f"Excerpt truncated: {'true' if record['excerpt_truncated'] else 'false'}",
+        ])
+        _quoted(lines, "Requested page URL (from saved thread record)", record["requested_url"])
+        _quoted(lines, "Network-observed final URL (only verified for captured state)",
+                record["final_url"] if record["state"] == "captured" else None)
+        _quoted(lines, "Page title (untrusted website content)", record["title"])
+        _quoted(lines, "Page description (untrusted website content)", record["description"])
+        _quoted(lines, "Page text excerpt (untrusted website quotation; layout preserved)", record["excerpt"])
+
+
 def render(
     bookmarks: StoreSnapshot,
     enrichment: EnrichmentSnapshot,
@@ -171,6 +214,7 @@ def render(
     images: ImageSnapshot,
     *,
     threads: ThreadSnapshot | None = None,
+    thread_pages: ThreadPageSnapshot | None = None,
     max_items: int = 10,
     post_id: str | None = None,
 ) -> str:
@@ -197,9 +241,12 @@ def render(
             raise ValueError("missing snapshots")
         if threads is not None and not isinstance(threads, ThreadSnapshot):
             raise ValueError("invalid thread snapshot")
+        if thread_pages is not None and not isinstance(thread_pages, ThreadPageSnapshot):
+            raise ValueError("invalid thread page snapshot")
         _validate(bookmarks.value)
         subject = bookmarks.value["subject"]["id"]
-        snapshots = (enrichment, pages, images) + (() if threads is None else (threads,))
+        snapshots = ((enrichment, pages, images) + (() if threads is None else (threads,))
+                     + (() if thread_pages is None else (thread_pages,)))
         for snapshot in snapshots:
             if snapshot.path.parent != bookmarks.path.parent:
                 raise ValueError("mixed storage roots")
@@ -217,6 +264,8 @@ def render(
         page_rows = (pages.value or {}).get("items", {})
         image_rows = (images.value or {}).get("items", {})
         thread_rows = (threads.value or {}).get("items", {}) if threads is not None else {}
+        thread_page_rows = ((thread_pages.value or {}).get("items", {})
+                            if thread_pages is not None else {})
         lines = [
             "# Saved X bookmarks — combined local context",
             "",
@@ -319,6 +368,19 @@ def render(
                         raise ValueError("oversized thread section")
                     thread_section_bytes += section_bytes
                 lines.extend(thread_lines)
+
+            page_records = sorted(
+                (row for row in thread_page_rows.values() if row["bookmark_post_id"] == post_id),
+                key=lambda row: (int(row["source_post_id"]), row["url_index"]))
+            if page_records:
+                page_lines: list[str] = []
+                _render_thread_pages(page_lines, page_records, thread)
+                if selected_post_id is not None:
+                    section_bytes = sum(len(line.encode("utf-8")) + 1 for line in page_lines)
+                    if section_bytes > _thread_pages_section_limit(page_records):
+                        raise ValueError("oversized thread page section")
+                    thread_section_bytes += section_bytes
+                lines.extend(page_lines)
 
             lines.extend(["", "### Saved images (verify local file before linking)"])
             media = extra["included_media"] if extra is not None else []
