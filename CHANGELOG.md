@@ -8,6 +8,12 @@
 - Show saved thread pages in `context --include-saved-details`. When the current thread record no longer has the same URL (or no thread record exists), only `stale_reference` is shown. With `--post-id` the section is bounded by its saved records; without `--post-id` the 256 KiB cap is unchanged.
 - Legacy `page capture` keeps URL index 0..19 with default 0 and its outputs. Duplicate occurrences of a source Post with different URLs are rejected as ambiguous before any network access.
 - Add 19 synthetic tests (`tests/test_thread_page_capture.py`). A real Gist capture, real sites, owner data and Windows qualification are NOT_RUN.
+- Remediate independent L2 review 6096552383 (at `2ea14a5`), new path only:
+  - M-1: blank lines, empty Gist code cells and tab indentation are kept in the saved excerpt and in the Markdown.
+  - M-2: untrusted thread-page fields (URLs, title, description, excerpt) are shown literally in backtick-fenced blocks longer than any backtick run in the value, so Markdown/HTML is not interpreted and the value cannot close the fence. The `--post-id` section bound becomes 8x record bytes (6x escaping + 2x fences) + labels; the no-`--post-id` 256 KiB cap is unchanged.
+  - m-1: a redirect to X/`t.co` returned by the last allowed GET is `blocked_target`, not `redirect_limit` (decided locally; no extra request).
+  - m-2: the network-observed final URL is shown also for `http_error` and other non-captured states.
+  - Add 7 synthetic tests (26 in total), including a 50-record worst-case output-bound check.
 
 ## Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged in PR #79)
 

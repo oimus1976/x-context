@@ -26,9 +26,18 @@ index; (4) the CLI `--url-index` default became `None`, mapped back to 0 for the
 legacy path.
 Evidence: RED 14/19 new tests failed before implementation, GREEN 19/19;
 `python -m unittest discover -s tests` 555 tests OK (skipped 1); `verify_repo`
-PASS; `git diff --check` PASS. Synthetic fakes only. Exact-head CI and
-independent L2 review are pending; a real Gist UAT, real sites, owner data,
-Ready and merge are NOT_RUN and remain human-final.
+PASS; `git diff --check` PASS. Exact-head CI at `2ea14a5` SUCCESS.
+Independent L2 review 6096552383 at `2ea14a5`: CHANGES_REQUIRED (MAJOR 2, MINOR 2).
+Remediation (new path only): M-1 blank lines/empty Gist cells/tabs preserved to
+Markdown; M-2 literal fenced display of untrusted thread-page fields (fence
+longer than any backtick run; section bound 8x record bytes + labels with
+`--post-id`, 256 KiB cap unchanged otherwise); m-1 redirect to X on the last
+allowed GET recorded as `blocked_target` without an extra request; m-2 observed
+final URL shown for non-captured states. The review's reproductions were RED
+before (8 failing) and GREEN after; 26/26 thread-page tests, 80 related tests and
+562 product tests OK (skipped 1). Synthetic fakes only. Exact-head CI and
+independent L2 delta re-review on the new HEAD are pending; a real Gist UAT,
+real sites, owner data, Ready and merge are NOT_RUN and remain human-final.
 
 ## Historical: Issue #77 stage 2 — bookmark-anchored same-author thread collection (merged PR #79)
 

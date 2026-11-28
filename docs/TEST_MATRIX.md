@@ -407,3 +407,11 @@ files, and corrupt/inconsistent/X-target/mixed-subject stores stopping before
 network; AC-4 offline Markdown (with and without `--post-id`), `stale_reference` for
 changed URLs or missing thread records without old text, no new section without
 the sidecar, and quoted untrusted excerpts. Real Gist/site access is NOT_RUN.
+
+L2 review 6096552383 remediation adds 7 tests (26 total): M-1 blank lines,
+empty Gist cells and tabs from storage to Markdown; M-2 literal fenced fields
+that Markdown/HTML and in-value fences cannot escape, plus a 50-record
+escape/backtick worst case rendered with `--post-id` and failing closed at
+256 KiB without it; m-1 redirect to `t.co` on the last allowed GET recorded as
+`blocked_target` with 3 GETs while the legacy path stays `redirect_limit`;
+m-2 observed final URL shown for `http_error`.

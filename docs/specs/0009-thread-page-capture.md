@@ -24,7 +24,9 @@ page capture --post-id <bookmark id> --source-post-id <saved Post id> --url-inde
   (2 redirects).
 - X/Twitter hosts (`x.com`, `twitter.com`, `t.co` and their subdomains) are never
   a page target: the initial URL is rejected before any network access, and a
-  redirect to such a host stops as `blocked_target`. An unexpanded `t.co` short
+  redirect to such a host stops as `blocked_target` (checked locally before the
+  redirect-count limit, so also when the last allowed GET redirects to X; no
+  further request). An unexpanded `t.co` short
   link is therefore not followed.
 - `--source-post-id` requires an explicit `--url-index` (0..49, the thread-record
   URL bound). The legacy path (no `--source-post-id`) keeps the 0..19 range,
@@ -39,24 +41,38 @@ page capture --post-id <bookmark id> --source-post-id <saved Post id> --url-inde
   `bookmark-pages-v1.json` and `bookmark-threads-v1.json` are not modified.
 - New-path extraction ("technical" mode of the existing worker) prefers
   `main`/`article` text when present, keeps line breaks and indentation inside
-  `pre` and GitHub-Gist-like `blob-code` cells, separates block elements by line
-  breaks, and records `excerpt_truncated`. Limits are unchanged (4096 characters,
+  `pre` and GitHub-Gist-like `blob-code` cells (including blank lines and empty
+  code cells, which stay blank lines; only ordinary text is whitespace-
+  normalized), separates block elements by line breaks, and records
+  `excerpt_truncated`. Limits are unchanged (4096 characters,
   32768 worker bytes). The legacy extraction is unchanged.
 - `context --include-saved-details [--post-id <id>]` shows saved thread pages in
   their own section: source Post / URL index / relation, capture state, HTTP
-  status, time, requested/final URL, title, description and the excerpt as an
-  escaped untrusted quotation, plus whether the excerpt was truncated. When the
+  status, time, requested URL, the network-observed final URL of the last HTTP
+  response (also for `http_error` etc.; the state line tells whether content was
+  obtained), title, description and the excerpt, plus whether the excerpt was
+  truncated. These untrusted fields are shown literally in backtick-fenced code
+  blocks whose fence is longer than any backtick run in the value, so Markdown
+  emphasis, links, images, headings and HTML are not interpreted and the value
+  cannot close the fence. Tabs and blank lines are kept; other control/format
+  characters are shown as `\uXXXX`. The legacy page/thread rendering is unchanged. When the
   current thread record no longer has the same URL at that position (or no
   thread record exists), only `stale_reference` is shown and the old content is
   not joined. The thread-page sidecar is read independently of the enrichment /
   legacy page sidecars.
 - Output bounds: the view without `--post-id` keeps the 256 KiB combined cap.
   With `--post-id`, the thread-page section is bounded by its saved records
-  (6x canonical JSON bytes + fixed per-entry labels), like the thread section;
+  (8x canonical JSON bytes — 6x escaping plus 2x fence lines — + fixed
+  per-entry labels), like the thread section;
   exceeding the derived bound fails closed, never truncates silently.
 
 Out of scope: Issue #80, Issue #64 AC-4/AC-6, G1–G3, batches, Grok, cloud
 publishing, AI re-assessment, general crawling, real-site extraction tuning.
+
+Independent L2 review 6096552383 (at `2ea14a5`) remediation: M-1 blank lines and
+tabs in code kept from storage to Markdown; M-2 literal fenced display; m-1
+redirect to X on the last allowed GET is `blocked_target`; m-2 observed final URL
+shown for non-captured states.
 
 ## Acceptance criteria
 
